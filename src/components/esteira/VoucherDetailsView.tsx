@@ -15,7 +15,6 @@ import { ProcessoOrigemCard } from "./ProcessoOrigemCard";
 import { AccrualMatchBadge } from "./AccrualMatchBadge";
 import { StatusComprovanteBadge } from "./StatusComprovanteBadge";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
 import { formatDateOnlyBR } from "@/utils/timezone";
 import {
   AlertDialog,
@@ -244,13 +243,11 @@ export const VoucherDetailsView = ({ voucher, onUpdate, onPatch, onAnexosChanged
       if (loadedMasterIdRef.current === voucher.id) return;
       loadedMasterIdRef.current = voucher.id;
       setLoadingFilhos(true);
-      supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_voucher_filhos", master_id: voucher.id },
-      }).then(({ data }) => {
-        setVouchersFilhos(data?.data || []);
-      }).catch(() => {
-        setVouchersFilhos([]);
-      }).finally(() => setLoadingFilhos(false));
+      fetch(`/api/fin/vouchers/${encodeURIComponent(voucher.id)}/filhos`)
+        .then(r => r.json())
+        .then(data => setVouchersFilhos(data?.data || []))
+        .catch(() => setVouchersFilhos([]))
+        .finally(() => setLoadingFilhos(false));
     } else {
       loadedMasterIdRef.current = null;
       setVouchersFilhos([]);
@@ -299,37 +296,14 @@ export const VoucherDetailsView = ({ voucher, onUpdate, onPatch, onAnexosChanged
   const handleDeleteAttachment = async (attachmentId: string, fileName: string) => {
     setDeletingAttachmentId(attachmentId);
     try {
-      // Extrair o path do arquivo da URL
-      const attachment = voucher.anexos.find(a => a.id === attachmentId);
-      if (attachment) {
-        const match = attachment.fileUrl.match(/voucher-anexos\/(.+)$/);
-        if (match) {
-          const filePath = match[1];
-          // Deletar do storage
-          await supabase.storage.from("voucher-anexos").remove([filePath]);
-        }
-      }
+      const resp = await fetch(`/api/fin/vouchers/anexos/${encodeURIComponent(attachmentId)}`, { method: 'DELETE' });
+      const data = await resp.json();
+      if (!resp.ok || !data.success) throw new Error(data.error || `HTTP ${resp.status}`);
 
-      // Delete from MariaDB via proxy
-      const { error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "delete_voucher_anexo",
-          anexo_id: attachmentId,
-        },
-      });
-
-      toast({
-        title: "Anexo excluído",
-        description: `"${fileName}" foi removido com sucesso.`,
-      });
-
+      toast({ title: "Anexo excluído", description: `"${fileName}" foi removido com sucesso.` });
       (onAnexosChanged ?? onUpdate)?.();
     } catch (error: any) {
-      toast({
-        title: "Erro ao excluir anexo",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao excluir anexo", description: error.message, variant: "destructive" });
     } finally {
       setDeletingAttachmentId(null);
       setConfirmDeleteId(null);

@@ -28,7 +28,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { authRegister } from "@/services/authService";
 import { UserRole } from "@/types/voucher";
 
 const formSchema = z.object({
@@ -72,55 +72,17 @@ export const InviteUserDialog = ({ onUserInvited }: InviteUserDialogProps) => {
   const onSubmit = async (values: FormValues) => {
     setIsSubmitting(true);
     try {
-      // Generate temporary password
       const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
 
-      // Create user via Supabase Auth Admin API (requires service role)
-      // For now, we'll use the signUp method which will send a confirmation email
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: values.email,
-        password: tempPassword,
-        options: {
-          data: {
-            name: values.name,
-          },
-        },
-      });
+      const result = await authRegister(values.name, values.email, tempPassword, values.role);
 
-      if (authError) throw authError;
-
-      if (authData.user) {
-        // Create profile entry
-        const { error: profileError } = await (supabase as any)
-          .from("profiles")
-          .insert({
-            id: authData.user.id,
-            email: values.email,
-            name: values.name,
-            role: values.role,
-            active: true,
-          });
-
-        if (profileError) {
-          console.error("Erro ao criar perfil:", profileError);
-        }
-
-        // Create user_roles entry for proper role management
-        const { error: roleError } = await (supabase as any)
-          .from("user_roles")
-          .insert({
-            user_id: authData.user.id,
-            role: values.role.toLowerCase(),
-          });
-
-        if (roleError) {
-          console.error("Erro ao criar role:", roleError);
-        }
+      if (!result.success) {
+        throw new Error(result.error || 'Erro ao criar usuário.');
       }
 
       toast({
         title: "Convite enviado",
-        description: `Um email de confirmação foi enviado para ${values.email}.`,
+        description: `E-mail de boas-vindas enviado para ${values.email}.`,
       });
 
       form.reset();

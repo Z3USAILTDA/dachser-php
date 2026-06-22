@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -90,13 +89,9 @@ export default function EsteiraUserManagement() {
     try {
       setLoading(true);
       
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_esteira_users" },
-      });
-
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || "Erro ao carregar usuários");
-
+      const resp = await fetch('/api/fin/users');
+      const data = await resp.json();
+      if (!resp.ok || !data.success) throw new Error(data.error || "Erro ao carregar usuários");
       setUsers(data.users || []);
     } catch (error: any) {
       console.error("Erro ao carregar usuários:", error);
@@ -112,16 +107,12 @@ export default function EsteiraUserManagement() {
 
   const handleRoleChange = async (userId: number, newRole: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { 
-          action: "update_esteira_role",
-          userId,
-          esteira_role: newRole === "SEM_ACESSO" ? null : newRole,
-        },
+      const resp = await fetch(`/api/fin/users/${userId}/role`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ esteira_role: newRole === 'SEM_ACESSO' ? null : newRole }),
       });
-
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || "Erro ao atualizar role");
+      const data = await resp.json();
+      if (!resp.ok || !data.success) throw new Error(data.error || "Erro ao atualizar role");
 
       toast({
         title: "Função atualizada",
@@ -141,16 +132,12 @@ export default function EsteiraUserManagement() {
   const handleToggleActive = async (userId: number, currentActive: number | null) => {
     const newActive = currentActive !== 1;
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { 
-          action: "toggle_esteira_active",
-          userId,
-          esteira_active: newActive,
-        },
+      const resp = await fetch(`/api/fin/users/${userId}/active`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ esteira_active: newActive }),
       });
-
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || "Erro ao alterar status");
+      const data = await resp.json();
+      if (!resp.ok || !data.success) throw new Error(data.error || "Erro ao alterar status");
 
       toast({
         title: newActive ? "Usuário ativado" : "Usuário desativado",

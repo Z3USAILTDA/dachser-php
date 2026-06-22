@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertCircle, FileText, Wand2, Search, Info, Trash2, CalendarCheck,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client"; // kept: preview_voucher_batch_import + create_voucher_batch_import (buildPreviewItems helpers)
 import { useToast } from "@/hooks/use-toast";
 import { parseBatchSpreadsheet } from "@/utils/batchVoucherImport";
 import { BatchImportPreviewTable, type StatusFilter } from "./BatchImportPreviewTable";
@@ -139,11 +139,13 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
   const handleFechamentoQuinzenal = async () => {
     setBusy(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "create_empty_batch_import", userId },
+      const resp = await fetch('/api/fin/batch-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
       });
-      if (error) throw error;
-      if (!data?.success || !data?.batch_id) {
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data?.success || !data?.batch_id) {
         throw new Error(data?.error || "Falha ao iniciar fechamento quinzenal");
       }
       toast({

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, UserPlus, LogIn } from "lucide-react";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { authRegister } from "@/services/authService";
 import logoZ3us from "@/assets/logo-z3us.png";
 import dachserBackground from "@/assets/dachser-background.jpg";
 
@@ -42,61 +42,22 @@ const Register = () => {
     setIsLoading(true);
 
     try {
-      // 1. Register user in MariaDB
-      const response = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'register_user',
-          username: formData.username,
-          email: formData.email,
-          password: formData.password
-        }
-      });
+      const result = await authRegister(formData.username, formData.email, formData.password);
 
-      const registerData = response.data;
-      const registerError = response.error;
-
-      // Handle both error scenarios: explicit error or success=false in response
-      if (registerError || !registerData?.success) {
-        // Extract error message from response body or error object
-        let errorMsg = 'Erro ao cadastrar usuário';
-        
-        if (registerData?.error) {
-          errorMsg = registerData.error;
-        } else if (registerError?.message) {
-          errorMsg = registerError.message;
-        }
-        
+      if (!result.success) {
         toast({
           title: "Erro no cadastro",
-          description: errorMsg,
+          description: result.error || 'Erro ao cadastrar usuário.',
           variant: "destructive",
         });
         setIsLoading(false);
         return;
       }
 
-      // 2. Send welcome email with credentials
-      const { data: emailData, error: emailError } = await supabase.functions.invoke('send-welcome-email', {
-        body: {
-          email: formData.email,
-          username: formData.username,
-          password: formData.password
-        }
+      toast({
+        title: "Sucesso",
+        description: "Usuário cadastrado e e-mail de boas-vindas enviado!",
       });
-
-      if (emailError || !emailData?.success) {
-        console.warn('Email sending failed:', emailError || emailData?.error);
-        // Still show success but warn about email
-        toast({
-          title: "Usuário cadastrado",
-          description: "Usuário criado, mas houve um problema ao enviar o e-mail de boas-vindas.",
-        });
-      } else {
-        toast({
-          title: "Sucesso",
-          description: "Usuário cadastrado e e-mail de boas-vindas enviado!",
-        });
-      }
 
       setFormData({ username: "", email: "", password: "" });
     } catch (error) {

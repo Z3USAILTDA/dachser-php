@@ -6,8 +6,6 @@ import {
   DraftStats,
   SyncStatus
 } from '@/types/draft';
-import { supabase } from '@/integrations/supabase/client';
-
 
 export const useDraftData = () => {
   const [mbls, setMbls] = useState<MBLRecord[]>([]);
@@ -48,39 +46,10 @@ export const useDraftData = () => {
     return 'Unknown';
   };
 
-  // Primário: Supabase edge functions (draft-fetch-mariadb + draft-fetch-tracking-status em paralelo).
-  // Fallback: Express local '/api/sea/draft-exportacao' (caso usuário rode servidor local).
   const fetchCombined = useCallback(async (): Promise<{
     mbls: MBLRecord[];
     trackingMap: Map<string, TrackingData>;
   }> => {
-    // 1) Tenta Supabase primeiro
-    try {
-      const [mblRes, trkRes] = await Promise.all([
-        supabase.functions.invoke('draft-fetch-mariadb'),
-        supabase.functions.invoke('draft-fetch-tracking-status'),
-      ]);
-
-      const mblOk = !mblRes.error && mblRes.data?.success;
-      const trkOk = !trkRes.error && trkRes.data?.success;
-
-      if (mblOk && trkOk) {
-        const mbls: MBLRecord[] = Array.isArray(mblRes.data.mbls) ? mblRes.data.mbls : [];
-        const trackingMap = new Map<string, TrackingData>();
-        const trackingSource = trkRes.data.trackingStatus ?? {};
-        Object.entries(trackingSource).forEach(([mblId, trackingData]) => {
-          trackingMap.set(mblId, trackingData as TrackingData);
-        });
-        return { mbls, trackingMap };
-      }
-      console.warn('[useDraftData] Supabase falhou, tentando fallback Express', {
-        mblErr: mblRes.error, trkErr: trkRes.error,
-      });
-    } catch (e) {
-      console.warn('[useDraftData] Supabase indisponível, tentando fallback Express:', e);
-    }
-
-    // 2) Fallback Express
     const response = await fetch('/api/sea/draft-exportacao');
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -92,7 +61,7 @@ export const useDraftData = () => {
 
     const mblsList: MBLRecord[] = Array.isArray(data.mbls) ? data.mbls : [];
     const trackingMap = new Map<string, TrackingData>();
-    const trackingSource = data.trackingStatus ?? data.trackingMap ?? {};
+    const trackingSource = data.trackingStatus ?? {};
     Object.entries(trackingSource).forEach(([mblId, trackingData]) => {
       trackingMap.set(mblId, trackingData as TrackingData);
     });

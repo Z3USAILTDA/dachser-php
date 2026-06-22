@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Voucher, EtapaAtual, ETAPA_LABELS, SLA_POR_ETAPA, calcularTempoNaEtapa } from "@/types/voucher";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -702,42 +701,19 @@ const EsteiraIndex = () => {
     }
   }, [role, roleLoading]);
 
-  // Get current user ID
+  // Get current user ID from localStorage (auth migrada)
   useEffect(() => {
-    const getCurrentUser = async () => {
-      const {
-        data: {
-          user
-        }
-      } = await supabase.auth.getUser();
-      setCurrentUserId(user?.id || null);
-    };
-    getCurrentUser();
-  }, []);
+    setCurrentUserId(user?.id?.toString() || null);
+  }, [user?.id]);
 
   // Background incremental sync - runs without blocking UI
   const runIncrementalSync = async () => {
     try {
       console.log("[sync] Running incremental sync in background...");
-      
-      // Run incremental sync (doesn't block)
-      const { data: syncResult } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "sync_vouchers_incremental" }
-      });
-      
+      const r = await fetch('/api/fin/sync/incremental', { method: 'POST' });
+      const syncResult = r.ok ? await r.json() : null;
       console.log("[sync] Incremental sync result:", syncResult);
-      
-      // If there are more records to sync, continue syncing
-      if (syncResult?.hasMore) {
-        console.log("[sync] More records available, scheduling next batch...");
-        setTimeout(runIncrementalSync, 1000);
-      }
-      
-      // Also check for baixados
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "sync_vouchers_baixados" }
-      });
-      
+      fetch('/api/fin/sync/baixados', { method: 'POST' }).catch(() => {});
       return syncResult;
     } catch (err) {
       console.error("[sync] Incremental sync error:", err);
@@ -745,24 +721,9 @@ const EsteiraIndex = () => {
     }
   };
 
-  // Legacy sync from RM (kept for compatibility but now runs less frequently)
+  // Legacy sync from RM (integração externa — gerenciada pelo sistema RM)
   const syncFromRM = async () => {
-    try {
-      console.log("Syncing vouchers from RM...");
-      const { data, error } = await supabase.functions.invoke("voucher-integrate-rm", {
-        body: {
-          action: "import",
-          limit: 10000 // High limit to get all vouchers
-        }
-      });
-      if (error) {
-        console.error("Error syncing from RM:", error);
-      } else {
-        console.log("RM sync complete:", data);
-      }
-    } catch (err) {
-      console.error("Failed to sync from RM:", err);
-    }
+    console.log("[syncFromRM] Integração RM gerenciada pelo sistema externo.");
   };
 
   // Helper function to map voucher from DB
@@ -933,23 +894,21 @@ const EsteiraIndex = () => {
         const fimExclusivo = mEm === 12
           ? `${yEm + 1}-01-01`
           : `${yEm}-${String(mEm + 1).padStart(2, '0')}-01`;
-        const combinedResult = await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "get_vouchers_combined",
-            ...(etapaSelecionada ? {} : {
-              data_vencimento_inicio: inicio,
-              data_vencimento_fim: fimExclusivo,
-            }),
-          }
-        });
-        
-        if (combinedResult.error) throw combinedResult.error;
-        
+        const qs = new URLSearchParams();
+        if (!etapaSelecionada) {
+          qs.set('data_vencimento_inicio', inicio);
+          qs.set('data_vencimento_fim', fimExclusivo);
+        }
+        const combinedResp = await fetch(`/api/fin/vouchers/combined?${qs}`);
+        if (!combinedResp.ok) throw new Error(`HTTP ${combinedResp.status}`);
+        const combinedResult = await combinedResp.json();
+        if (!combinedResult.success) throw new Error(combinedResult.error || 'Erro ao carregar vouchers');
+
         // Map vouchers from ativos
-        const mappedVouchers: Voucher[] = (combinedResult.data?.ativos || []).map((v: any) => mapVoucherFromDB(v));
-        
+        const mappedVouchers: Voucher[] = (combinedResult.ativos || []).map((v: any) => mapVoucherFromDB(v));
+
         // Map pending RM vouchers
-        const rmPendingVouchers: Voucher[] = (combinedResult.data?.pendentes_rm || []).map((rm: any) => mapRMPendingVoucher(rm));
+        const rmPendingVouchers: Voucher[] = (combinedResult.pendentes_rm || []).map((rm: any) => mapRMPendingVoucher(rm));
         
         // Deduplicate: remove RM pending vouchers that already exist in mappedVouchers
         const mappedSPOs = new Set(mappedVouchers.map(v => v.numeroSPO));
@@ -979,17 +938,18 @@ const EsteiraIndex = () => {
       // LEGACY MODE: Full sync (used for manual refresh)
       await syncFromRM();
 
-      // Load from MariaDB t_vouchers and pending RM vouchers sequentially to keep only 1 connection in flight
-      const esteiraResult = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_vouchers_esteira" }
-      });
-      const rmPendingResult = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_vouchers_pendentes_rm" }
-      });
-      if (esteiraResult.error) throw esteiraResult.error;
+      // Load from MariaDB t_vouchers and pending RM vouchers
+      const [esteiraResp, rmPendingResp] = await Promise.all([
+        fetch('/api/fin/vouchers/esteira'),
+        fetch('/api/fin/vouchers/pendentes-rm'),
+      ]);
+      if (!esteiraResp.ok) throw new Error(`HTTP ${esteiraResp.status}`);
+      const esteiraResult = await esteiraResp.json();
+      const rmPendingResult = rmPendingResp.ok ? await rmPendingResp.json() : { success: false, data: [] };
+      if (!esteiraResult.success) throw new Error(esteiraResult.error || 'Erro ao carregar vouchers');
 
       // Map vouchers from esteira
-      const mappedVouchers: Voucher[] = (esteiraResult.data?.data || []).map((v: any) => ({
+      const mappedVouchers: Voucher[] = (esteiraResult.data || []).map((v: any) => ({
         id: v.id,
         numeroSPO: v.numero_spo,
         // t_vouchers é espelhado a partir do dfv (mirror_vouchers_from_dfv).
@@ -1046,7 +1006,7 @@ const EsteiraIndex = () => {
       }));
 
       // Map pending RM vouchers to Voucher format with etapaAtual = A_PROCESSAR
-      const rmPendingVouchers: Voucher[] = (rmPendingResult.data?.data || []).map((rm: any) => {
+      const rmPendingVouchers: Voucher[] = (rmPendingResult.data || []).map((rm: any) => {
         // Map forma_pag to FormaPagamento
         const mapFormaPag = (fp: string | null): string => {
           const mapping: Record<string, string> = {
@@ -1172,16 +1132,10 @@ const EsteiraIndex = () => {
   };
   const loadEsteiraUsers = async () => {
     try {
-      const {
-        data,
-        error
-      } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "get_all_users_esteira"
-        }
-      });
-      if (!error && data?.users) {
-        // Filter only users with esteira_role assigned
+      const resp = await fetch('/api/fin/users');
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (data?.users) {
         const usersWithRole = data.users.filter((u: any) => u.esteira_role);
         setEsteiraUsers(usersWithRole);
       }
@@ -1194,15 +1148,9 @@ const EsteiraIndex = () => {
   const fetchFinDbStats = async () => {
     setIsLoadingDbStats(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "fetch_fin_voucher_stats" }
-      });
-      
-      if (error) {
-        console.error("Error fetching fin db stats:", error);
-        return;
-      }
-
+      const resp = await fetch('/api/fin/stats');
+      if (!resp.ok) return;
+      const data = await resp.json();
       if (data?.success && data?.stats) {
         setFinDbStats(data.stats);
       }
@@ -1334,9 +1282,8 @@ const EsteiraIndex = () => {
     setMastersSearchLoading(true);
     searchDebounceRef.current = setTimeout(async () => {
       try {
-        const { data } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "search_masters_by_child_spo", spo_prefix: searchTerm },
-        });
+        const resp = await fetch(`/api/fin/vouchers/search-masters?spo_prefix=${encodeURIComponent(searchTerm)}`);
+        const data = resp.ok ? await resp.json() : null;
         if (data?.data) {
           const map = new Map<string, string[]>();
           for (const item of data.data) {
@@ -1370,9 +1317,8 @@ const EsteiraIndex = () => {
     setConcludedSearchLoading(true);
     concludedSearchDebounceRef.current = setTimeout(async () => {
       try {
-        const { data } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "search_vouchers_including_concluded", search: term },
-        });
+        const resp = await fetch(`/api/fin/vouchers/search?search=${encodeURIComponent(term)}`);
+        const data = resp.ok ? await resp.json() : null;
         const rows: any[] = data?.data || [];
         if (!rows.length) return;
         const extras = rows.map((v: any) => mapVoucherFromDB(v));
@@ -1704,96 +1650,25 @@ const EsteiraIndex = () => {
       </div>;
   }
   const handleViewDetails = async (voucher: Voucher) => {
-    // If voucher is from RM pending (A_PROCESSAR), import it first
     if (voucher.etapaAtual === "A_PROCESSAR" && voucher.fonteDados === "RM_PENDENTE") {
-      try {
-        const {
-          data,
-          error
-        } = await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "import_voucher_from_rm",
-            nd: voucher.numeroSPO,
-            user_id: user?.id,
-            user_name: user?.username || user?.email
-          }
-        });
-        if (error) throw error;
-        if (!data?.success) throw new Error(data?.error || "Erro ao importar voucher");
-
-        // Navigate to the newly created voucher
-        if (data?.voucherId) {
-          navigate(`/fin/esteira/voucher/${data.voucherId}`);
-        } else {
-          loadVouchers();
-        }
-        return;
-      } catch (error: any) {
-        toast({
-          title: "Erro ao importar voucher",
-          description: error.message,
-          variant: "destructive"
-        });
-        return;
-      }
+      toast({ title: "Importação RM", description: "A importação de vouchers do RM é gerenciada pelo sistema externo." });
+      return;
     }
     navigate(`/fin/esteira/voucher/${voucher.id}`);
   };
   const handleEdit = async (voucher: Voucher) => {
-    // If voucher is from RM pending (A_PROCESSAR), import it first
     if (voucher.etapaAtual === "A_PROCESSAR" && voucher.fonteDados === "RM_PENDENTE") {
-      try {
-        const {
-          data,
-          error
-        } = await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "import_voucher_from_rm",
-            nd: voucher.numeroSPO,
-            user_id: user?.id,
-            user_name: user?.username || user?.email
-          }
-        });
-        if (error) throw error;
-        if (!data?.success) throw new Error(data?.error || "Erro ao importar voucher");
-
-        // Update local voucher with new ID and open edit dialog
-        if (data?.voucherId) {
-          const updatedVoucher = {
-            ...voucher,
-            id: data.voucherId,
-            etapaAtual: "OPERACAO" as const,
-            fonteDados: undefined
-          };
-          setSelectedVoucher(updatedVoucher);
-          setShowEditDialog(true);
-          loadVouchers();
-        }
-        return;
-      } catch (error: any) {
-        toast({
-          title: "Erro ao importar voucher",
-          description: error.message,
-          variant: "destructive"
-        });
-        return;
-      }
+      toast({ title: "Importação RM", description: "A importação de vouchers do RM é gerenciada pelo sistema externo." });
+      return;
     }
     setSelectedVoucher(voucher);
     setShowEditDialog(true);
   };
   const handleDelete = async (voucher: Voucher) => {
     try {
-      const {
-        data,
-        error
-      } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "delete_voucher_esteira",
-          voucher_id: voucher.id
-        }
-      });
-      if (error || !data?.success) throw new Error(data?.error || error?.message || "Erro ao excluir");
+      const resp = await fetch(`/api/fin/vouchers/${encodeURIComponent(voucher.id)}`, { method: 'DELETE' });
+      const data = await resp.json();
+      if (!resp.ok || !data?.success) throw new Error(data?.error || "Erro ao excluir");
       toast({
         title: "Voucher excluído",
         description: `Voucher ${voucher.numeroSPO} foi excluído com sucesso`
@@ -1840,40 +1715,17 @@ const EsteiraIndex = () => {
           throw new Error("Não é possível voltar desta etapa");
       }
 
-      // Build update payload with justification in the appropriate field
-      const updatePayload: Record<string, any> = {
-        action: "update_voucher_esteira",
-        voucher_id: voucher.id,
-        etapa_atual: previousStage
-      };
-      if (ajusteField) {
-        updatePayload[ajusteField] = justificativa;
-      }
-
-      // Use MariaDB proxy instead of Supabase directly
-      const {
-        data,
-        error
-      } = await supabase.functions.invoke("mariadb-proxy", {
-        body: updatePayload
+      const patchBody: Record<string, any> = { etapa_atual: previousStage, user_id: user?.id?.toString(), user_name: user?.username };
+      if (ajusteField) patchBody[ajusteField] = justificativa;
+      const resp = await fetch(`/api/fin/vouchers/${encodeURIComponent(voucher.id)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patchBody),
       });
-      if (error || !data?.success) throw new Error(data?.error || error?.message || "Erro ao atualizar");
+      const data = await resp.json();
+      if (!resp.ok || !data?.success) throw new Error(data?.error || "Erro ao atualizar");
 
-      // Log the action with justification
-      const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
-      const userData = storedUser ? JSON.parse(storedUser) : {
-        id: 0,
-        username: "sistema"
-      };
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "save_voucher_log",
-          voucher_id: voucher.id,
-          user_id: userData.id?.toString(),
-          user_name: userData.username,
-          acao: "ETAPA_RETORNADA",
-          detalhe: `Voucher/SPO retornou para etapa ${previousStage.replace("_", " ")}. Justificativa: ${justificativa}`
-        }
+      await fetch(`/api/fin/vouchers/${encodeURIComponent(voucher.id)}/log`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user?.id?.toString(), user_name: user?.username, acao: "ETAPA_RETORNADA", detalhe: `Voucher/SPO retornou para etapa ${previousStage.replace("_", " ")}. Justificativa: ${justificativa}` }),
       });
       toast({
         title: "Etapa atualizada",
@@ -1891,44 +1743,22 @@ const EsteiraIndex = () => {
 
   const handleValidateComprovante = async (voucher: Voucher) => {
     try {
-      const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
-      const userData = storedUser ? JSON.parse(storedUser) : { id: 0, username: "sistema" };
+      const patchResp = await fetch(`/api/fin/vouchers/${encodeURIComponent(voucher.id)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status_comprovante: 'VALIDADO', user_id: user?.id?.toString(), user_name: user?.username }),
+      });
+      const data = await patchResp.json();
+      if (!patchResp.ok || !data?.success) throw new Error(data?.error || "Erro ao validar");
 
-      // Update status_comprovante to VALIDADO
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "update_voucher_esteira",
-          voucher_id: voucher.id,
-          status_comprovante: "VALIDADO"
-        }
+      await fetch(`/api/fin/vouchers/${encodeURIComponent(voucher.id)}/log`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user?.id?.toString(), user_name: user?.username, acao: 'COMPROVANTE_VALIDADO', detalhe: 'Comprovante validado pelo financeiro' }),
       });
 
-      if (error || !data?.success) throw new Error(data?.error || error?.message || "Erro ao validar");
-
-      // Log the action
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "save_voucher_log",
-          voucher_id: voucher.id,
-          user_id: userData.id?.toString(),
-          user_name: userData.username,
-          acao: "COMPROVANTE_VALIDADO",
-          detalhe: `Comprovante validado pelo financeiro`
-        }
-      });
-
-      toast({
-        title: "Comprovante validado!",
-        description: `Voucher ${voucher.numeroSPO} teve o comprovante validado com sucesso`
-      });
-
+      toast({ title: "Comprovante validado!", description: `Voucher ${voucher.numeroSPO} teve o comprovante validado com sucesso` });
       loadVouchers();
     } catch (error: any) {
-      toast({
-        title: "Erro ao validar comprovante",
-        description: error.message,
-        variant: "destructive"
-      });
+      toast({ title: "Erro ao validar comprovante", description: error.message, variant: "destructive" });
     }
   };
 
@@ -1938,44 +1768,20 @@ const EsteiraIndex = () => {
   };
   const handleDisassemble = async (voucher: Voucher) => {
     try {
-      const {
-        data,
-        error
-      } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "disassemble_master_voucher",
-          master_id: voucher.id
-        }
+      const resp = await fetch(`/api/fin/vouchers/${encodeURIComponent(voucher.id)}/disassemble`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
       });
-      if (error || !data?.success) throw new Error(data?.error || error?.message || "Erro ao desmembrar");
+      const data = await resp.json();
+      if (!resp.ok || !data?.success) throw new Error(data?.error || "Erro ao desmembrar");
 
-      // Log the action
-      const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
-      const userData = storedUser ? JSON.parse(storedUser) : {
-        id: 0,
-        username: "sistema"
-      };
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "save_voucher_log",
-          voucher_id: voucher.id,
-          user_id: userData.id?.toString(),
-          user_name: userData.username,
-          acao: "MASTER_DESMEMBRADO",
-          detalhe: `Voucher/SPO master ${voucher.numeroSPO} foi desmembrado. ${data.childrenRestored || 0} vouchers/SPO filhos restaurados.`
-        }
+      await fetch(`/api/fin/vouchers/${encodeURIComponent(voucher.id)}/log`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user?.id?.toString(), user_name: user?.username, acao: 'MASTER_DESMEMBRADO', detalhe: `Voucher/SPO master ${voucher.numeroSPO} foi desmembrado. ${data.childrenRestored || 0} vouchers/SPO filhos restaurados.` }),
       });
-      toast({
-        title: "Voucher/SPO desmembrado",
-        description: `${data.childrenRestored || 0} vouchers/SPO filhos foram restaurados como individuais`
-      });
+      toast({ title: "Voucher/SPO desmembrado", description: `${data.childrenRestored || 0} vouchers/SPO filhos foram restaurados como individuais` });
       loadVouchers();
     } catch (error: any) {
-      toast({
-        title: "Erro ao desmembrar",
-        description: error.message,
-        variant: "destructive"
-      });
+      toast({ title: "Erro ao desmembrar", description: error.message, variant: "destructive" });
     }
   };
   return <div className="min-h-screen relative overflow-x-hidden">

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { authForgotPassword } from "@/services/authService";
 import logoZ3us from "@/assets/logo-z3us.png";
 import dachserBg from "@/assets/dachser-background.jpg";
 
@@ -40,14 +40,10 @@ const ForgotPassword = () => {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke("send-password-reset-code", {
-        body: { email: email.trim() },
-      });
+      const data = await authForgotPassword(email.trim());
 
-      if (error) throw new Error(error.message || "Erro ao enviar código");
-
-      if (data.error) {
-        throw new Error(data.error);
+      if (!data.success) {
+        throw new Error(data.error || "Erro ao enviar código");
       }
 
       toast({

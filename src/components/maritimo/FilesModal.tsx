@@ -1,6 +1,5 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { FileText, Download, ExternalLink, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -27,18 +26,11 @@ export function FilesModal({ open, onOpenChange, itemId, itemName }: FilesModalP
 
   const fetchFiles = async () => {
     if (!itemId) return;
-    
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'get_maritimo_files', itemId }
-      });
-
-      if (error) {
-        console.error('Error fetching files:', error);
-        return;
-      }
-
+      const response = await fetch(`/api/sea/maritimo/items/${encodeURIComponent(itemId)}/files`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
       if (data?.success) {
         setFiles(data.files || []);
         setBaseFileName(data.baseFileName || '');

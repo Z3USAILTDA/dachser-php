@@ -1,11 +1,11 @@
 // @ts-nocheck
 import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { useUsageLog } from "@/hooks/useUsageLog";
-
-// Type assertion to bypass strict typing (DB schema not in sync)
-const db = supabase as any;
+import {
+  fetchChecks, deleteCheck, uploadDocument, parseDocument,
+  parseDocumentById, createCheck, updateParsed, fetchActiveMatrices, fetchRules,
+} from "@/services/checkAwbService";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -106,27 +106,18 @@ const CheckAwb = () => {
       const parsedUser = JSON.parse(storedUser);
       setUser(parsedUser);
       setUserRole(parsedUser.is_admin === 1 ? "ADMIN" : "OPERACAO");
-      fetchChecks();
+      loadChecks();
     } else {
       navigate("/");
     }
     setLoading(false);
   }, [navigate]);
 
-  const fetchChecks = async () => {
+  const loadChecks = async () => {
     setIsRefreshing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "get_awb_checks",
-          perPage: 100,
-          page: 1,
-        },
-      });
-
-      if (error) throw error;
+      const data = await fetchChecks();
       if (!data?.success) throw new Error(data?.error || "Erro ao buscar validações");
-      
       setChecks(data.checks || []);
     } catch (error) {
       console.error("Error fetching checks:", error);
@@ -151,18 +142,10 @@ const CheckAwb = () => {
   const handleDeleteConfirm = async () => {
     if (!checkToDelete) return;
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "delete_awb_check",
-          awbCheckId: checkToDelete,
-        },
-      });
-
-      if (error) throw error;
+      const data = await deleteCheck(checkToDelete, user?.username);
       if (!data?.success) throw new Error(data?.error || "Erro ao excluir");
-      
       toast.success("Validação excluída com sucesso");
-      fetchChecks();
+      loadChecks();
     } catch (error: any) {
       console.error("Erro ao excluir:", error);
       toast.error("Erro ao excluir validação");
@@ -173,131 +156,59 @@ const CheckAwb = () => {
   };
 
   const handleExportToMariaDB = async () => {
-    setIsExporting(true);
-    try {
-      toast.info("Iniciando exportação para MariaDB...");
-
-      const { data, error } = await supabase.functions.invoke("export-to-mariadb");
-
-      if (error) throw error;
-
-      if (data?.success) {
-        toast.success(data.message);
-        data.results?.forEach((r: any) => {
-          if (r.exported > 0) {
-            toast.info(`${r.table}: ${r.exported} registros exportados`);
-          }
-          if (r.errors?.length > 0) {
-            toast.warning(`${r.table}: ${r.errors.length} erros`);
-          }
-        });
-      } else {
-        throw new Error(data?.error || "Erro desconhecido");
-      }
-    } catch (error: any) {
-      console.error("Export error:", error);
-      toast.error(`Erro na exportação: ${error.message}`);
-    } finally {
-      setIsExporting(false);
-    }
+    toast.info("Exportação não disponível — dados já residem no MariaDB.");
   };
 
   const handleReextractAll = async () => {
-    if (checks.length === 0) {
-      toast.error("Nenhum processo para reextrair");
+    const eligible = checks.filter(c => c.hawb_document_id);
+    if (eligible.length === 0) {
+      toast.error("Nenhum processo com documento armazenado para reextrair");
       return;
     }
 
     setIsReextracting(true);
-    setReextractProgress({ current: 0, total: checks.length });
-    
-    let successCount = 0;
-    let errorCount = 0;
+    setReextractProgress({ current: 0, total: eligible.length });
+    let successCount = 0, errorCount = 0;
 
-    toast.info(`Iniciando reextração de ${checks.length} processos...`);
+    toast.info(`Iniciando reextração de ${eligible.length} processos...`);
 
-    for (let i = 0; i < checks.length; i++) {
-      const check = checks[i];
-      setReextractProgress({ current: i + 1, total: checks.length });
-
+    for (let i = 0; i < eligible.length; i++) {
+      const check = eligible[i];
+      setReextractProgress({ current: i + 1, total: eligible.length });
       try {
-        // Get file path from check
-        const filePath = check.hawb_file_path;
-        if (!filePath) {
-          console.log(`Check ${check.id} sem arquivo, pulando...`);
-          continue;
-        }
+        const parsedData = await parseDocumentById(check.hawb_document_id);
+        if (!parsedData?.success) { errorCount++; continue; }
 
-        // Download file from storage
-        const { data: fileData, error: downloadError } = await supabase.storage
-          .from("hawb-documents")
-          .download(filePath);
-
-        if (downloadError || !fileData) {
-          console.error(`Erro ao baixar arquivo para check ${check.id}:`, downloadError);
-          errorCount++;
-          continue;
-        }
-
-        // Create form data and parse
-        const formData = new FormData();
-        formData.append("file", fileData, check.hawb_file_name || "document.pdf");
-
-        const { data: parsedData, error: parseError } = await supabase.functions.invoke(
-          "parse-awb",
-          { body: formData }
-        );
-
-        if (parseError || !parsedData) {
-          console.error(`Erro ao parsear check ${check.id}:`, parseError);
-          errorCount++;
-          continue;
-        }
-
-        console.log(`Reextracted data for check ${check.id}:`, parsedData);
-
-        // Update parsed_awb record
-        const { error: updateError } = await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "update_parsed_awb",
-            awbCheckId: check.id,
-            shipper: parsedData.shipper,
-            consignee: parsedData.consignee,
-            carrier: parsedData.carrier,
-            grossWeight: parsedData.grossWeight,
-            chargeableWeight: parsedData.chargeableWeight,
-            mrn: parsedData.mrn,
-            routingLegs: parsedData.routingLegs,
-            flightNumbers: parsedData.flightNumbers,
-            hsCodes: parsedData.hsCodes,
-            dimensions: parsedData.dimensions,
-            incoterms: parsedData.incoterms,
-            references: parsedData.references,
-            extractedAwb: parsedData.awbNumber,
-            extractedCnpj: parsedData.cnpj,
-            extractedOrigin: parsedData.origin,
-            extractedDestination: parsedData.destination,
-            extractedCustomer: parsedData.customer,
-          },
+        await updateParsed(check.id, {
+          shipper: parsedData.shipper,
+          consignee: parsedData.consignee,
+          carrier: parsedData.carrier,
+          grossWeight: parsedData.grossWeight,
+          chargeableWeight: parsedData.chargeableWeight,
+          mrn: parsedData.mrn,
+          routingLegs: parsedData.routingLegs,
+          flightNumbers: parsedData.flightNumbers,
+          hsCodes: parsedData.hsCodes,
+          dimensions: parsedData.dimensions,
+          incoterms: parsedData.incoterms,
+          references: parsedData.references,
+          extractedAwb: parsedData.awbNumber,
+          extractedCnpj: parsedData.cnpj,
+          extractedOrigin: parsedData.origin,
+          extractedDestination: parsedData.destination,
+          extractedCustomer: parsedData.customer,
         });
-
-        if (updateError) {
-          console.error(`Erro ao atualizar check ${check.id}:`, updateError);
-          errorCount++;
-        } else {
-          successCount++;
-        }
-      } catch (error) {
-        console.error(`Erro no check ${check.id}:`, error);
+        successCount++;
+      } catch (err) {
+        console.error(`Erro no check ${check.id}:`, err);
         errorCount++;
       }
     }
 
     setIsReextracting(false);
     setReextractProgress({ current: 0, total: 0 });
-    
     toast.success(`Reextração concluída: ${successCount} sucesso, ${errorCount} erros`);
-    fetchChecks();
+    loadChecks();
   };
 
   const handleFilesUpload = async (files: File[]) => {
@@ -321,7 +232,7 @@ const CheckAwb = () => {
         await processSingleFile(validFiles[0], user.id.toString());
       }
       setIsUploadModalOpen(false);
-      fetchChecks();
+      loadChecks();
     } catch (error: any) {
       console.error("Upload error:", error);
       toast.error(error.message || "Erro ao processar documento(s)");
@@ -331,338 +242,171 @@ const CheckAwb = () => {
   };
 
   const processSingleFile = async (file: File, userId: string) => {
-    // Upload do arquivo para storage
-    const fileExt = file.name.split(".").pop();
-    const fileName = `${userId}/${Date.now()}.${fileExt}`;
+    const uploadResult = await uploadDocument(file, user?.id);
+    if (!uploadResult?.success) throw new Error(uploadResult?.error || "Erro no upload");
+    const documentId = uploadResult.documentId;
 
-    const { error: uploadError } = await supabase.storage
-      .from("hawb-documents")
-      .upload(fileName, file);
+    const parsedData = await parseDocument(file, "house_awb");
+    if (!parsedData || parsedData.error) throw new Error(parsedData?.error || "Erro ao extrair dados do documento");
 
-    if (uploadError) {
-      console.error("Upload error:", uploadError);
-      throw new Error(`Erro no upload: ${uploadError.message}`);
-    }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from("hawb-documents")
-      .getPublicUrl(fileName);
-
-    // Parsear documento via edge function
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const { data: parsedData, error: parseError } = await supabase.functions.invoke(
-      "parse-awb",
-      { body: formData }
-    );
-
-    if (parseError) {
-      console.error("Parse error:", parseError);
-      throw new Error(`Erro ao parsear: ${parseError.message}`);
-    }
-    
-    if (!parsedData || parsedData.error) {
-      throw new Error(parsedData?.error || "Erro ao extrair dados do documento");
-    }
-
-    console.log("Parsed data:", parsedData);
-
-    // Processar validação via MariaDB
-    await processValidationViaMariaDB(parsedData, fileName, file.name, publicUrl, userId);
+    await processValidation(parsedData, documentId, userId);
     toast.success("Documento processado com sucesso!");
   };
 
   const processMultipleFiles = async (files: File[], userId: string) => {
     toast.info("Processando arquivos...");
 
-    const parsedResults: Array<{
-      file: File;
-      parsed: any;
-      isLikelyInstruction: boolean;
-      cnpjSuffixPattern: string | null;
-    }> = [];
+    const parsedResults: Array<{ file: File; parsed: any; isLikelyInstruction: boolean; cnpjSuffixPattern: string | null }> = [];
 
     for (const file of files) {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const { data: parsed } = await supabase.functions.invoke("parse-awb", {
-        body: formData,
-      });
-
+      const parsed = await parseDocument(file, "house_awb");
       const references = parsed?.references || [];
       let cnpjSuffixPattern: string | null = null;
       for (const ref of references) {
         if (typeof ref === 'string') {
           const match = ref.match(/CNPJ\s*(\d{2})-(\d{2})/i) || ref.match(/^(\d{2})-(\d{2})$/);
-          if (match) {
-            cnpjSuffixPattern = match[1] + match[2];
-            break;
-          }
+          if (match) { cnpjSuffixPattern = match[1] + match[2]; break; }
         }
       }
-
       const cnpj = parsed?.cnpj?.replace(/\D/g, "") || "";
-      const isLikelyFabricatedCnpj = cnpj.length === 14 && (
-        cnpj.startsWith("0176") ||
-        cnpj.startsWith("0001") ||
-        /^0\d{3}0+\d{2,4}$/.test(cnpj)
-      );
-      const isLikelyInstruction = !!cnpjSuffixPattern || isLikelyFabricatedCnpj;
-
-      parsedResults.push({
-        file,
-        parsed,
-        isLikelyInstruction,
-        cnpjSuffixPattern,
-      });
+      const isLikelyFabricatedCnpj = cnpj.length === 14 && (cnpj.startsWith("0176") || cnpj.startsWith("0001") || /^0\d{3}0+\d{2,4}$/.test(cnpj));
+      parsedResults.push({ file, parsed, isLikelyInstruction: !!cnpjSuffixPattern || isLikelyFabricatedCnpj, cnpjSuffixPattern });
     }
 
     const instructionResult = parsedResults.find(r => r.isLikelyInstruction);
     const houseResult = parsedResults.find(r => {
       const cnpj = r.parsed?.cnpj?.replace(/\D/g, "") || "";
       return cnpj.length === 14 && r.parsed?.awbNumber && !r.isLikelyInstruction;
-    }) || parsedResults.find(r => {
-      const cnpj = r.parsed?.cnpj?.replace(/\D/g, "") || "";
-      return cnpj.length === 14 && r.parsed?.awbNumber && r !== instructionResult;
-    });
+    }) || parsedResults.find(r => r !== instructionResult);
 
-    if (!houseResult) {
-      throw new Error("Nenhum documento identificado como House AWB com CNPJ válido.");
-    }
+    if (!houseResult) throw new Error("Nenhum documento identificado como House AWB com CNPJ válido.");
 
-    const houseFile = houseResult.file;
-    const houseParsed = houseResult.parsed;
-    toast.info(`House AWB identificado: ${houseFile.name}`);
+    toast.info(`House AWB identificado: ${houseResult.file.name}`);
 
-    // Upload do House
-    const houseExt = houseFile.name.split(".").pop();
-    const houseFileName = `${userId}/${Date.now()}-house.${houseExt}`;
-    
-    const { error: uploadError } = await supabase.storage.from("hawb-documents").upload(houseFileName, houseFile);
-    if (uploadError) {
-      console.error("Upload error:", uploadError);
-      throw new Error(`Erro no upload: ${uploadError.message}`);
-    }
+    const uploadResult = await uploadDocument(houseResult.file, user?.id);
+    if (!uploadResult?.success) throw new Error(uploadResult?.error || "Erro no upload");
+    const documentId = uploadResult.documentId;
 
-    const { data: { publicUrl: houseUrl } } = supabase.storage
-      .from("hawb-documents")
-      .getPublicUrl(houseFileName);
-
-    let finalCnpj = houseParsed.cnpj;
+    let finalCnpj = houseResult.parsed.cnpj;
 
     if (instructionResult) {
       toast.info(`Instrução identificada: ${instructionResult.file.name}`);
-      let cnpjSuffix: string | null = instructionResult.cnpjSuffixPattern;
-
+      let cnpjSuffix = instructionResult.cnpjSuffixPattern;
       if (!cnpjSuffix) {
-        const instructionFormData = new FormData();
-        instructionFormData.append("file", instructionResult.file);
-        instructionFormData.append("document_type", "instruction");
-        const { data: instructionParsed } = await supabase.functions.invoke("parse-awb", {
-          body: instructionFormData,
-        });
-        cnpjSuffix = instructionParsed?.cnpjSuffix?.replace(/\D/g, "") || null;
+        const instrParsed = await parseDocument(instructionResult.file, "instruction");
+        cnpjSuffix = instrParsed?.cnpjSuffix?.replace(/\D/g, "") || null;
       }
-
-      if (cnpjSuffix && houseParsed.cnpj) {
-        const baseCnpj = houseParsed.cnpj.replace(/\D/g, "");
+      if (cnpjSuffix && houseResult.parsed.cnpj) {
+        const base = houseResult.parsed.cnpj.replace(/\D/g, "");
         if (cnpjSuffix.length === 4) {
-          finalCnpj = baseCnpj.substring(0, 8) + cnpjSuffix + baseCnpj.substring(12, 14);
+          finalCnpj = base.substring(0, 8) + cnpjSuffix + base.substring(12, 14);
           toast.info(`CNPJ ajustado conforme instrução: filial ${cnpjSuffix}`);
         } else if (cnpjSuffix.length >= 2 && cnpjSuffix.length <= 6) {
-          const prefixLength = 14 - cnpjSuffix.length;
-          finalCnpj = baseCnpj.substring(0, prefixLength) + cnpjSuffix;
+          finalCnpj = base.substring(0, 14 - cnpjSuffix.length) + cnpjSuffix;
           toast.info(`CNPJ ajustado conforme instrução: ...${cnpjSuffix}`);
         }
       }
     }
 
-    const composedParsedData = {
-      ...houseParsed,
-      cnpj: finalCnpj,
-      instructionUsed: !!instructionResult,
-    };
-
-    await processValidationViaMariaDB(composedParsedData, houseFileName, houseFile.name, houseUrl, userId);
+    await processValidation({ ...houseResult.parsed, cnpj: finalCnpj }, documentId, userId);
     toast.success("Documentos processados com sucesso!");
   };
 
-  // Nova função para validação via MariaDB
-  const processValidationViaMariaDB = async (
-    parsedData: any, 
-    filePath: string, 
-    fileName: string,
-    fileUrl: string,
-    userId: string
-  ) => {
-    try {
-      // Validar contra matriz de regras via MariaDB
-      const result = await validateAgainstMatrixViaMariaDB(parsedData);
-      const dbResult = result.result === "COMPATIVEL" ? "OK" : "BLOQUEIO";
-
-      // Inserir registro de validação no MariaDB com todos os campos parseados
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "create_awb_check",
-          awbNumber: parsedData.awbNumber || "N/A",
-          cnpj: parsedData.cnpj?.replace(/\D/g, "") || "N/A",
-          origin: parsedData.origin || "N/A",
-          destination: parsedData.destination || "N/A",
-          customer: result.customer,
-          validationStatus: dbResult,
-          validationMessage: result.reason,
-          matchedRuleId: result.matchedRuleId || null,
-          createdBy: userId,
-          hawbFileName: fileName,
-          hawbFilePath: fileUrl,
-          // Extracted data
-          extractedAwb: parsedData.awbNumber,
-          extractedCnpj: parsedData.cnpj,
-          extractedOrigin: parsedData.origin,
-          extractedDestination: parsedData.destination,
-          extractedCustomer: parsedData.customer,
-          confidenceScore: parsedData.confidence === "high" ? 0.9 : parsedData.confidence === "medium" ? 0.7 : 0.5,
-          // Additional parsed fields
-          shipper: parsedData.shipper,
-          consignee: parsedData.consignee,
-          carrier: parsedData.carrier,
-          grossWeight: parsedData.grossWeight,
-          chargeableWeight: parsedData.chargeableWeight,
-          mrn: parsedData.mrn,
-          routingLegs: parsedData.routingLegs,
-          flightNumbers: parsedData.flightNumbers,
-          hsCodes: parsedData.hsCodes,
-          dimensions: parsedData.dimensions,
-          incoterms: parsedData.incoterms,
-          references: parsedData.references,
-        },
-      });
-
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || "Erro ao salvar validação");
-
-      console.log("Validation saved:", data);
-    } catch (error) {
-      console.error("Erro na validação:", error);
-      throw error;
-    }
+  const processValidation = async (parsedData: any, documentId: number | undefined, userId: string) => {
+    const result = await validateAgainstMatrix(parsedData);
+    const dbResult = result.result === "COMPATIVEL" ? "OK" : "BLOQUEIO";
+    const data = await createCheck({
+      awbNumber: parsedData.awbNumber || "N/A",
+      cnpj: parsedData.cnpj?.replace(/\D/g, "") || "N/A",
+      origin: parsedData.origin || "N/A",
+      destination: parsedData.destination || "N/A",
+      customer: result.customer,
+      validationStatus: dbResult,
+      validationMessage: result.reason,
+      matchedRuleId: result.matchedRuleId || null,
+      createdBy: userId,
+      documentId: documentId || null,
+      extractedAwb: parsedData.awbNumber,
+      extractedCnpj: parsedData.cnpj,
+      extractedOrigin: parsedData.origin,
+      extractedDestination: parsedData.destination,
+      extractedCustomer: parsedData.customer,
+      confidenceScore: parsedData.confidence === "high" ? 0.9 : parsedData.confidence === "medium" ? 0.7 : 0.5,
+      shipper: parsedData.shipper,
+      consignee: parsedData.consignee,
+      carrier: parsedData.carrier,
+      grossWeight: parsedData.grossWeight,
+      chargeableWeight: parsedData.chargeableWeight,
+      mrn: parsedData.mrn,
+      routingLegs: parsedData.routingLegs,
+      flightNumbers: parsedData.flightNumbers,
+      hsCodes: parsedData.hsCodes,
+      dimensions: parsedData.dimensions,
+      incoterms: parsedData.incoterms,
+      references: parsedData.references,
+    });
+    if (!data?.success) throw new Error(data?.error || "Erro ao salvar validação");
   };
 
-  // Nova função para validar contra matriz via MariaDB
-  const validateAgainstMatrixViaMariaDB = async (parsedData: any) => {
+  const validateAgainstMatrix = async (parsedData: any) => {
     const missingFields = [];
     if (!parsedData.cnpj) missingFields.push("CNPJ");
     if (!parsedData.origin) missingFields.push("Origem");
     if (!parsedData.destination) missingFields.push("Destino");
-
-    if (missingFields.length > 0) {
-      throw new Error(`Campos não encontrados no documento: ${missingFields.join(", ")}`);
-    }
+    if (missingFields.length > 0) throw new Error(`Campos não encontrados: ${missingFields.join(", ")}`);
 
     const normalizedCnpj = parsedData.cnpj.replace(/\D/g, "");
-    if (normalizedCnpj.length !== 14) {
-      throw new Error("CNPJ inválido detectado");
-    }
+    if (normalizedCnpj.length !== 14) throw new Error("CNPJ inválido detectado");
 
-    // Buscar matrizes ativas via MariaDB
-    const { data: matricesData, error: matrixError } = await supabase.functions.invoke("mariadb-proxy", {
-      body: { action: "get_active_matrices" },
-    });
-
-    if (matrixError) throw matrixError;
-    if (!matricesData?.success || !matricesData?.matrices?.length) {
-      throw new Error("Nenhuma matriz de regras ativa encontrada");
-    }
+    const matricesData = await fetchActiveMatrices();
+    if (!matricesData?.success || !matricesData?.matrices?.length) throw new Error("Nenhuma matriz ativa encontrada");
 
     const matrices = matricesData.matrices;
     const extractedCustomer = parsedData.customer?.toUpperCase() as "KLABIN" | "ZF" | null;
-    
+
     if (!extractedCustomer) {
-      return {
-        result: "INCOMPATIVEL" as const,
-        reason: "Não foi possível identificar o cliente (Klabin/ZF) no documento",
-        customer: "KLABIN" as const,
-        matrixVersion: matrices[0]?.version || 1,
-        matchedRuleId: null,
-      };
+      return { result: "INCOMPATIVEL" as const, reason: "Cliente (Klabin/ZF) não identificado", customer: "KLABIN" as const, matchedRuleId: null };
     }
 
     const customerMatrix = matrices.find((m: any) => m.customer?.toUpperCase() === extractedCustomer);
     if (!customerMatrix) {
-      return {
-        result: "INCOMPATIVEL" as const,
-        reason: `Matriz ${extractedCustomer} não encontrada ou inativa`,
-        customer: extractedCustomer,
-        matrixVersion: matrices[0]?.version || 1,
-        matchedRuleId: null,
-      };
+      return { result: "INCOMPATIVEL" as const, reason: `Matriz ${extractedCustomer} não encontrada`, customer: extractedCustomer, matchedRuleId: null };
     }
 
-    // Buscar regras para o CNPJ via MariaDB
-    const { data: rulesData, error: rulesError } = await supabase.functions.invoke("mariadb-proxy", {
-      body: { 
-        action: "get_rules_by_cnpj",
-        matrixId: customerMatrix.id,
-        cnpj: normalizedCnpj,
-      },
-    });
-
-    if (rulesError) throw rulesError;
-
+    const rulesData = await fetchRules(customerMatrix.id, normalizedCnpj);
     const rules = rulesData?.rules || [];
+
     let result: "COMPATIVEL" | "INCOMPATIVEL";
     let reason: string;
     let matchedRuleId: number | null = null;
 
     if (rules.length > 0) {
       const consigneeAddress = parsedData.consignee || parsedData.deliveryAddress || "";
-
       const airportMatch = rules.find((r: any) =>
-        r.airport_code &&
-        r.airport_code !== "N/A" &&
+        r.airport_code && r.airport_code !== "N/A" &&
         (r.airport_code.toUpperCase() === parsedData.origin?.toUpperCase() ||
-          r.airport_code.toUpperCase() === parsedData.destination?.toUpperCase())
+         r.airport_code.toUpperCase() === parsedData.destination?.toUpperCase())
       );
-
-      const addressMatch = rules.find((r: any) =>
-        r.address_pattern && addressMatches(consigneeAddress, r.address_pattern)
-      );
+      const addressMatch = rules.find((r: any) => r.address_pattern && addressMatches(consigneeAddress, r.address_pattern));
 
       if (airportMatch) {
-        result = "COMPATIVEL";
-        reason = "CNPJ e aeroporto compatíveis";
-        matchedRuleId = airportMatch.id;
+        result = "COMPATIVEL"; reason = "CNPJ e aeroporto compatíveis"; matchedRuleId = airportMatch.id;
       } else if (addressMatch) {
-        result = "COMPATIVEL";
-        reason = "CNPJ e endereço compatíveis";
-        matchedRuleId = addressMatch.id;
+        result = "COMPATIVEL"; reason = "CNPJ e endereço compatíveis"; matchedRuleId = addressMatch.id;
       } else {
         const hasValidAirport = rules.some((r: any) => r.airport_code && r.airport_code !== "N/A");
-        const hasValidAddress = rules.some((r: any) => r.address_pattern && r.address_pattern.trim() !== "");
-
+        const hasValidAddress = rules.some((r: any) => r.address_pattern?.trim());
         if (!hasValidAirport && !hasValidAddress) {
-          result = "COMPATIVEL";
-          reason = "CNPJ compatível";
-          matchedRuleId = rules[0]?.id || null;
+          result = "COMPATIVEL"; reason = "CNPJ compatível"; matchedRuleId = rules[0]?.id || null;
         } else {
-          result = "INCOMPATIVEL";
-          reason = "Aeroporto não compatível";
+          result = "INCOMPATIVEL"; reason = "Aeroporto não compatível";
         }
       }
     } else {
-      result = "INCOMPATIVEL";
-      reason = "CNPJ não compatível";
+      result = "INCOMPATIVEL"; reason = "CNPJ não compatível";
     }
 
-    return {
-      result,
-      reason,
-      customer: extractedCustomer,
-      matrixVersion: customerMatrix.version,
-      matchedRuleId,
-    };
+    return { result, reason, customer: extractedCustomer, matchedRuleId };
   };
 
   // Função auxiliar para normalização de endereço
@@ -957,7 +701,7 @@ const CheckAwb = () => {
                   </div>
 
                   <button
-                    onClick={fetchChecks}
+                    onClick={loadChecks}
                     disabled={isRefreshing}
                     className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-[rgba(255,255,255,.05)] border border-[rgba(255,255,255,.25)] text-[#f5f5f5] text-[0.78rem] font-semibold hover:bg-[rgba(255,255,255,.08)] disabled:opacity-50"
                   >

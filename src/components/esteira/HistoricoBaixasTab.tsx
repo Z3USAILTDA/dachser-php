@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -50,11 +49,9 @@ export const HistoricoBaixasTab = () => {
   const loadBaixas = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_historico_baixas", periodo: filterPeriodo }
-      });
-
-      if (error) throw error;
+      const resp = await fetch(`/api/fin/baixas/historico?periodo=${encodeURIComponent(filterPeriodo)}`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
       setBaixas(data?.data || []);
     } catch (err) {
       console.error("Erro ao carregar histórico de baixas:", err);

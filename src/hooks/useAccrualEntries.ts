@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 
 export interface AccrualEntry {
   id: string;
@@ -20,13 +19,10 @@ export interface AccrualEntryInput {
   uploaded_by_user_id?: string;
 }
 
-// Helper function to call MariaDB proxy
-async function callMariaDB<T>(action: string, params: Record<string, any> = {}): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-    body: { action, ...params }
-  });
-  if (error) throw error;
-  if (data?.error) throw new Error(data.error);
+async function finApi<T>(path: string, options?: RequestInit): Promise<T> {
+  const resp = await fetch(path, options);
+  const data = await resp.json();
+  if (!resp.ok || data?.error) throw new Error(data?.error || `HTTP ${resp.status}`);
   return data;
 }
 
@@ -37,10 +33,9 @@ export function useAccrualEntries() {
   const fetchEntries = useCallback(async (search?: string) => {
     setLoading(true);
     try {
-      const response = await callMariaDB<{ success: boolean; data: AccrualEntry[] }>('get_accrual_entries', { search });
-      if (response.success) {
-        setEntries(response.data || []);
-      }
+      const qs = search ? `?search=${encodeURIComponent(search)}` : '';
+      const response = await finApi<{ success: boolean; data: AccrualEntry[] }>(`/api/fin/accrual${qs}`);
+      if (response.success) setEntries(response.data || []);
     } catch (err) {
       console.error('Erro ao buscar accruals:', err);
     } finally {
@@ -50,11 +45,10 @@ export function useAccrualEntries() {
 
   const createEntry = useCallback(async (entry: AccrualEntryInput): Promise<string | null> => {
     try {
-      const response = await callMariaDB<{ success: boolean; id: string }>('create_accrual_entry', entry);
-      if (response.success) {
-        await fetchEntries();
-        return response.id;
-      }
+      const response = await finApi<{ success: boolean; id: string }>('/api/fin/accrual', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry),
+      });
+      if (response.success) { await fetchEntries(); return response.id; }
       return null;
     } catch (err) {
       console.error('Erro ao criar accrual:', err);
@@ -64,11 +58,10 @@ export function useAccrualEntries() {
 
   const bulkCreate = useCallback(async (entriesData: Array<{ fornecedor: string; valor: number; shared_code?: string }>): Promise<number> => {
     try {
-      const response = await callMariaDB<{ success: boolean; inserted: number }>('bulk_create_accrual', { entries: entriesData });
-      if (response.success) {
-        await fetchEntries();
-        return response.inserted;
-      }
+      const response = await finApi<{ success: boolean; inserted: number }>('/api/fin/accrual/bulk', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entries: entriesData }),
+      });
+      if (response.success) { await fetchEntries(); return response.inserted; }
       return 0;
     } catch (err) {
       console.error('Erro ao criar accruals em lote:', err);
@@ -78,7 +71,7 @@ export function useAccrualEntries() {
 
   const deleteEntry = useCallback(async (id: string): Promise<void> => {
     try {
-      await callMariaDB('delete_accrual_entry', { id });
+      await finApi(`/api/fin/accrual/${encodeURIComponent(id)}`, { method: 'DELETE' });
       await fetchEntries();
     } catch (err) {
       console.error('Erro ao deletar accrual:', err);
@@ -88,7 +81,7 @@ export function useAccrualEntries() {
 
   const clearAll = useCallback(async (): Promise<void> => {
     try {
-      await callMariaDB('clear_accrual_entries');
+      await finApi('/api/fin/accrual/all', { method: 'DELETE' });
       setEntries([]);
     } catch (err) {
       console.error('Erro ao limpar accruals:', err);
@@ -96,13 +89,5 @@ export function useAccrualEntries() {
     }
   }, []);
 
-  return {
-    entries,
-    loading,
-    fetchEntries,
-    createEntry,
-    bulkCreate,
-    deleteEntry,
-    clearAll
-  };
+  return { entries, loading, fetchEntries, createEntry, bulkCreate, deleteEntry, clearAll };
 }

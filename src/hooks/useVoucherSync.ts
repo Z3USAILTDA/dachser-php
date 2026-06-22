@@ -1,35 +1,22 @@
-import { supabase } from "@/integrations/supabase/client";
-
 /**
- * Hook to sync voucher updates to MariaDB
- * Note: Realtime sync was removed as vouchers table is now in MariaDB
- * Use syncVoucherToMariaDB for manual sync when needed
+ * Hook to sync voucher updates to MariaDB via API
  */
 export const useVoucherSync = () => {
-  // Realtime sync removed - vouchers table is now in MariaDB
-  // Use syncVoucherToMariaDB for explicit sync operations
-  console.log("Voucher sync: Using MariaDB directly, no Supabase realtime needed");
+  console.log("Voucher sync: Using API directly, no Supabase needed");
 };
 
-/**
- * Manually sync a voucher update to MariaDB
- * Use this when you need explicit control over syncing
- */
 export const syncVoucherToMariaDB = async (voucherId: string, updates: Record<string, any>) => {
   try {
-    const { error } = await supabase.functions.invoke("mariadb-proxy", {
-      body: {
-        action: "update_voucher_esteira",
-        voucher_id: voucherId,
-        ...updates,
-      },
+    const resp = await fetch(`/api/fin/vouchers/${encodeURIComponent(voucherId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
     });
-
-    if (error) {
-      console.error("Failed to sync voucher to MariaDB:", error);
+    const data = await resp.json();
+    if (!resp.ok || !data?.success) {
+      console.error("Failed to sync voucher to MariaDB:", data?.error);
       return false;
     }
-
     console.log("Voucher synced to MariaDB:", voucherId);
     return true;
   } catch (err) {

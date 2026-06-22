@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { CCTRegraNotificacao, CanalNotificacao } from '@/types/cct';
+import { CCTRegraNotificacao } from '@/types/cct';
+import { apiGet, apiPost, apiPatch, apiDelete } from '@/services/apiClient';
 import { toast } from 'sonner';
 
 export function useRegrasNotificacao() {
@@ -10,20 +10,13 @@ export function useRegrasNotificacao() {
   const fetchRegras = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await (supabase as any).functions.invoke('mariadb-proxy', {
-        body: { action: 'get_cct_regras_notificacao' }
-      });
-
-      if (error) throw error;
-      
-      // Parse arrays from JSON strings if needed
+      const data = await apiGet('/api/cct/regras-notificacao');
       const parsed = (data?.data || []).map((r: any) => ({
         ...r,
         aeroportos: typeof r.aeroportos === 'string' ? JSON.parse(r.aeroportos) : (r.aeroportos || []),
         eventos_disparo: typeof r.eventos_disparo === 'string' ? JSON.parse(r.eventos_disparo) : (r.eventos_disparo || []),
         canais: typeof r.canais === 'string' ? JSON.parse(r.canais) : (r.canais || []),
       }));
-      
       setRegras(parsed);
     } catch (err) {
       console.error('Erro ao buscar regras:', err);
@@ -35,17 +28,12 @@ export function useRegrasNotificacao() {
 
   const createRegra = useCallback(async (regra: Omit<CCTRegraNotificacao, 'id' | 'created_at' | 'updated_at'>) => {
     try {
-      const { error } = await (supabase as any).functions.invoke('mariadb-proxy', {
-        body: { 
-          action: 'create_cct_regra_notificacao',
-          ...regra,
-          aeroportos: JSON.stringify(regra.aeroportos),
-          eventos_disparo: JSON.stringify(regra.eventos_disparo),
-          canais: JSON.stringify(regra.canais),
-        }
+      await apiPost('/api/cct/regras-notificacao', {
+        ...regra,
+        aeroportos: JSON.stringify(regra.aeroportos),
+        eventos_disparo: JSON.stringify(regra.eventos_disparo),
+        canais: JSON.stringify(regra.canais),
       });
-
-      if (error) throw error;
       toast.success('Regra criada com sucesso');
       await fetchRegras();
       return true;
@@ -58,8 +46,7 @@ export function useRegrasNotificacao() {
 
   const updateRegra = useCallback(async (id: string, regra: Partial<CCTRegraNotificacao>) => {
     try {
-      const payload: any = { action: 'update_cct_regra_notificacao', id };
-      
+      const payload: any = {};
       if (regra.cliente_nome !== undefined) payload.cliente_nome = regra.cliente_nome;
       if (regra.cnpj_consignatario !== undefined) payload.cnpj_consignatario = regra.cnpj_consignatario;
       if (regra.aeroportos !== undefined) payload.aeroportos = JSON.stringify(regra.aeroportos);
@@ -67,12 +54,7 @@ export function useRegrasNotificacao() {
       if (regra.canais !== undefined) payload.canais = JSON.stringify(regra.canais);
       if (regra.template_id !== undefined) payload.template_id = regra.template_id;
       if (regra.ativo !== undefined) payload.ativo = regra.ativo;
-
-      const { error } = await (supabase as any).functions.invoke('mariadb-proxy', {
-        body: payload
-      });
-
-      if (error) throw error;
+      await apiPatch(`/api/cct/regras-notificacao/${id}`, payload);
       toast.success('Regra atualizada com sucesso');
       await fetchRegras();
       return true;
@@ -85,11 +67,7 @@ export function useRegrasNotificacao() {
 
   const deleteRegra = useCallback(async (id: string) => {
     try {
-      const { error } = await (supabase as any).functions.invoke('mariadb-proxy', {
-        body: { action: 'delete_cct_regra_notificacao', id }
-      });
-
-      if (error) throw error;
+      await apiDelete(`/api/cct/regras-notificacao/${id}`);
       toast.success('Regra excluída com sucesso');
       await fetchRegras();
       return true;
@@ -104,13 +82,5 @@ export function useRegrasNotificacao() {
     return updateRegra(id, { ativo });
   }, [updateRegra]);
 
-  return {
-    regras,
-    loading,
-    fetchRegras,
-    createRegra,
-    updateRegra,
-    deleteRegra,
-    toggleAtivo,
-  };
+  return { regras, loading, fetchRegras, createRegra, updateRegra, deleteRegra, toggleAtivo };
 }

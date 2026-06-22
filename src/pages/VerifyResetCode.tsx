@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { authForgotPassword, authVerifyResetCode } from "@/services/authService";
 import logoZ3us from "@/assets/logo-z3us.png";
 import dachserBg from "@/assets/dachser-background.jpg";
 
@@ -69,12 +69,9 @@ const VerifyResetCode = () => {
     setIsResending(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke("send-password-reset-code", {
-        body: { email },
-      });
+      const data = await authForgotPassword(email);
 
-      if (error) throw new Error(error.message);
-      if (data.error) throw new Error(data.error);
+      if (!data.success) throw new Error(data.error || "Erro ao reenviar código");
 
       toast({
         title: "Código reenviado",
@@ -111,18 +108,10 @@ const VerifyResetCode = () => {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "verify_reset_code", email, code: fullCode },
-      });
-
-      if (error) throw new Error(error.message);
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      const data = await authVerifyResetCode(email, fullCode);
 
       if (!data.success || !data.user) {
-        throw new Error("Código inválido ou expirado");
+        throw new Error(data.error || "Código inválido ou expirado");
       }
 
       toast({
@@ -130,12 +119,12 @@ const VerifyResetCode = () => {
         description: "Agora você pode definir sua nova senha.",
       });
 
-      navigate("/reset-password", { 
-        state: { 
-          email, 
+      navigate("/reset-password", {
+        state: {
+          email,
           username: data.user.username,
-          userId: data.user.id 
-        } 
+          userId: data.user.id,
+        },
       });
     } catch (err: unknown) {
       console.error("Error verifying code:", err);

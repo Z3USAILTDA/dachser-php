@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { downloadViaBlob } from "@/utils/blobDownload";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,10 +56,9 @@ export function ComprovantesTab() {
   const loadComprovantes = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "list_comprovantes" },
-      });
-      if (error) throw error;
+      const resp = await fetch('/api/fin/vouchers/comprovantes');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
       if (data?.comprovantes) {
         setComprovantes(data.comprovantes);
       }

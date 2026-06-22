@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  fetchMatrices as apiFetchMatrices,
+  fetchRules as apiFetchRules,
+  importMatrix,
+  createRule,
+  deleteRule,
+} from "@/services/checkAwbService";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -68,12 +74,12 @@ export const RuleMatrixManager = ({ userRole }: RuleMatrixManagerProps) => {
   });
 
   useEffect(() => {
-    fetchMatrices();
+    loadMatrices();
   }, []);
 
   useEffect(() => {
     if (selectedMatrix) {
-      fetchRules(selectedMatrix.id);
+      loadRules(selectedMatrix.id);
     }
   }, [selectedMatrix]);
 
@@ -91,22 +97,16 @@ export const RuleMatrixManager = ({ userRole }: RuleMatrixManagerProps) => {
     }
   }, [customerFilter, matrices]);
 
-  const fetchMatrices = async () => {
+  const loadMatrices = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_rule_matrices" },
-      });
-
-      if (error) throw error;
+      const data = await apiFetchMatrices();
       if (!data?.success) throw new Error(data?.error || "Erro ao carregar matrizes");
-
       const formattedMatrices = (data.matrices || []).map((m: any) => ({
         ...m,
         effective_from: m.effective_from || m.effective_date,
         is_active: Boolean(m.is_active),
       }));
-
       setMatrices(formattedMatrices);
     } catch (error: any) {
       console.error("Error fetching matrices:", error);
@@ -116,16 +116,11 @@ export const RuleMatrixManager = ({ userRole }: RuleMatrixManagerProps) => {
     }
   };
 
-  const fetchRules = async (matrixId: number) => {
+  const loadRules = async (matrixId: number) => {
     setIsLoadingRules(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_rule_rows", matrixId },
-      });
-
-      if (error) throw error;
+      const data = await apiFetchRules(matrixId);
       if (!data?.success) throw new Error(data?.error || "Erro ao carregar regras");
-
       setRules(data.rules || []);
     } catch (error: any) {
       console.error("Error fetching rules:", error);
@@ -140,21 +135,12 @@ export const RuleMatrixManager = ({ userRole }: RuleMatrixManagerProps) => {
       toast.error("Por favor, selecione um arquivo Excel (.xlsx ou .xls)");
       return;
     }
-
     setIsUploading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const { data, error } = await supabase.functions.invoke("import-rule-matrix", {
-        body: formData,
-      });
-
-      if (error) throw error;
-
+      const data = await importMatrix(file);
       if (data?.success) {
         toast.success(data.message || "Matriz importada com sucesso");
-        fetchMatrices();
+        loadMatrices();
       } else {
         throw new Error(data?.error || "Erro ao importar matriz");
       }
@@ -194,44 +180,25 @@ export const RuleMatrixManager = ({ userRole }: RuleMatrixManagerProps) => {
       toast.error("CNPJ é obrigatório");
       return;
     }
-
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "create_rule_row",
-          matrixId: selectedMatrix.id,
-          cnpj: newRule.cnpj.replace(/\D/g, ""),
-          airportCode: newRule.airport_code || null,
-          addressPattern: newRule.address_pattern || null,
-          emailDespachante: newRule.email_despachante || null,
-          refOthello: newRule.ref_othello || null,
-          empresa: newRule.empresa || null,
-          endereco: newRule.endereco || null,
-          cidade: newRule.cidade || null,
-          estado: newRule.estado || null,
-          cep: newRule.cep || null,
-          pais: newRule.pais || null,
-        },
+      const data = await createRule({
+        matrixId: selectedMatrix.id,
+        cnpj: newRule.cnpj.replace(/\D/g, ""),
+        airportCode: newRule.airport_code || null,
+        addressPattern: newRule.address_pattern || null,
+        emailDespachante: newRule.email_despachante || null,
+        refOthello: newRule.ref_othello || null,
+        empresa: newRule.empresa || null,
+        endereco: newRule.endereco || null,
+        cidade: newRule.cidade || null,
+        estado: newRule.estado || null,
+        cep: newRule.cep || null,
+        pais: newRule.pais || null,
       });
-
-      if (error) throw error;
       if (!data?.success) throw new Error(data?.error || "Erro ao adicionar regra");
-
       toast.success("Regra adicionada com sucesso");
-      fetchRules(selectedMatrix.id);
-      setNewRule({
-        cnpj: "",
-        airport_code: "",
-        address_pattern: "",
-        email_despachante: "",
-        ref_othello: "",
-        empresa: "",
-        endereco: "",
-        cidade: "",
-        estado: "",
-        cep: "",
-        pais: "",
-      });
+      loadRules(selectedMatrix.id);
+      setNewRule({ cnpj: "", airport_code: "", address_pattern: "", email_despachante: "", ref_othello: "", empresa: "", endereco: "", cidade: "", estado: "", cep: "", pais: "" });
       setShowAddForm(false);
     } catch (error: any) {
       console.error("Add rule error:", error);
@@ -241,17 +208,10 @@ export const RuleMatrixManager = ({ userRole }: RuleMatrixManagerProps) => {
 
   const handleDeleteRule = async (ruleId: number) => {
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "delete_rule_row", ruleId },
-      });
-
-      if (error) throw error;
+      const data = await deleteRule(ruleId);
       if (!data?.success) throw new Error(data?.error || "Erro ao excluir regra");
-
       toast.success("Regra excluída com sucesso");
-      if (selectedMatrix) {
-        fetchRules(selectedMatrix.id);
-      }
+      if (selectedMatrix) loadRules(selectedMatrix.id);
     } catch (error: any) {
       console.error("Delete rule error:", error);
       toast.error(error.message || "Erro ao excluir regra");

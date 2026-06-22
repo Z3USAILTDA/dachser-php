@@ -18,7 +18,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
 import { FORNECEDORES_SEM_FISCAL } from "@/data/fornecedoresSemFiscal";
@@ -53,10 +52,9 @@ export const FornecedoresSemFiscalDialog = ({ trigger }: FornecedoresSemFiscalDi
   const loadRows = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_fornecedores_sem_fiscal" },
-      });
-      if (error) throw error;
+      const resp = await fetch('/api/fin/fornecedores-sem-fiscal');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
       if (data?.success && Array.isArray(data.data)) {
         setRows(data.data);
       } else {
@@ -114,16 +112,13 @@ export const FornecedoresSemFiscalDialog = ({ trigger }: FornecedoresSemFiscalDi
       const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
       const userName = storedUser ? (JSON.parse(storedUser).name || JSON.parse(storedUser).email) : null;
 
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "add_fornecedor_sem_fiscal",
-          cnpj,
-          nome,
-          created_by: userName,
-        },
+      const resp = await fetch('/api/fin/fornecedores-sem-fiscal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cnpj, nome, created_by: userName }),
       });
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || "Erro ao adicionar");
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data?.success) throw new Error(data?.error || `HTTP ${resp.status}`);
       toast({ title: "Fornecedor adicionado" });
       setNewCnpj("");
       setNewNome("");
@@ -149,11 +144,9 @@ export const FornecedoresSemFiscalDialog = ({ trigger }: FornecedoresSemFiscalDi
       return;
     }
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "remove_fornecedor_sem_fiscal", id },
-      });
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || "Erro ao remover");
+      const resp = await fetch(`/api/fin/fornecedores-sem-fiscal/${id}`, { method: 'DELETE' });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data?.success) throw new Error(data?.error || `HTTP ${resp.status}`);
       toast({ title: "Fornecedor removido" });
       await loadRows();
     } catch (err: any) {

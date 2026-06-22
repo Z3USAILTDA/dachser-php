@@ -925,7 +925,7 @@ Deno.serve(async (req) => {
         // Defensive truncation: column `method` may be VARCHAR(4) in legacy schema.
         const safeMethod = String(storedMethod).slice(0, 4);
         await client.query(
-          `INSERT INTO ai_agente.t_dachser_usage_logs (username, endpoint, method, session_id, event_time)
+          `INSERT INTO dados_dachser.t_usage_logs (username, endpoint, method, session_id, event_time)
            VALUES (?, ?, ?, ?, NOW())`,
           [logUsername, storedEndpoint, safeMethod, logSessionId || null]
         );
@@ -971,7 +971,7 @@ Deno.serve(async (req) => {
         // Total de sessões distintas no período
         const countRes = await client.query(
           `SELECT COUNT(*) AS total FROM (
-             SELECT session_id FROM ai_agente.t_dachser_usage_logs
+             SELECT session_id FROM dados_dachser.t_usage_logs
              ${whereSql}
              GROUP BY session_id
            ) s`,
@@ -990,7 +990,7 @@ Deno.serve(async (req) => {
              COUNT(*) AS event_count,
              COUNT(DISTINCT endpoint) AS unique_endpoints,
              TIMESTAMPDIFF(SECOND, MIN(event_time), MAX(event_time)) AS duration_sec
-           FROM ai_agente.t_dachser_usage_logs
+           FROM dados_dachser.t_usage_logs
            ${whereSql}
            GROUP BY session_id
            ORDER BY ended_at DESC
@@ -1006,7 +1006,7 @@ Deno.serve(async (req) => {
           const placeholders = sessionIds.map(() => '?').join(', ');
           const eventsRes = await client.query(
             `SELECT session_id, endpoint, method, event_time
-             FROM ai_agente.t_dachser_usage_logs
+             FROM dados_dachser.t_usage_logs
              WHERE session_id IN (${placeholders})
              ORDER BY event_time ASC`,
             sessionIds
@@ -1067,7 +1067,7 @@ Deno.serve(async (req) => {
                GROUP_CONCAT(endpoint ORDER BY event_time DESC SEPARATOR '||'),
                '||', 1
              ) AS current_endpoint
-           FROM ai_agente.t_dachser_usage_logs
+           FROM dados_dachser.t_usage_logs
            WHERE ${acConds.join(' AND ')}
            GROUP BY session_id
            ORDER BY last_activity_at DESC`,
@@ -1142,7 +1142,7 @@ Deno.serve(async (req) => {
         const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
         const countResult = await client.query(
-          `SELECT COUNT(*) as total FROM ai_agente.t_dachser_usage_logs ${whereClause}`,
+          `SELECT COUNT(*) as total FROM dados_dachser.t_usage_logs ${whereClause}`,
           params
         );
         const total = Number(countResult[0]?.total || 0);
@@ -1154,7 +1154,7 @@ Deno.serve(async (req) => {
             COUNT(DISTINCT endpoint) AS endpoints,
             SUM(CASE WHEN method='GET' THEN 1 ELSE 0 END) AS get_calls,
             SUM(CASE WHEN method='POST' THEN 1 ELSE 0 END) AS post_calls
-          FROM ai_agente.t_dachser_usage_logs
+          FROM dados_dachser.t_usage_logs
           ${whereClause}`,
           params
         );
@@ -1167,7 +1167,7 @@ Deno.serve(async (req) => {
 
         const dailyResult = await client.query(
           `SELECT DATE(event_time) AS d, COUNT(*) AS total
-          FROM ai_agente.t_dachser_usage_logs
+          FROM dados_dachser.t_usage_logs
           ${whereClause}
           GROUP BY DATE(event_time)
           ORDER BY d ASC`,
@@ -1180,7 +1180,7 @@ Deno.serve(async (req) => {
 
         const endpointResult = await client.query(
           `SELECT endpoint, COUNT(*) AS total
-          FROM ai_agente.t_dachser_usage_logs
+          FROM dados_dachser.t_usage_logs
           ${whereClause}
           GROUP BY endpoint
           ORDER BY total DESC
@@ -1194,7 +1194,7 @@ Deno.serve(async (req) => {
 
         const logsResult = await client.query(
           `SELECT id, username, endpoint, method, event_time
-          FROM ai_agente.t_dachser_usage_logs
+          FROM dados_dachser.t_usage_logs
           ${whereClause}
           ORDER BY event_time DESC, id DESC
           LIMIT ? OFFSET ?`,
@@ -1269,7 +1269,7 @@ Deno.serve(async (req) => {
 
           const aggRes = await client.query(
             `SELECT COUNT(*) AS total, COUNT(DISTINCT username) AS users
-             FROM ai_agente.t_dachser_usage_logs ${whereSql}`,
+             FROM dados_dachser.t_usage_logs ${whereSql}`,
             params
           );
           const total = Number(aggRes[0]?.total || 0);
@@ -1289,7 +1289,7 @@ Deno.serve(async (req) => {
                  FROM (
                    SELECT username, event_time,
                      LAG(event_time) OVER (PARTITION BY username ORDER BY event_time) AS prev_time
-                   FROM ai_agente.t_dachser_usage_logs
+                   FROM dados_dachser.t_usage_logs
                    ${whereSql}
                  ) t
                  WHERE prev_time IS NOT NULL
@@ -1300,7 +1300,7 @@ Deno.serve(async (req) => {
             avgTimeSec = Math.round(Number(gapRes[0]?.avg_gap || 0));
 
             const topRes = await client.query(
-              `SELECT endpoint, COUNT(*) AS c FROM ai_agente.t_dachser_usage_logs
+              `SELECT endpoint, COUNT(*) AS c FROM dados_dachser.t_usage_logs
                ${whereSql} GROUP BY endpoint ORDER BY c DESC LIMIT 1`,
               params
             );
@@ -1328,7 +1328,7 @@ Deno.serve(async (req) => {
         const HIDDEN_LOG_USERS_MU = ["admin", "herbert.zacatei", "laricell", "teste.test3"];
         const isDachserUserMU = metricRequester && DACHSER_ADMIN_USERS_MU.includes(metricRequester);
 
-        let usersQuery = `SELECT DISTINCT username FROM ai_agente.t_dachser_usage_logs WHERE username != 'unknown'`;
+        let usersQuery = `SELECT DISTINCT username FROM dados_dachser.t_usage_logs WHERE username != 'unknown'`;
         let usersParams: string[] = [];
 
         usersQuery += ` AND username NOT IN (${HIDDEN_LOG_USERS_MU.map(() => '?').join(', ')})`;
@@ -1351,7 +1351,7 @@ Deno.serve(async (req) => {
           );
         }
         const delRes = await client.execute(
-          `DELETE FROM ai_agente.t_dachser_usage_logs WHERE LOWER(username) = LOWER(?)`,
+          `DELETE FROM dados_dachser.t_usage_logs WHERE LOWER(username) = LOWER(?)`,
           [targetUsername]
         );
         console.log(`[delete_metric_user_logs] removidos ${delRes?.affectedRows ?? 0} logs de ${targetUsername}`);

@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/select";
 import { Trash2, Search, AlertTriangle, Loader2 } from "lucide-react";
 import { Voucher, calcularTempoNaEtapa, formatarTempoNaEtapa, ETAPA_LABELS, SLA_POR_ETAPA } from "@/types/voucher";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
 interface BulkDeleteVouchersDialogProps {
@@ -119,11 +118,10 @@ export const BulkDeleteVouchersDialog = ({
     for (let i = 0; i < ids.length; i++) {
       const id = ids[i];
       try {
-        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "delete_voucher_esteira", voucher_id: id },
-        });
-        if (error || !data?.success) {
-          throw new Error(data?.error || error?.message || "Erro ao excluir");
+        const resp = await fetch(`/api/fin/vouchers/${id}`, { method: 'DELETE' });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data?.success) {
+          throw new Error(data?.error || `HTTP ${resp.status}`);
         }
         okCount++;
       } catch (e: any) {
