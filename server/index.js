@@ -2,13 +2,20 @@
 // Rode com: node server/index.js
 import 'dotenv/config';
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import cors from 'cors';
 import mysql from 'mysql2/promise';
 import { Resend } from 'resend';
 import { registerOlimpoRoutes } from './olimpoRoutes.js';
 
 const app = express();
-const PORT = process.env.SERVER_PORT || 3001;
+const PORT = process.env.PORT || process.env.SERVER_PORT || 3001;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const distPath = path.resolve(__dirname, '..', 'dist');
+const indexHtmlPath = path.join(distPath, 'index.html');
 
 // ─── Configurações de schema/database por fase ──────────────────────────────
 //
@@ -33,6 +40,10 @@ const ETD_CUTOFF = process.env.AIR_ETD_CUTOFF || '2026-06-01';
 
 app.use(cors());
 app.use(express.json());
+
+app.get('/api/health', (_req, res) => {
+  res.json({ success: true, service: 'dachser-api', time: new Date().toISOString() });
+});
 
 // ─── In-memory caches (mesma lógica da edge function) ───
 let discrepancyCache = null;
@@ -5672,6 +5683,20 @@ app.patch('/api/fin/vouchers/:id/numero-spo', async (req, res) => {
   }
 });
 
+// Serve o frontend em produção quando o domínio aponta para este app Node.
+// Rotas /api continuam exclusivas do backend; se uma API não existir, responde JSON 404.
+app.use(express.static(distPath));
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ success: false, error: 'Endpoint da API não encontrado.' });
+  }
+
+  if ((req.method === 'GET' || req.method === 'HEAD') && fs.existsSync(indexHtmlPath)) {
+    return res.sendFile(indexHtmlPath);
+  }
+
+  next();
+});
 // Express error handler — ensures JSON even for unhandled errors
 app.use((err, req, res, _next) => {
   const msg = err?.message || String(err) || 'Internal error';
