@@ -10,8 +10,7 @@ import {
   Zap, Database, Mail, Calculator, AlertTriangle 
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { format, parseISO, subDays } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 interface EdgeLog {
@@ -40,21 +39,16 @@ export function JobExecutionLogsPanel() {
   const { data: logs = [], isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['demurrage_job_logs', selectedFunction, daysBack],
     queryFn: async () => {
-      // Use edge function logs endpoint
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'demurrage_get_job_logs',
-          function_filter: selectedFunction !== "all" ? selectedFunction : null,
-          days_back: parseInt(daysBack),
-        }
-      });
-      
-      if (error) {
+      try {
+        const params = new URLSearchParams({ days_back: daysBack });
+        if (selectedFunction !== "all") params.set('function_filter', selectedFunction);
+        const res = await fetch(`/api/demurrage/job-logs?${params}`);
+        const data = await res.json();
+        return (data?.data || []) as EdgeLog[];
+      } catch (error) {
         console.error('Error fetching logs:', error);
         return [];
       }
-
-      return (data?.data || []) as EdgeLog[];
     },
     refetchInterval: () => (typeof document !== "undefined" && document.visibilityState === "visible" ? 30000 : false),
     refetchIntervalInBackground: false,

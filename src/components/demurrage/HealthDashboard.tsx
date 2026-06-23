@@ -15,7 +15,6 @@ import {
   XCircle,
   RefreshCw
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface ServiceHealth {
@@ -47,13 +46,13 @@ export function HealthDashboard() {
   const runHealthCheck = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("demurrage-health-check", {
-        body: testEmail ? { test_email: testEmail } : {},
+      const res = await fetch('/api/demurrage/health-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testEmail ? { test_email: testEmail } : {}),
       });
-
-      if (error) throw error;
+      const data = await res.json();
       setHealthData(data);
-      
       if (data.status === "healthy") {
         toast.success("Todos os serviços estão operacionais");
       } else if (data.status === "degraded") {

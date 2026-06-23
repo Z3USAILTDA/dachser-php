@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 
 export interface ChbClientConfig {
   id: string;
@@ -54,11 +53,38 @@ export interface ChbClientConfigInput {
 
 // Helper function to call MariaDB proxy
 async function callMariaDB<T>(action: string, params: Record<string, any> = {}): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-    body: { action, ...params }
-  });
-  if (error) throw error;
-  if (data?.error) throw new Error(data.error);
+  let response: Response;
+  switch (action) {
+    case 'get_chb_client_configs':
+      response = await fetch('/api/chb/client-configs');
+      break;
+    case 'get_chb_client_config':
+      response = await fetch(`/api/chb/client-configs/${encodeURIComponent(params.cnpj)}`);
+      break;
+    case 'create_chb_client_config':
+      response = await fetch('/api/chb/client-configs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+      break;
+    case 'update_chb_client_config': {
+      const { id, ...body } = params;
+      response = await fetch(`/api/chb/client-configs/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      break;
+    }
+    case 'delete_chb_client_config':
+      response = await fetch(`/api/chb/client-configs/${encodeURIComponent(params.id)}`, { method: 'DELETE' });
+      break;
+    default:
+      throw new Error(`Unsupported CHB config action: ${action}`);
+  }
+  const data = await response.json();
+  if (!response.ok || data?.error) throw new Error(data?.error || `HTTP ${response.status}`);
   return data;
 }
 

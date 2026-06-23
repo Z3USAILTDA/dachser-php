@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { apiGet, apiPatch } from '@/services/apiClient';
 
 export interface SlaConfig {
   id: string;
@@ -10,16 +10,6 @@ export interface SlaConfig {
   updated_at: string;
 }
 
-// Helper function to call MariaDB proxy
-async function callMariaDB<T>(action: string, params: Record<string, any> = {}): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-    body: { action, ...params }
-  });
-  if (error) throw error;
-  if (data?.error) throw new Error(data.error);
-  return data;
-}
-
 export function useSlaConfig() {
   const [configs, setConfigs] = useState<SlaConfig[]>([]);
   const [loading, setLoading] = useState(false);
@@ -27,8 +17,8 @@ export function useSlaConfig() {
   const fetchConfigs = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await callMariaDB<{ success: boolean; data: SlaConfig[] }>('get_sla_configs');
-      if (response.success) {
+      const response = await apiGet('/api/admin/sla-config');
+      if (response?.success) {
         setConfigs(response.data || []);
       }
     } catch (err) {
@@ -40,7 +30,7 @@ export function useSlaConfig() {
 
   const updateConfig = useCallback(async (id: string, updates: { horas_limite?: number; ativo?: boolean }): Promise<void> => {
     try {
-      await callMariaDB('update_sla_config', { id, ...updates });
+      await apiPatch(`/api/admin/sla-config/${id}`, updates);
       await fetchConfigs();
     } catch (err) {
       console.error('Erro ao atualizar configuração de SLA:', err);

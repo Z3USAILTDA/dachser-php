@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client"; // kept: extract-boleto-barcode edge fn requires Supabase
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { 
@@ -107,11 +106,14 @@ export const DadosPagamentoPanel = ({
       }
 
       // Extract barcode from boleto
-      const { data, error } = await supabase.functions.invoke("extract-boleto-barcode", {
-        body: { fileUrl: boletoAnexo.fileUrl }
+      const resp = await fetch("/api/parsers/boleto-barcode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileUrl: boletoAnexo.fileUrl }),
       });
+      const data = await resp.json();
 
-      if (error || !data?.success) {
+      if (!resp.ok || !data?.success) {
         throw new Error(data?.error || "Falha na extração");
       }
 

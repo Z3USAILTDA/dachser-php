@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { KeyRound, Play, Loader2, CheckCircle2, XCircle, Clock, Eye, EyeOff } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 
 interface ApiConfig {
   key: string;
@@ -47,9 +46,13 @@ export default function ApiKeyTest() {
       const custom = customKeys[apiKey]?.trim();
       if (custom) body.customKey = custom;
 
-      const { data, error } = await supabase.functions.invoke("test-api-key", { body });
-      if (error) throw error;
-      const result = data as TestResult;
+      const res = await fetch('/api/admin/test-api-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`Erro ${res.status}`);
+      const result = (await res.json()) as TestResult;
       setResults((prev) => ({
         ...prev,
         [apiKey]: { status: result.success ? "ok" : "error", result },

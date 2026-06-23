@@ -37,7 +37,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { FilterCard, TableCard } from "@/components/layout/PageCard";
@@ -127,11 +126,10 @@ function FinanceiroDisputaContent() {
   const fetchDisputas = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_disputas_cr", tipo: tipoFilter === "all" ? "" : tipoFilter },
-      });
-
-      if (error) throw error;
+      const params = new URLSearchParams();
+      if (tipoFilter !== "all") params.set('tipo', tipoFilter);
+      const res = await fetch(`/api/fin/disputas?${params}`);
+      const data = await res.json();
       if (data?.success && data.rows) {
         setRows(data.rows);
       } else {
@@ -240,11 +238,8 @@ function FinanceiroDisputaContent() {
 
     try {
       // Lookup do documento na nova base (CR) — pega a primeira ocorrência
-      const { data: lookupData, error: lookupError } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "lookup_documento_cr", nd: addNf.trim() },
-      });
-
-      if (lookupError) throw lookupError;
+      const lookupRes = await fetch(`/api/fin/disputas/lookup?nd=${encodeURIComponent(addNf.trim())}`);
+      const lookupData = await lookupRes.json();
       const lookupRows = lookupData?.rows || [];
       if (!lookupData?.success || lookupRows.length === 0) {
         setAddError("Documento não encontrado.");
@@ -259,16 +254,12 @@ function FinanceiroDisputaContent() {
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "save_disputa_cr_bulk",
-          doc_keys: docKeys,
-          responsavel: addResp.trim(),
-          observacoes: addObservacoes.trim(),
-        },
+      const bulkRes = await fetch('/api/fin/disputas/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ doc_keys: docKeys, responsavel: addResp.trim(), observacoes: addObservacoes.trim() }),
       });
-
-      if (error) throw error;
+      const data = await bulkRes.json();
       if (data?.success) {
         const inserted = Number(data?.inserted ?? 0);
         const updated = Number(data?.updated ?? 0);
@@ -304,11 +295,8 @@ function FinanceiroDisputaContent() {
   const handleDelete = async () => {
     if (!deleteDocKey) return;
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "delete_disputa_cr", doc_key: deleteDocKey },
-      });
-
-      if (error) throw error;
+      const res = await fetch(`/api/fin/disputas/${encodeURIComponent(deleteDocKey)}`, { method: 'DELETE' });
+      const data = await res.json();
       if (data?.success) {
         toast({ title: "Sucesso", description: "Disputa excluída" });
         fetchDisputas();
@@ -334,11 +322,12 @@ function FinanceiroDisputaContent() {
       return;
     }
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "resolve_disputa_cr", nf: targetNf },
+      const res = await fetch('/api/fin/disputas/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nf: targetNf }),
       });
-
-      if (error) throw error;
+      const data = await res.json();
       if (data?.success) {
         toast({ title: "Sucesso", description: "Disputa resolvida" });
         fetchDisputas();
@@ -383,10 +372,12 @@ function FinanceiroDisputaContent() {
     }
     setBulkLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "bulk_delete_disputas_cr", doc_keys: keys },
+      const res = await fetch('/api/fin/disputas/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ doc_keys: keys }),
       });
-      if (error) throw error;
+      const data = await res.json();
       if (!data?.success) throw new Error(data?.error || "Falha no bulk delete");
       toast({ title: "Excluído", description: `${data.deleted ?? keys.length} disputa(s) removida(s)` });
       setSelectedDocKeys(new Set());
@@ -409,10 +400,12 @@ function FinanceiroDisputaContent() {
     }
     setBulkLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "bulk_resolve_disputas_cr", doc_keys: keys },
+      const res = await fetch('/api/fin/disputas/bulk-resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ doc_keys: keys }),
       });
-      if (error) throw error;
+      const data = await res.json();
       if (!data?.success) throw new Error(data?.error || "Falha no bulk resolve");
       toast({ title: "Resolvido", description: `${data.resolved ?? keys.length} disputa(s) resolvida(s)` });
       setSelectedDocKeys(new Set());
@@ -447,11 +440,12 @@ function FinanceiroDisputaContent() {
       try {
         const targetNf = rowsRef.current.find(r => r.doc_key === docKey)?.nf;
         if (!targetNf) throw new Error("Linha não encontrada");
-        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "update_disputa_observacoes_cr", nf: targetNf, observacoes: value },
+        const res = await fetch(`/api/fin/disputas/${encodeURIComponent(docKey)}/observacoes`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nf: targetNf, observacoes: value }),
         });
-
-        if (error) throw error;
+        const data = await res.json();
         if (!data?.success) {
           toast({ title: "Erro", description: "Falha ao salvar observações", variant: "destructive" });
         }
@@ -477,11 +471,12 @@ function FinanceiroDisputaContent() {
       try {
         const targetNf = rowsRef.current.find(r => r.doc_key === docKey)?.nf;
         if (!targetNf) throw new Error("Linha não encontrada");
-        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "update_disputa_responsavel_cr", nf: targetNf, responsavel: value },
+        const res = await fetch(`/api/fin/disputas/${encodeURIComponent(docKey)}/responsavel`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nf: targetNf, responsavel: value }),
         });
-
-        if (error) throw error;
+        const data = await res.json();
         if (!data?.success) {
           toast({ title: "Erro", description: "Falha ao salvar responsável", variant: "destructive" });
         }
@@ -698,10 +693,12 @@ function FinanceiroDisputaContent() {
     }
     setImportLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "import_disputas_planilha_cr", items, forceUpdate },
+      const res = await fetch('/api/fin/disputas/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, forceUpdate }),
       });
-      if (error) throw error;
+      const data = await res.json();
       if (!data?.success) throw new Error(data?.error || "Falha na importação");
       const parts: string[] = [];
       if (data.count) parts.push(`${data.count} criada(s)`);
@@ -740,10 +737,12 @@ function FinanceiroDisputaContent() {
         return;
       }
       const items = propagateObservations(parsed);
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "check_disputas_planilha_cr", items: items.map(i => ({ nd: i.nd })) },
+      const checkRes = await fetch('/api/fin/disputas/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: items.map(i => ({ nd: i.nd })) }),
       });
-      if (error) throw error;
+      const data = await checkRes.json();
       if (!data?.success) throw new Error(data?.error || "Falha na verificação");
 
       setParsedItemsForImport(items);

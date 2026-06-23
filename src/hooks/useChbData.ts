@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 export interface ChbItem {
@@ -48,14 +47,73 @@ export interface ChbRun {
 }
 
 async function callMariaDB<T>(action: string, params: Record<string, any> = {}): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-    body: { action, ...params },
-  });
-  
-  if (error) {
-    throw new Error(error.message);
+  let response: Response;
+
+  switch (action) {
+    case 'get_chb_items':
+      response = await fetch('/api/chb/items');
+      break;
+    case 'create_chb_item':
+      response = await fetch('/api/chb/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+      break;
+    case 'update_chb_item': {
+      const { id, ...body } = params;
+      response = await fetch(`/api/chb/items/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      break;
+    }
+    case 'delete_chb_item':
+      response = await fetch(`/api/chb/items/${encodeURIComponent(params.id)}`, { method: 'DELETE' });
+      break;
+    case 'get_chb_files':
+      response = await fetch(`/api/chb/items/${encodeURIComponent(params.itemId)}/files`);
+      break;
+    case 'create_chb_file':
+      response = await fetch(`/api/chb/items/${encodeURIComponent(params.itemId)}/files`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+      break;
+    case 'delete_chb_doc':
+      response = await fetch(`/api/chb/items/${encodeURIComponent(params.itemId)}/files/${encodeURIComponent(params.fileId)}`, { method: 'DELETE' });
+      break;
+    case 'get_chb_runs': {
+      const qs = params.etapa ? `?etapa=${encodeURIComponent(params.etapa)}` : '';
+      response = await fetch(`/api/chb/items/${encodeURIComponent(params.itemId)}/runs${qs}`);
+      break;
+    }
+    case 'create_chb_run':
+      response = await fetch(`/api/chb/items/${encodeURIComponent(params.itemId)}/runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+      break;
+    case 'update_chb_run': {
+      const { runId, ...body } = params;
+      response = await fetch(`/api/chb/runs/${encodeURIComponent(runId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      break;
+    }
+    default:
+      throw new Error(`Unsupported CHB action: ${action}`);
   }
-  
+
+  const data = await response.json();
+  if (!response.ok || data?.error) {
+    throw new Error(data?.error || `HTTP ${response.status}`);
+  }
   return data as T;
 }
 

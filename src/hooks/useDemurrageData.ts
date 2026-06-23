@@ -1,5 +1,4 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 
 export interface DemurrageContainer {
   id: number;
@@ -100,30 +99,30 @@ export interface DemurrageRate {
   updated_at: string;
 }
 
+async function apiFetch(url: string, options?: RequestInit) {
+  const res = await fetch(url, options);
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
 export function useDemurrageData(filters?: DemurrageFilters) {
   return useQuery({
     queryKey: ['demurrage_containers', filters],
     queryFn: async () => {
-      // Build request body, only including non-empty values
-      const body: Record<string, unknown> = {
-        action: 'demurrage_get_containers',
-      };
-      
-      if (filters?.search) body.search = filters.search;
-      if (filters?.risk_status) body.risk_status = filters.risk_status;
-      if (filters?.cronos_status) body.cronos_status = filters.cronos_status;
+      const params = new URLSearchParams();
+      if (filters?.search) params.set('search', filters.search);
+      if (filters?.risk_status) params.set('risk_status', filters.risk_status);
+      if (filters?.cronos_status) params.set('cronos_status', filters.cronos_status);
       if (filters?.cronos_status_list && filters.cronos_status_list.length > 0) {
-        body.cronos_status_list = filters.cronos_status_list;
+        filters.cronos_status_list.forEach(s => params.append('cronos_status_list', s));
       }
-      if (filters?.cliente) body.cliente = filters.cliente;
-      if (filters?.armador) body.armador = filters.armador;
-      if (filters?.pre_invoice_status) body.pre_invoice_status = filters.pre_invoice_status;
-      if (filters?.dispute_status) body.dispute_status = filters.dispute_status;
-      if (filters?.audit_status) body.audit_status = filters.audit_status;
-      
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', { body });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to fetch containers');
+      if (filters?.cliente) params.set('cliente', filters.cliente);
+      if (filters?.armador) params.set('armador', filters.armador);
+      if (filters?.pre_invoice_status) params.set('pre_invoice_status', filters.pre_invoice_status);
+      if (filters?.dispute_status) params.set('dispute_status', filters.dispute_status);
+      if (filters?.audit_status) params.set('audit_status', filters.audit_status);
+      const data = await apiFetch(`/api/demurrage/containers?${params}`);
       return (data.data || []) as DemurrageContainer[];
     },
   });
@@ -133,11 +132,9 @@ export function useDemurrageContainersByMbl(mbl: string | null, invoiceNumber?: 
   return useQuery({
     queryKey: ['demurrage_containers_by_mbl', mbl, invoiceNumber],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'demurrage_get_containers_by_mbl', mbl, invoice_number: invoiceNumber || undefined }
-      });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to fetch containers by MBL');
+      const params = new URLSearchParams({ mbl: mbl! });
+      if (invoiceNumber) params.set('invoice_number', invoiceNumber);
+      const data = await apiFetch(`/api/demurrage/containers/by-mbl?${params}`);
       return (data.data || []) as DemurrageContainer[];
     },
     enabled: !!mbl,
@@ -148,11 +145,7 @@ export function useDemurrageStats() {
   return useQuery({
     queryKey: ['demurrage_stats'],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'demurrage_get_stats' }
-      });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to fetch stats');
+      const data = await apiFetch('/api/demurrage/stats');
       return data.data as DemurrageStats;
     },
   });
@@ -163,15 +156,11 @@ export function useUpdateDemurrageContainer() {
 
   return useMutation({
     mutationFn: async ({ containerId, updates }: { containerId: number; updates: Record<string, unknown> }) => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'demurrage_update_container',
-          container_id: containerId,
-          updates,
-        }
+      const data = await apiFetch(`/api/demurrage/containers/${containerId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates }),
       });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to update container');
       return data;
     },
     onSuccess: () => {
@@ -185,11 +174,7 @@ export function useDemurrageRates() {
   return useQuery({
     queryKey: ['demurrage_rates'],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'demurrage_get_rates' }
-      });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to fetch rates');
+      const data = await apiFetch('/api/demurrage/rates');
       return (data.data || []) as DemurrageRate[];
     },
   });
@@ -208,14 +193,11 @@ export function useCreateDemurrageRate() {
       period_start_day?: number;
       period_end_day?: number;
     }) => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'demurrage_create_rate',
-          ...rate,
-        }
+      const data = await apiFetch('/api/demurrage/rates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rate),
       });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to create rate');
       return data;
     },
     onSuccess: () => {
@@ -238,15 +220,11 @@ export function useUpdateDemurrageRate() {
       period_end_day: number;
       active: boolean;
     }>) => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'demurrage_update_rate',
-          rate_id: id,
-          updates,
-        }
+      const data = await apiFetch(`/api/demurrage/rates/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
       });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to update rate');
       return data;
     },
     onSuccess: () => {
@@ -260,14 +238,7 @@ export function useDeleteDemurrageRate() {
 
   return useMutation({
     mutationFn: async (id: number) => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'demurrage_delete_rate',
-          rate_id: id,
-        }
-      });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to delete rate');
+      const data = await apiFetch(`/api/demurrage/rates/${id}`, { method: 'DELETE' });
       return data;
     },
     onSuccess: () => {
@@ -286,11 +257,7 @@ export function useBulkDeleteDemurrageRates() {
       for (let i = 0; i < ids.length; i += batchSize) {
         const batch = ids.slice(i, i + batchSize);
         await Promise.all(batch.map(async (id) => {
-          const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-            body: { action: 'demurrage_delete_rate', rate_id: id }
-          });
-          if (error) throw error;
-          if (!data.success) throw new Error(data.error || 'Failed to delete rate');
+          await apiFetch(`/api/demurrage/rates/${id}`, { method: 'DELETE' });
           deleted++;
         }));
       }
@@ -306,11 +273,7 @@ export function useDemurrageSettings() {
   return useQuery({
     queryKey: ['demurrage_settings'],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'demurrage_get_settings' }
-      });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to fetch settings');
+      const data = await apiFetch('/api/demurrage/settings');
       return (data.data || {}) as Record<string, string>;
     },
   });
@@ -321,15 +284,11 @@ export function useUpdateDemurrageSetting() {
 
   return useMutation({
     mutationFn: async ({ key, value }: { key: string; value: string }) => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'demurrage_update_setting',
-          setting_key: key,
-          setting_value: value,
-        }
+      const data = await apiFetch(`/api/demurrage/settings/${encodeURIComponent(key)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value }),
       });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to update setting');
       return data;
     },
     onSuccess: () => {
@@ -343,11 +302,11 @@ export function useSyncDemurrage() {
 
   return useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'demurrage_sync_from_tracking' }
+      const data = await apiFetch('/api/demurrage/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
       });
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || 'Sync failed');
       return data;
     },
     onSuccess: () => {
@@ -362,8 +321,11 @@ export function useRecalcDemurrage() {
 
   return useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke('demurrage-recalc');
-      if (error) throw error;
+      const data = await apiFetch('/api/demurrage/recalc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
       return data;
     },
     onSuccess: () => {
@@ -377,11 +339,7 @@ export function useDemurrageClients() {
   return useQuery({
     queryKey: ['demurrage_clients'],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'demurrage_get_unique_clients' }
-      });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to fetch clients');
+      const data = await apiFetch('/api/demurrage/clients');
       return (data.data || []) as Array<{ cliente: string; total_containers: number; total_demurrage: number }>;
     },
   });
@@ -391,11 +349,7 @@ export function useDemurrageArmadores() {
   return useQuery({
     queryKey: ['demurrage_armadores'],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'demurrage_get_unique_armadores' }
-      });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to fetch armadores');
+      const data = await apiFetch('/api/demurrage/armadores');
       return (data.data || []) as Array<{ armador: string; total_containers: number }>;
     },
   });
@@ -422,16 +376,7 @@ export function useDemurrageContainerEvents(containerNumber: string | null) {
     queryKey: ['demurrage_container_events', containerNumber],
     queryFn: async () => {
       if (!containerNumber) return [];
-
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'demurrage_get_container_events',
-          container_number: containerNumber,
-        }
-      });
-
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to fetch container events');
+      const data = await apiFetch(`/api/demurrage/containers/${encodeURIComponent(containerNumber)}/events`);
       return (data.data || []) as ContainerEvent[];
     },
     enabled: !!containerNumber,
@@ -490,17 +435,11 @@ export function useDemurragePreInvoices(filters?: PreInvoiceFilters) {
   return useQuery({
     queryKey: ['demurrage_pre_invoices', filters],
     queryFn: async () => {
-      const body: Record<string, unknown> = {
-        action: 'demurrage_get_pre_invoices',
-      };
-      
-      if (filters?.status) body.status = filters.status;
-      if (filters?.workflow_status) body.workflow_status = filters.workflow_status;
-      if (filters?.client_name) body.client_name = filters.client_name;
-
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', { body });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to fetch pre-invoices');
+      const params = new URLSearchParams();
+      if (filters?.status) params.set('status', filters.status);
+      if (filters?.workflow_status) params.set('workflow_status', filters.workflow_status);
+      if (filters?.client_name) params.set('client_name', filters.client_name);
+      const data = await apiFetch(`/api/demurrage/pre-invoices?${params}`);
       return (data.data || []) as PreInvoice[];
     },
   });
@@ -511,16 +450,7 @@ export function useDemurragePreInvoiceItems(preInvoiceId: number | null) {
     queryKey: ['demurrage_pre_invoice_items', preInvoiceId],
     queryFn: async () => {
       if (!preInvoiceId) return [];
-
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'demurrage_get_pre_invoice_items',
-          pre_invoice_id: preInvoiceId,
-        }
-      });
-
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to fetch pre-invoice items');
+      const data = await apiFetch(`/api/demurrage/pre-invoices/${preInvoiceId}/items`);
       return (data.data || []) as PreInvoiceItem[];
     },
     enabled: !!preInvoiceId,
@@ -532,15 +462,11 @@ export function useUpdatePreInvoice() {
 
   return useMutation({
     mutationFn: async ({ invoiceId, updates }: { invoiceId: number; updates: Record<string, unknown> }) => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'demurrage_update_pre_invoice',
-          invoice_id: invoiceId,
-          updates,
-        }
+      const data = await apiFetch(`/api/demurrage/pre-invoices/${invoiceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates }),
       });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to update pre-invoice');
       return data;
     },
     onSuccess: () => {
@@ -555,8 +481,11 @@ export function useGeneratePreInvoices() {
 
   return useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke('demurrage-auto-invoice');
-      if (error) throw error;
+      const data = await apiFetch('/api/demurrage/recalc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'auto_invoice' }),
+      });
       return data;
     },
     onSuccess: () => {
@@ -572,15 +501,11 @@ export function useBulkUpdateDemurrageContainers() {
 
   return useMutation({
     mutationFn: async ({ containerIds, updates }: { containerIds: number[]; updates: Record<string, unknown> }) => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'demurrage_bulk_update_containers',
-          container_ids: containerIds,
-          updates,
-        }
+      const data = await apiFetch('/api/demurrage/containers/bulk-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ container_ids: containerIds, updates }),
       });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to bulk update containers');
       return data;
     },
     onSuccess: () => {
@@ -607,14 +532,11 @@ export function useCreateDemurrageDispute() {
 
   return useMutation({
     mutationFn: async (disputeData: CreateDisputeData) => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'demurrage_create_dispute',
-          ...disputeData,
-        }
+      const data = await apiFetch('/api/demurrage/disputes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(disputeData),
       });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to create dispute');
       return data;
     },
     onSuccess: () => {
@@ -625,7 +547,7 @@ export function useCreateDemurrageDispute() {
   });
 }
 
-// Demurrage Disputes List (from t_dachser_demurrage_disputes table)
+// Demurrage Disputes List
 export interface DemurrageDispute {
   id: number;
   container_id: number;
@@ -654,16 +576,10 @@ export function useDemurrageDisputesList(filters?: DisputeFilters) {
   return useQuery({
     queryKey: ['demurrage_disputes', filters],
     queryFn: async () => {
-      const body: Record<string, unknown> = {
-        action: 'demurrage_get_disputes',
-      };
-      
-      if (filters?.status) body.status = filters.status;
-      if (filters?.client_name) body.client_name = filters.client_name;
-
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', { body });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to fetch disputes');
+      const params = new URLSearchParams();
+      if (filters?.status) params.set('status', filters.status);
+      if (filters?.client_name) params.set('client_name', filters.client_name);
+      const data = await apiFetch(`/api/demurrage/disputes?${params}`);
       return (data.data || []) as DemurrageDispute[];
     },
   });
@@ -674,15 +590,11 @@ export function useUpdateDemurrageDispute() {
 
   return useMutation({
     mutationFn: async ({ disputeId, updates }: { disputeId: number; updates: Record<string, unknown> }) => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'demurrage_update_dispute',
-          id: disputeId,
-          updates,
-        }
+      const data = await apiFetch(`/api/demurrage/disputes/${disputeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
       });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to update dispute');
       return data;
     },
     onSuccess: () => {
@@ -712,15 +624,7 @@ export function useDemurrageAlerts(clientName?: string) {
   return useQuery({
     queryKey: ['demurrage_alerts', clientName],
     queryFn: async () => {
-      const body: Record<string, unknown> = {
-        action: 'demurrage_get_alerts',
-        limit: 100,
-      };
-
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', { body });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to fetch alerts');
-      
+      const data = await apiFetch('/api/demurrage/alerts?limit=100');
       let alerts = (data.data || []) as DemurrageAlert[];
       if (clientName) {
         alerts = alerts.filter(a => a.client_name === clientName);
@@ -744,13 +648,12 @@ export function useSendTestAlert() {
     }) => {
       const { clientName, emails, preInvoice, items, demurrageContainers } = params;
 
-      // Extract partner_id and hbl from demurrageContainers
       const firstContainer = (demurrageContainers || []).find(c => c.partner_id);
       const partnerId = firstContainer?.partner_id || '';
       const houseBl = (demurrageContainers || []).find(c => c.hbl)?.hbl || preInvoice?.bl_number || '';
 
       let containers: Array<Record<string, unknown>>;
-      
+
       if (items && items.length > 0) {
         containers = items.map(item => {
           const match = (demurrageContainers || []).find(dc => dc.numero === item.container_number);
@@ -771,7 +674,6 @@ export function useSendTestAlert() {
           };
         });
       } else {
-        // Fallback: build from demurrageContainers when pre_invoice_items is empty
         containers = (demurrageContainers || []).map(dc => ({
           number: dc.numero,
           type: '',
@@ -789,8 +691,10 @@ export function useSendTestAlert() {
         }));
       }
 
-      const { data, error } = await supabase.functions.invoke('demurrage-send-alert', {
-        body: {
+      const data = await apiFetch('/api/demurrage/send-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           test_mode: true,
           client_name: clientName,
           recipient_emails: emails,
@@ -805,9 +709,8 @@ export function useSendTestAlert() {
           issue_date: preInvoice?.issue_date || new Date().toISOString(),
           container_number: containers[0]?.number || '',
           containers,
-        }
+        }),
       });
-      if (error) throw error;
       return data;
     },
     onSuccess: () => {
@@ -829,15 +732,11 @@ export function useCreateAuditEvent() {
       event_description?: string;
       source?: string;
     }) => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'demurrage_create_container_event',
-          ...eventData,
-          event_datetime: new Date().toISOString(),
-        }
+      const data = await apiFetch(`/api/demurrage/containers/${eventData.container_id}/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...eventData, event_datetime: new Date().toISOString() }),
       });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to create audit event');
       return data;
     },
     onSuccess: () => {
@@ -852,15 +751,11 @@ export function useMarkAlertReturned() {
 
   return useMutation({
     mutationFn: async ({ alertId, userName }: { alertId: number; userName?: string }) => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'demurrage_mark_alert_returned',
-          id: alertId,
-          user_name: userName || 'manual',
-        }
+      const data = await apiFetch(`/api/demurrage/alerts/${alertId}/returned`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_name: userName || 'manual' }),
       });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to mark alert as returned');
       return data;
     },
     onSuccess: () => {
@@ -878,11 +773,11 @@ export function useBulkCreateDemurrageRates() {
       armador: string; container_type: string; free_time_days: number;
       rate_usd: number; period_type?: string; period_start_day?: number; period_end_day?: number;
     }>) => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'demurrage_bulk_create_rates', rates }
+      const data = await apiFetch('/api/demurrage/rates/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rates }),
       });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to bulk create rates');
       return data;
     },
     onSuccess: () => {

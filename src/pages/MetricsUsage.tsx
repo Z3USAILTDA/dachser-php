@@ -5,7 +5,7 @@ import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { TablePagination } from "@/components/layout/TablePagination";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/services/apiClient";
 import { trackEvent } from "@/hooks/useUsageLog";
 import { parseDBDate, formatDateTimeBR } from "@/utils/timezone";
 import { prettifyEndpoint, prettifyMethod } from "@/utils/endpointLabels";
@@ -128,12 +128,8 @@ const MetricsUsage = () => {
   useEffect(() => {
     const fetchAvailableUsers = async () => {
       try {
-        const storedUser = localStorage.getItem("user");
-        const parsedUser = storedUser ? JSON.parse(storedUser) : null;
-        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "get_metric_users", requesterUsername: parsedUser?.username || null },
-        });
-        if (!error && data?.users) {
+        const data = await apiGet('/api/admin/metric-users');
+        if (data?.users) {
           setAvailableUsers(data.users);
         }
       } catch (err) {
@@ -178,10 +174,8 @@ const MetricsUsage = () => {
 
     const fetchActiveCount = async () => {
       try {
-        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "get_active_connections", requesterUsername: user?.username },
-        });
-        if (!error && data?.success) {
+        const data = await apiGet('/api/admin/connections');
+        if (data?.success) {
           setActiveUsersCount(Number(data.uniqueUsers || 0));
         }
       } catch (err) {
@@ -199,16 +193,14 @@ const MetricsUsage = () => {
   const fetchModuleStats = async () => {
     setLoadingModules(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "get_metrics_by_module",
-          dateFrom,
-          dateTo,
-          username: usernameFilter,
-          requesterUsername: user?.username,
-        },
+      const params = new URLSearchParams({
+        dateFrom,
+        dateTo,
+        ...(usernameFilter ? { username: usernameFilter } : {}),
+        ...(user?.username ? { requesterUsername: user.username } : {}),
       });
-      if (!error && data?.modules) setModuleStats(data.modules);
+      const data = await apiGet(`/api/fin/metrics/by-module?${params}`);
+      if (data?.modules) setModuleStats(data.modules);
     } catch (err) {
       console.error("Error fetching module stats:", err);
     } finally {
@@ -219,18 +211,16 @@ const MetricsUsage = () => {
   const fetchSessions = async () => {
     setLoadingSessions(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "get_metrics_sessions",
-          dateFrom,
-          dateTo,
-          username: usernameFilter,
-          requesterUsername: user?.username,
-          perPage: 25,
-          page: sessionsPage,
-        },
+      const params = new URLSearchParams({
+        dateFrom,
+        dateTo,
+        perPage: "25",
+        page: String(sessionsPage),
+        ...(usernameFilter ? { username: usernameFilter } : {}),
+        ...(user?.username ? { requesterUsername: user.username } : {}),
       });
-      if (!error && data?.sessions) {
+      const data = await apiGet(`/api/fin/metrics/sessions?${params}`);
+      if (data?.sessions) {
         setSessions(data.sessions);
         setSessionsTotalPages(data.totalPages || 1);
       }
@@ -255,20 +245,16 @@ const MetricsUsage = () => {
   const fetchMetrics = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "get_metrics",
-          dateFrom,
-          dateTo,
-          username: usernameFilter,
-          module: moduleFilter,
-          perPage,
-          page: currentPage,
-          requesterUsername: user?.username,
-        },
+      const params = new URLSearchParams({
+        dateFrom,
+        dateTo,
+        perPage: String(perPage),
+        page: String(currentPage),
+        ...(usernameFilter ? { username: usernameFilter } : {}),
+        ...(moduleFilter ? { module: moduleFilter } : {}),
+        ...(user?.username ? { requesterUsername: user.username } : {}),
       });
-
-      if (error) throw error;
+      const data = await apiGet(`/api/fin/metrics?${params}`);
 
       if (data) {
         setLogs(data.logs || []);

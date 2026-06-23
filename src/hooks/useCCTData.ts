@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiPatch } from "@/services/apiClient";
 import { filterByYearIfNotZ3us } from "@/utils/adminAccess";
 import type { 
   ProcessoCCT, 
@@ -394,23 +394,16 @@ export function useProcessosCCT(options: { enabled?: boolean } = {}) {
     queryFn: async (): Promise<ProcessoCCT[]> => {
       // Todos os usuários autenticados podem ver dados
 
-      console.log("CCT: Fetching shipments from MariaDB via mariadb-proxy...");
+      console.log("CCT: Fetching shipments from Express API...");
 
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'get_cct_shipments_cached' }
-      });
-
-      if (error) {
-        console.error("CCT: Error fetching shipments:", error);
-        throw new Error(error.message || 'Erro ao buscar processos CCT');
-      }
+      const data = await apiGet('/api/sea/cct/shipments');
 
       if (!data?.success) {
         console.error("CCT: Error in response:", data?.error);
         throw new Error(data?.error || 'Erro ao buscar processos CCT');
       }
 
-      // O edge `get_cct_shipments_cached` já aplica a regra de retenção
+      // O endpoint já aplica a regra de retenção
       // (oculta entregues após 5 dias do evento via dados_dachser.t_cct_hidden_hawbs).
       const processos: ProcessoCCT[] = (data.data || []).map(mapRowToProcessoCCT);
       console.log(`CCT: Loaded ${processos.length} processos`);
@@ -442,17 +435,7 @@ export function useProcessoCCT(id: string) {
   return useQuery({
     queryKey: ["cct-processo", id],
     queryFn: async (): Promise<ProcessoCCT | null> => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { 
-          action: 'get_cct_shipment',
-          shipmentId: id
-        }
-      });
-
-      if (error) {
-        console.error("CCT: Error fetching shipment:", error);
-        return null;
-      }
+      const data = await apiGet(`/api/sea/cct/shipments/${encodeURIComponent(id)}`);
 
       if (!data?.success || !data?.data) return null;
       return mapRowToProcessoCCT(data.data);
@@ -471,19 +454,9 @@ export function useCCTEvents(awb: string, master?: string) {
       if (!awb) return [];
 
       console.log("CCT: Fetching events for AWB:", awb, "Master:", master);
-      
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { 
-          action: 'get_cct_events',
-          awb: awb,
-          master: master || '',
-        }
-      });
 
-      if (error) {
-        console.error("CCT: Error fetching events:", error);
-        return [];
-      }
+      const params = new URLSearchParams({ shipment_id: awb });
+      const data = await apiGet(`/api/sea/cct/events?${params}`);
 
       if (!data?.success) {
         console.error("CCT: Error in response:", data?.error);
@@ -540,12 +513,10 @@ export function useExcecoesAnalytics() {
   return useQuery({
     queryKey: ["cct-excecoes-analytics"],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'get_cct_analytics' }
-      });
+      const data = await apiGet('/api/sea/cct/analytics');
 
-      if (error || !data?.success) {
-        console.error("CCT: Error fetching analytics:", error || data?.error);
+      if (!data?.success) {
+        console.error("CCT: Error fetching analytics:", data?.error);
         return { statusDistribution: [], alertCount: 0, staleCount: 0, dailyEvents: [] };
       }
 
@@ -625,12 +596,10 @@ export function useProfiles(options: { enabled?: boolean } = {}) {
     queryFn: async (): Promise<CCTProfile[]> => {
       // Todos os usuários autenticados podem ver dados
 
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'get_cct_profiles' }
-      });
+      const data = await apiGet('/api/sea/cct/profiles');
 
-      if (error || !data?.success) {
-        console.error("CCT: Error fetching profiles:", error || data?.error);
+      if (!data?.success) {
+        console.error("CCT: Error fetching profiles:", data?.error);
         return [];
       }
 
@@ -670,19 +639,14 @@ export function useRegistrarPeso() {
       volume_declarado?: number;
       volume_constatado?: number;
     }) => {
-      const { error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { 
-          action: 'update_cct_shipment',
-          shipmentId: data.shipmentId,
-          updates: {
-            peso_bruto: data.peso_declarado,
-            peso_real: data.peso_constatado,
-            volume: data.volume_declarado,
-          }
+      const result = await apiPatch(`/api/sea/cct/shipments/${encodeURIComponent(data.shipmentId)}`, {
+        updates: {
+          peso_bruto: data.peso_declarado,
+          peso_real: data.peso_constatado,
+          volume: data.volume_declarado,
         }
       });
-
-      if (error) throw error;
+      if (!result?.success) throw new Error(result?.error || 'Erro ao registrar peso');
       toast.success("Peso registrado com sucesso");
       return data;
     },
@@ -696,17 +660,10 @@ export function useUpdateTratamentos() {
   
   return useMutation({
     mutationFn: async (data: { shipmentId: string; tratamentos: string[] }) => {
-      const { error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { 
-          action: 'update_cct_shipment',
-          shipmentId: data.shipmentId,
-          updates: {
-            tratamento_especial: data.tratamentos.join(','),
-          }
-        }
+      const result = await apiPatch(`/api/sea/cct/shipments/${encodeURIComponent(data.shipmentId)}`, {
+        updates: { tratamento_especial: data.tratamentos.join(',') }
       });
-
-      if (error) throw error;
+      if (!result?.success) throw new Error(result?.error || 'Erro ao atualizar tratamentos');
       toast.success("Tratamentos atualizados");
       return data;
     },
@@ -720,17 +677,10 @@ export function useUpdateDecolagem() {
   
   return useMutation({
     mutationFn: async (data: { shipmentId: string; data_decolagem: string }) => {
-      const { error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { 
-          action: 'update_cct_shipment',
-          shipmentId: data.shipmentId,
-          updates: {
-            data_decolagem: data.data_decolagem,
-          }
-        }
+      const result = await apiPatch(`/api/sea/cct/shipments/${encodeURIComponent(data.shipmentId)}`, {
+        updates: { data_decolagem: data.data_decolagem }
       });
-
-      if (error) throw error;
+      if (!result?.success) throw new Error(result?.error || 'Erro ao atualizar decolagem');
       toast.success("Data de decolagem atualizada");
       return data;
     },
@@ -744,18 +694,10 @@ export function useAssignAnalista() {
   
   return useMutation({
     mutationFn: async (data: { shipmentId: string; nome_analista: string; email_analista?: string }) => {
-      const { error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { 
-          action: 'update_cct_shipment',
-          shipmentId: data.shipmentId,
-          updates: {
-            nome_analista: data.nome_analista,
-            email_analista: data.email_analista,
-          }
-        }
+      const result = await apiPatch(`/api/sea/cct/shipments/${encodeURIComponent(data.shipmentId)}`, {
+        updates: { nome_analista: data.nome_analista, email_analista: data.email_analista }
       });
-
-      if (error) throw error;
+      if (!result?.success) throw new Error(result?.error || 'Erro ao atribuir analista');
       toast.success("Analista atribuído");
       return data;
     },

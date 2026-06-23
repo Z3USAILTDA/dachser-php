@@ -19,7 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/services/apiClient";
 import { toast } from "sonner";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
@@ -85,11 +85,8 @@ export default function AlteracoesFee() {
   const fetchChanges = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'get_fee_changes' }
-      });
+      const data = await apiGet('/api/fin/fee-changes');
 
-      if (error) throw error;
       if (!data?.success) throw new Error(data?.error || 'Erro ao carregar dados');
 
       const changesData: FeeChange[] = data.changes || [];

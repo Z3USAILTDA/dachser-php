@@ -11,7 +11,6 @@ import { ChbTabs } from '@/components/chb/ChbTabs';
 import { ChbDocumentsPanel } from '@/components/chb/ChbDocumentsPanel';
 import { ChbAnalysisPanel } from '@/components/chb/ChbAnalysisPanel';
 import { ChbHistoryPanel } from '@/components/chb/ChbHistoryPanel';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useChbFiles, useChbRuns, useChbItems, ChbFile, ChbRun } from '@/hooks/useChbData';
 import { useChbClientConfig, ChbClientConfig } from '@/hooks/useChbClientConfig';
@@ -69,15 +68,11 @@ export default function ConferenciaChb() {
     if (!itemId) return;
     
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'get_chb_docs',
-          item_id: itemId,
-        },
-      });
+      const response = await fetch(`/api/chb/items/${encodeURIComponent(itemId)}/docs`);
+      const data = await response.json();
 
-      if (error) {
-        console.error('Error loading CHB documents from MariaDB:', error);
+      if (!response.ok) {
+        console.error('Error loading CHB documents from MariaDB:', data?.error);
         return;
       }
 
@@ -306,7 +301,7 @@ export default function ConferenciaChb() {
     const currentStepFiles = uploadedFiles[activeStep] || [];
     
     // Get documents from current and all previous steps
-    const allDocs = Array.from({ length: activeStep }, (_, i) => documents[i + 1] || []).flat();
+    let allDocs = Array.from({ length: activeStep }, (_, i) => documents[i + 1] || []).flat();
     
     // For re-run, use existing documents; for new analysis, need new files
     const hasNewFiles = currentStepFiles.length > 0;
@@ -335,9 +330,7 @@ export default function ConferenciaChb() {
 
     try {
       // =========================================================================
-      // STEP 0: Persist newly uploaded files to Storage + MariaDB BEFORE analysis.
-      // This prevents analyze-chb-documents from auto-registering duplicate rows
-      // (its "auto-register" branch creates rows without size/url, causing dupes).
+      // STEP 0: Persist newly uploaded files to MariaDB BLOB before analysis.
       // =========================================================================
       let savedDocsCount = 0;
       if (currentStepFiles.length > 0) {
@@ -347,42 +340,24 @@ export default function ConferenciaChb() {
         for (const file of currentStepFiles) {
           try {
             const timestamp = Date.now();
-            const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-            const filePath = `${itemId}/${activeStep}/${timestamp}_${safeName}`;
-
-            const { error: uploadError } = await supabase.storage
-              .from('chb-documents')
-              .upload(filePath, file, { cacheControl: '3600', upsert: false });
-
-            if (uploadError) {
-              console.error('Error uploading file:', uploadError);
-              toast.error(`Erro ao enviar ${file.name}`);
-              continue;
-            }
-
-            const { data: urlData } = supabase.storage
-              .from('chb-documents')
-              .getPublicUrl(filePath);
-            const publicUrl = urlData?.publicUrl;
-
-            const { error: fileInsertError, data: fileData } = await supabase.functions.invoke('mariadb-proxy', {
-              body: {
-                action: 'create_chb_file',
-                itemId: itemId,
+            const fileBase64 = await fileToBase64(file);
+            const uploadResp = await fetch(`/api/chb/items/${encodeURIComponent(itemId!)}/files/upload`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
                 filename: file.name,
                 mime: file.type,
                 sizeBytes: file.size,
-                sha256: null,
-                relPath: filePath,
-                url: publicUrl || '',
+                fileBase64,
                 etapa: activeStep.toString(),
                 docRole: detectDocumentType(file.name),
-                userId: null,
-              },
+                userId: localStorage.getItem('user_id') ? Number(localStorage.getItem('user_id')) : null,
+              }),
             });
+            const fileData = await uploadResp.json();
 
-            if (fileInsertError || !fileData?.success) {
-              console.error('Error saving file to MariaDB:', fileInsertError || fileData);
+            if (!uploadResp.ok || !fileData?.success) {
+              console.error('Error saving file to MariaDB:', fileData);
               toast.error(`Erro ao salvar ${file.name}`);
               continue;
             }
@@ -394,8 +369,7 @@ export default function ConferenciaChb() {
               uploadedAt: new Date().toLocaleString('pt-BR'),
               size: formatFileSize(file.size),
               stepId: activeStep,
-              file: file,
-              url: publicUrl,
+              url: fileData.fileUrl,
             });
 
             console.log(`[CHB] File saved successfully: ${file.name}`);
@@ -416,6 +390,10 @@ export default function ConferenciaChb() {
 
         // Refresh from MariaDB so the UI mirrors the DB truth
         await loadMariaDBFiles();
+        allDocs = [
+          ...Array.from({ length: activeStep }, (_, i) => documents[i + 1] || []).flat(),
+          ...savedDocs,
+        ];
 
         // Clear the upload buffer for this step now that files are persisted
         setUploadedFiles(prev => ({
@@ -424,19 +402,8 @@ export default function ConferenciaChb() {
         }));
       }
 
-      // Convert new uploaded files to base64
-      const newFilesContent = await Promise.all(
-        currentStepFiles.map(async (file) => ({
-          name: file.name,
-          content: await fileToBase64(file),
-          mimeType: file.type || 'application/octet-stream',
-          stepId: activeStep,
-        }))
-      );
-
-
-      // Convert existing documents (all steps) - fetch from URL if no local file
-      setAnalysisProgress('Carregando documentos existentes...');
+      // Convert persisted documents (all steps) from the database-backed download URL.
+      setAnalysisProgress('Carregando documentos salvos no banco...');
       const existingDocsPromises = allDocs.map(async (doc) => {
         // If we have a local File reference, use it
         if (doc.file) {
@@ -469,12 +436,9 @@ export default function ConferenciaChb() {
       const existingDocsResults = await Promise.all(existingDocsPromises);
       const existingDocsContent = existingDocsResults.filter((doc): doc is NonNullable<typeof doc> => doc !== null);
 
-      // Combine: existing docs first, then new files (avoiding duplicates)
-      const existingNames = new Set(existingDocsContent.map(d => d.name));
-      const uniqueNewFiles = newFilesContent.filter(f => !existingNames.has(f.name));
-      const allFilesContent = [...existingDocsContent, ...uniqueNewFiles];
+      const allFilesContent = existingDocsContent;
 
-      console.log(`Sending ${allFilesContent.length} files for analysis (${existingDocsContent.length} from DB/storage, ${uniqueNewFiles.length} new uploads)`);
+      console.log(`Sending ${allFilesContent.length} persisted DB files for analysis`);
       if (clientConfig) {
         console.log(`Using client config for: ${clientConfig.cliente_nome || clientConfig.cliente_cnpj}`);
       }
@@ -486,8 +450,10 @@ export default function ConferenciaChb() {
       setAnalysisProgress('Enviando para análise...');
       
       // Step 1: Submit analysis request
-      const submitResult = await supabase.functions.invoke('analyze-chb-documents', {
-        body: {
+      const submitResponse = await fetch('/api/chb/analyze-documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           stepId: activeStep,
           files: allFilesContent,
           itemId: itemId,
@@ -509,27 +475,26 @@ export default function ConferenciaChb() {
             estado_uf: clientConfig.estado_uf,
             icms_diferido: clientConfig.icms_diferido,
           } : undefined,
-        },
+        }),
       });
 
-      if (submitResult.error) {
+      const submitData = await submitResponse.json();
+      if (!submitResponse.ok) {
         // Extract detailed error message from response
         let errorMessage = 'Erro ao iniciar análise';
         
         // Check if the response data contains error details (from 4xx responses)
-        if (submitResult.data?.error) {
-          errorMessage = submitResult.data.error;
-          if (submitResult.data.errors?.[0]?.suggestion) {
-            errorMessage += ` ${submitResult.data.errors[0].suggestion}`;
+        if (submitData?.error) {
+          errorMessage = submitData.error;
+          if (submitData.errors?.[0]?.suggestion) {
+            errorMessage += ` ${submitData.errors[0].suggestion}`;
           }
-        } else if (submitResult.error.message && !submitResult.error.message.includes('non-2xx')) {
-          errorMessage = submitResult.error.message;
         }
         
         throw new Error(errorMessage);
       }
 
-      const { requestId } = submitResult.data;
+      const { requestId } = submitData;
       if (!requestId) {
         throw new Error('Não foi possível obter ID da requisição');
       }
@@ -554,16 +519,18 @@ export default function ConferenciaChb() {
         const elapsedSecs = Math.floor((Date.now() - startTime) / 1000);
         setAnalysisProgress(`Analisando documentos... (${elapsedSecs}s)`);
 
-        const pollResult = await supabase.functions.invoke('analyze-chb-documents', {
-          body: { requestId },
+        const pollResponse = await fetch('/api/chb/analyze-documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requestId }),
         });
 
-        if (pollResult.error) {
-          console.error('Poll error:', pollResult.error);
+        if (!pollResponse.ok) {
+          console.error('Poll error:', await pollResponse.text());
           continue; // Try again
         }
 
-        const pollData = pollResult.data;
+        const pollData = await pollResponse.json();
         console.log(`Poll status: ${pollData.status}`);
 
         if (pollData.status === 'completed') {
@@ -819,17 +786,22 @@ export default function ConferenciaChb() {
           approvedAt: new Date().toISOString(),
         };
         const userId = localStorage.getItem('user_id');
-        await supabase.functions.invoke('mariadb-proxy', {
-          body: {
-            action: 'save_chb_approved_snapshot',
+        const snapshotResponse = await fetch('/api/chb/approved-snapshots', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
             itemId,
             etapa: String(activeStep),
             snapshot: snapshotPayload,
             resultHtml: correctedHtml,
             summary: { ...tagCounts, filesAnalyzed: correctedAnalysis.filesAnalyzed || [] },
             approvedBy: userId ? parseInt(userId) : null,
-          },
+          }),
         });
+        if (!snapshotResponse.ok) {
+          const snapshotError = await snapshotResponse.json().catch(() => ({}));
+          throw new Error(snapshotError?.error || 'Erro ao salvar snapshot aprovado');
+        }
         console.log('[CHB] Approved snapshot saved for step', activeStep, '— rows:', snapshotPayload.rows.length);
       } catch (snapErr) {
         console.warn('[CHB] Failed to save approved snapshot (non-blocking):', snapErr);
@@ -888,14 +860,12 @@ export default function ConferenciaChb() {
   const handleDeleteDocument = async (docId: string) => {
     // Delete from MariaDB
     try {
-      const { error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'delete_chb_doc',
-          doc_id: docId,
-        },
+      const response = await fetch(`/api/chb/docs/${encodeURIComponent(String(docId))}`, {
+        method: 'DELETE',
       });
       
-      if (error) {
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
         console.error('Error deleting document from MariaDB:', error);
         toast.error('Erro ao excluir documento');
         return;

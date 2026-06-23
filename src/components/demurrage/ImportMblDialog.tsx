@@ -7,7 +7,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Ship, Package, AlertTriangle, CheckCircle2, Info } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { 
   getAllShippingLines, 
@@ -74,16 +73,13 @@ export function ImportMblDialog({ open, onOpenChange, onSuccess }: ImportMblDial
 
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("demurrage-import-jsoncargo", {
-        body: {
-          mbls,
-          shipping_line: carrier,
-          organization_id: "default",
-          cliente: cliente || undefined,
-        },
+      const apiRes = await fetch('/api/demurrage/import-jsoncargo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mbls, shipping_line: carrier, organization_id: 'default', cliente: cliente || undefined }),
       });
-
-      if (error) throw error;
+      if (!apiRes.ok) throw new Error(`Erro ${apiRes.status}: ${await apiRes.text()}`);
+      const data = await apiRes.json();
 
       const importResults: ImportResult[] = [];
 

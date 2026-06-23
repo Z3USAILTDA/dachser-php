@@ -3,7 +3,6 @@ import { insertDadosRmOnFinanceiro } from "@/utils/voucherRmSync";
 import { parseRequesterFromAjuste, stripRequesterMarker } from "@/utils/voucherAjusteRouting";
 import { Voucher, TipoAnexo } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client"; // mantido apenas para send-voucher-notification (FIN-5)
 import { useToast } from "@/hooks/use-toast";
 import { Send, AlertTriangle, RefreshCw, Loader2, Upload, MessageSquare, FileText, CheckCircle2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -241,9 +240,9 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
             moeda: voucher.moeda,
             vencimento: voucher.vencimento,
           };
-          await supabase.functions.invoke("send-voucher-notification", { body: { type: "URGENCIA_SOLICITADA", ...urgencyBody } });
+          await fetch('/api/notifications/voucher', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'URGENCIA_SOLICITADA', ...urgencyBody }) });
           try {
-            await supabase.functions.invoke("send-voucher-notification", { body: { type: "URGENCIA_SOLICITADA_CONFIRMACAO", ...urgencyBody } });
+            await fetch('/api/notifications/voucher', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'URGENCIA_SOLICITADA_CONFIRMACAO', ...urgencyBody }) });
           } catch (_) {}
         } catch (emailErr) {
           console.log("Email notification skipped:", emailErr);

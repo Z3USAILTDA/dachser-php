@@ -1,5 +1,4 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 
 export interface ClientProfile {
   id: number;
@@ -12,15 +11,18 @@ export interface ClientProfile {
   updated_at: string;
 }
 
+async function apiFetch(url: string, options?: RequestInit) {
+  const res = await fetch(url, options);
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
 export function useClientProfiles() {
   return useQuery({
     queryKey: ['demurrage_client_profiles'],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'demurrage_get_client_profiles' }
-      });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to fetch client profiles');
+      const data = await apiFetch('/api/demurrage/client-profiles');
       return (data.data || []) as ClientProfile[];
     },
   });
@@ -37,14 +39,11 @@ export function useCreateClientProfile() {
       report_frequency: string;
       contact_emails: string[];
     }) => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'demurrage_create_client_profile',
-          ...profile,
-        }
+      const data = await apiFetch('/api/demurrage/client-profiles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
       });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to create client profile');
       return data;
     },
     onSuccess: () => {
@@ -65,15 +64,11 @@ export function useUpdateClientProfile() {
       report_frequency?: string;
       contact_emails?: string[];
     }) => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'demurrage_update_client_profile',
-          cliente,
-          updates,
-        }
+      const data = await apiFetch(`/api/demurrage/client-profiles/${encodeURIComponent(cliente)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates }),
       });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to update client profile');
       return data;
     },
     onSuccess: () => {
@@ -88,14 +83,9 @@ export function useDeleteClientProfile() {
 
   return useMutation({
     mutationFn: async (cliente: string) => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'demurrage_delete_client_profile',
-          cliente,
-        }
+      const data = await apiFetch(`/api/demurrage/client-profiles/${encodeURIComponent(cliente)}`, {
+        method: 'DELETE',
       });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to delete client profile');
       return data;
     },
     onSuccess: () => {

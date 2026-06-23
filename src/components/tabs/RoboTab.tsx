@@ -5,8 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { Bot, Upload, CheckCircle2, XCircle, AlertCircle, FileText, Search, Edit2, X } from "lucide-react";
 
 import { UploadZone } from "@/components/maritimo/UploadZone";
@@ -215,14 +215,9 @@ export function RoboTab() {
 
   const searchVoucherBySPO = async (spo: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean; etapaAtual?: string } | null> => {
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'find_voucher_by_spo',
-          numero_spo: spo,
-        },
-      });
-
-      if (!error && data?.vouchers?.length > 0) {
+      const res = await fetch(`/api/fin/vouchers/find-by-spo?spo=${encodeURIComponent(spo)}`);
+      const data = await res.json();
+      if (data?.vouchers?.length > 0) {
         const chosen = pickVoucher(data.vouchers, spo);
         if (chosen) return buildMatch(chosen);
       }
@@ -234,14 +229,9 @@ export function RoboTab() {
 
   const searchVoucherByND = async (nd: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean; etapaAtual?: string } | null> => {
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'find_voucher_by_nd',
-          numero_nd: nd,
-        },
-      });
-
-      if (!error && data?.vouchers?.length > 0) {
+      const res = await fetch(`/api/fin/vouchers/find-by-nd?nd=${encodeURIComponent(nd)}`);
+      const data = await res.json();
+      if (data?.vouchers?.length > 0) {
         const chosen = pickVoucher(data.vouchers, nd);
         if (chosen) return buildMatch(chosen);
       }
@@ -265,19 +255,20 @@ export function RoboTab() {
   ): Promise<{ match: { id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean; etapaAtual?: string } | null; matchedValue: string | null }> => {
     const MAX = 6;
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'find_voucher_multi',
+      const res = await fetch('/api/fin/vouchers/find-multi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           spoPrimary: extracted.numeroSPO || undefined,
           ndPrimary: extracted.numeroND || undefined,
           spoCandidates: extracted.candidatosSPO.slice(0, MAX),
           ndCandidates: extracted.candidatosND.slice(0, MAX),
-        },
+        }),
       });
-      if (!error && data?.voucher) {
+      const data = await res.json();
+      if (data?.voucher) {
         const matchedCandidate: string | undefined = data.matchedCandidate;
         const matchedValue = matchedCandidate ? matchedCandidate.replace(/^(SPO|ND):/, '') : null;
-        // Defesa em profundidade: re-valida identidade
         const chosen = pickVoucher([data.voucher], matchedValue || undefined);
         if (chosen) return { match: buildMatch(chosen), matchedValue };
       }
@@ -435,7 +426,8 @@ export function RoboTab() {
     setProcessing(true);
     setProgress(0);
 
-    const { data: userData } = await supabase.auth.getUser();
+    const storedUser = localStorage.getItem('user');
+    const currentUser = storedUser ? JSON.parse(storedUser) : null;
     let processed = 0;
     let successCount = 0;
     let errorCount = 0;
@@ -472,18 +464,12 @@ export function RoboTab() {
           .getPublicUrl(filePath);
 
         // Save attachment metadata to MariaDB (must complete before subsequent calls)
-        const { error: attachmentError } = await supabase.functions.invoke('mariadb-proxy', {
-          body: {
-            action: 'save_voucher_anexo',
-            voucher_id: fileMatch.voucherId,
-            tipo: "COMPROVANTE",
-            file_url: publicUrl,
-            file_name: fileMatch.file.name,
-            file_size: fileMatch.file.size,
-          },
+        const anexoRes = await fetch(`/api/fin/vouchers/${encodeURIComponent(fileMatch.voucherId!)}/anexos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tipo: 'COMPROVANTE', file_url: publicUrl, file_name: fileMatch.file.name, file_size: fileMatch.file.size }),
         });
-
-        if (attachmentError) throw attachmentError;
+        if (!anexoRes.ok) throw new Error(`Erro ao salvar anexo: ${await anexoRes.text()}`);
 
         // Update voucher: se já estava CONCLUIDO, apenas marca o comprovante como validado;
         // caso contrário, segue o fluxo normal do robô (move para CONCLUIDO).
@@ -497,37 +483,27 @@ export function RoboTab() {
             };
 
         // Disparar update + logs em paralelo (independentes entre si)
+        const userName = currentUser?.email || currentUser?.nome || 'Sistema';
+        const userId = currentUser?.id || null;
         const tasks: Promise<any>[] = [
-          supabase.functions.invoke('mariadb-proxy', {
-            body: {
-              action: 'update_voucher_esteira',
-              voucher_id: fileMatch.voucherId,
-              updates,
-            },
+          fetch(`/api/fin/vouchers/${encodeURIComponent(fileMatch.voucherId!)}/esteira`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ updates }),
           }),
-          supabase.functions.invoke('mariadb-proxy', {
-            body: {
-              action: 'save_voucher_log',
-              voucher_id: fileMatch.voucherId,
-              user_id: userData.user?.id || null,
-              user_name: userData.user?.email || 'Sistema',
-              acao: "COMPROVANTE_ANEXADO",
-              detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô${fileMatch.childSpo ? ` (filho SPO ${fileMatch.childSpo})` : ''}${wasConcluded ? ' (revínculo em voucher já concluído)' : ''}`,
-            },
+          fetch('/api/fin/vouchers/log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ voucher_id: fileMatch.voucherId, user_id: userId, user_name: userName, acao: 'COMPROVANTE_ANEXADO', detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô${fileMatch.childSpo ? ` (filho SPO ${fileMatch.childSpo})` : ''}${wasConcluded ? ' (revínculo em voucher já concluído)' : ''}` }),
           }),
         ];
 
         if (!wasConcluded) {
           tasks.push(
-            supabase.functions.invoke('mariadb-proxy', {
-              body: {
-                action: 'save_voucher_log',
-                voucher_id: fileMatch.voucherId,
-                user_id: userData.user?.id || null,
-                user_name: userData.user?.email || 'Sistema',
-                acao: "CONCLUIDO_ROBO",
-                detalhe: `Voucher concluído automaticamente após processamento do comprovante`,
-              },
+            fetch('/api/fin/vouchers/log', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ voucher_id: fileMatch.voucherId, user_id: userId, user_name: userName, acao: 'CONCLUIDO_ROBO', detalhe: 'Voucher concluído automaticamente após processamento do comprovante' }),
             })
           );
         }

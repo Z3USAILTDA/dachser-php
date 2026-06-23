@@ -4,7 +4,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/services/apiClient";
 import { parseDBDate } from "@/utils/timezone";
 import { prettifyEndpoint } from "@/utils/endpointLabels";
 
@@ -69,10 +69,8 @@ export const ActiveConnectionsDialog = ({
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_active_connections", requesterUsername },
-      });
-      if (!error && data?.success) {
+      const data = await apiGet('/api/admin/connections');
+      if (data?.success) {
         const conns: ActiveConnection[] = data.connections || [];
         setConnections(conns);
         setUniqueUsers(Number(data.uniqueUsers || 0));
