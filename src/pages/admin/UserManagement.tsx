@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Users, Shield, UserCheck, UserX, Search, RefreshCw, Check, HelpCircle } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiPatch } from "@/services/apiClient";
 import { toast } from "sonner";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
@@ -94,11 +94,7 @@ const UserManagement = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_all_users_esteira" },
-      });
-
-      if (error) throw error;
+      const data = await apiGet("/api/fin/users/esteira");
       if (data.users) {
         setUsers(data.users);
       }
@@ -129,15 +125,7 @@ const UserManagement = () => {
     const newRoleString = newRoles.length > 0 ? newRoles.join(",") : null;
 
     try {
-      const { error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "update_user_esteira_role",
-          userId,
-          esteira_role: newRoleString,
-        },
-      });
-
-      if (error) throw error;
+      await apiPatch(`/api/fin/users/${userId}/esteira-role`, { esteira_role: newRoleString });
 
       setUsers((prev) =>
         prev.map((u) =>
@@ -156,15 +144,7 @@ const UserManagement = () => {
   const handleToggleActive = async (userId: number, currentActive: number) => {
     const newActive = currentActive === 1 ? 0 : 1;
     try {
-      const { error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "update_user_esteira_active",
-          userId,
-          esteira_active: newActive,
-        },
-      });
-
-      if (error) throw error;
+      await apiPatch(`/api/fin/users/${userId}/esteira-active`, { esteira_active: newActive });
 
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, esteira_active: newActive } : u))
@@ -179,15 +159,7 @@ const UserManagement = () => {
   const handleSupervisorChange = async (userId: number, supervisorIdRaw: string) => {
     const supervisor_id = supervisorIdRaw === "none" ? null : Number(supervisorIdRaw);
     try {
-      const { error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "update_user_supervisor",
-          userId,
-          supervisor_id,
-        },
-      });
-
-      if (error) throw error;
+      await apiPatch(`/api/fin/users/${userId}/supervisor`, { supervisor_id });
 
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, supervisor_id } : u))

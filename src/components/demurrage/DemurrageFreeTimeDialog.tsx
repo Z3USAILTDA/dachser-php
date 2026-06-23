@@ -7,7 +7,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCreateClientFreeTime, CreateClientFreeTimeData } from "@/hooks/useClientFreeTime";
-import { supabase } from "@/integrations/supabase/client";
 import { Clock, FileText, Building2, Loader2 } from "lucide-react";
 
 interface DemurrageFreeTimeDialogProps {
@@ -48,9 +47,8 @@ export function DemurrageFreeTimeDialog({ open, onOpenChange, onSuccess }: Demur
     if (term.length < 2) { setSuggestions([]); return; }
     setIsSearching(true);
     try {
-      const { data } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'demurrage_search_clientes', search: term }
-      });
+      const res = await fetch(`/api/demurrage/search-clientes?search=${encodeURIComponent(term)}`);
+      const data = await res.json();
       if (data?.success) {
         setSuggestions(data.data || []);
         setShowSuggestions(true);

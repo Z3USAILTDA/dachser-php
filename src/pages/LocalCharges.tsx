@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/services/apiClient";
 import { toast } from "sonner";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
@@ -229,15 +229,7 @@ export default function LocalCharges() {
   const fetchLocalCharges = async () => {
     setIsLoading(true);
     try {
-      const {
-        data,
-        error
-      } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'get_local_charges'
-        }
-      });
-      if (error) throw error;
+      const data = await apiGet('/api/fin/local-charges');
       if (!data?.success) throw new Error(data?.error || 'Erro ao carregar dados');
       if (data.hapag) setHapagData(data.hapag);
       if (data.msc) setMscData(data.msc);

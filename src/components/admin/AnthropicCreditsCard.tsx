@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiPost } from "@/services/apiClient";
 import { cn } from "@/lib/utils";
 
 interface CreditTopUp {
@@ -61,11 +61,7 @@ export function useAnthropicCredits() {
   const fetchCreditsData = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_anthropic_credits" },
-      });
-
-      if (error) throw error;
+      const data = await apiGet('/api/admin/anthropic-credits');
 
       if (data?.success) {
         setBalance(data.balance);
@@ -100,16 +96,11 @@ export function AnthropicTopupDialog({ isOpen, onOpenChange, onSuccess }: Anthro
 
     setIsSubmitting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { 
-          action: "add_anthropic_credit",
-          credit_date: newTopup.date,
-          amount_usd: parseFloat(newTopup.amount),
-          notes: newTopup.notes || null
-        },
+      const data = await apiPost('/api/admin/anthropic-credits', {
+        credit_date: newTopup.date,
+        amount_usd: parseFloat(newTopup.amount),
+        notes: newTopup.notes || null
       });
-
-      if (error) throw error;
 
       if (data?.success) {
         toast.success("Recarga registrada com sucesso!");
@@ -300,15 +291,11 @@ export function AnthropicBalanceAdjustDialog({ isOpen, onOpenChange, onSuccess, 
 
     setIsSubmitting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { 
-          action: "set_anthropic_balance",
-          balance_usd: balance,
-          notes: notes || `Saldo ajustado manualmente para $${balance.toFixed(2)}`
-        },
+      const data = await apiPost('/api/admin/anthropic-credits', {
+        action: 'set_balance',
+        balance_usd: balance,
+        notes: notes || `Saldo ajustado manualmente para $${balance.toFixed(2)}`
       });
-
-      if (error) throw error;
 
       if (data?.success) {
         toast.success("Saldo ajustado com sucesso!");

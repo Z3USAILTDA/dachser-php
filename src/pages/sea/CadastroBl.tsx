@@ -179,12 +179,17 @@ const CadastroBl = () => {
     setFileName(file.name);
     setIsExtracting(true);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-bl-cadastro`,
-        { method: "POST", headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` }, body: fd }
-      );
+      const fileBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch("/api/parsers/bl-cadastro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: file.name, mimeType: file.type || "application/pdf", fileBase64 }),
+      });
       const result = await res.json();
       if (!res.ok || !result.success) throw new Error(result.error || "Erro na extração");
       const d = result.data;

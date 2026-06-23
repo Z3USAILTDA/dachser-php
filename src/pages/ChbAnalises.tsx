@@ -13,7 +13,6 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { Filter as FilterIcon } from "lucide-react";
 import { useChbItems, ChbItem } from "@/hooks/useChbData";
-import { supabase } from "@/integrations/supabase/client";
 import { exportChbHistoryToPDF } from "@/utils/chbPdfExport";
 import { ChbClientConfigDialog } from "@/components/chb/ChbClientConfigDialog";
 import { copyHtmlAsText } from "@/utils/clipboard";
@@ -120,16 +119,9 @@ export default function ChbAnalises() {
       loading: true
     });
     try {
-      const {
-        data,
-        error
-      } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'get_chb_runs',
-          itemId
-        }
-      });
-      if (error) throw error;
+      const response = await fetch(`/api/chb/items/${encodeURIComponent(itemId)}/runs`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "Erro ao buscar histórico");
       setHistoryModal(prev => ({
         ...prev,
         history: (data?.data || []).filter((r: any) => r.status === 'approved'),

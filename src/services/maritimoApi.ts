@@ -138,20 +138,10 @@ export const maritimoApi = {
   },
 
   /**
-   * Poll analysis status - uses dedicated edge function
+   * Poll analysis status from backend
    */
   async pollAnalysis(analysisId: string): Promise<AnalysisStatus> {
-    const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sea-poll-analysis`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ id: analysisId })
-      }
-    );
+    const response = await fetch(`/api/sea/maritimo/analysis/${encodeURIComponent(analysisId)}`);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -231,7 +221,7 @@ export const maritimoApi = {
   },
 
   /**
-   * Submit analysis - uses dedicated edge function with FormData
+   * Submit analysis to backend with base64 files
    */
   async submitAnalysis(params: SubmitAnalysisParams): Promise<{ 
     analysisId: string; 
@@ -240,40 +230,25 @@ export const maritimoApi = {
     result_data?: any;
     error?: string;
   }> {
-    const formData = new FormData();
-    
-    if (params.itemId) {
-      formData.append('itemId', params.itemId);
-    }
-    formData.append('analysisType', params.analysisType);
-    
-    // Add files
-    if (params.files && params.files.length > 0) {
-      for (const file of params.files) {
-        formData.append('files', file);
-      }
-    }
-    
-    // Add fileUrls (pre-uploaded files)
-    if (params.fileUrls && params.fileUrls.length > 0) {
-      formData.append('fileUrls', JSON.stringify(params.fileUrls));
-    }
-    
-    // Add link data for invoices_hbl
-    if (params.linkData) {
-      formData.append('linkData', JSON.stringify(params.linkData));
-    }
+    const encodedFiles = await Promise.all((params.files || []).map(async (file) => ({
+      name: file.name,
+      type: file.type || 'application/octet-stream',
+      mimeType: file.type || 'application/octet-stream',
+      size: file.size,
+      content: await fileToBase64(file),
+    })));
 
-    const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sea-submit-analysis`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: formData
-      }
-    );
+    const response = await fetch('/api/sea/maritimo/submit-analysis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        itemId: params.itemId,
+        analysisType: params.analysisType,
+        files: encodedFiles,
+        fileUrls: params.fileUrls || [],
+        linkData: params.linkData || null,
+      }),
+    });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/services/apiClient";
 import { UserRole } from "@/types/voucher";
 
 export function useUserRole() {
@@ -64,11 +64,9 @@ export function useUserRole() {
 
           // 2) Busca esteira role do banco
           try {
-            const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-              body: { action: "get_user_esteira_role", userId },
-            });
+            const data = await apiGet(`/api/fin/users/${userId}/esteira-role`);
 
-            if (!error && data?.success) {
+            if (data?.success) {
               const esteiraRoleRaw = data.esteira_role as string | null;
               const active = data.esteira_active === 1;
 
@@ -82,16 +80,14 @@ export function useUserRole() {
               } catch {
                 // sessionStorage cheio / indisponível — segue sem cache
               }
+            } else if (isAdminUser) {
+              setRole("ADMIN");
+              setRoles(["ADMIN"]);
+              setEsteiraActive(true);
             } else {
-              if (isAdminUser) {
-                setRole("ADMIN");
-                setRoles(["ADMIN"]);
-                setEsteiraActive(true);
-              } else {
-                setRole(null);
-                setRoles([]);
-                setEsteiraActive(false);
-              }
+              setRole(null);
+              setRoles([]);
+              setEsteiraActive(false);
             }
           } catch (fetchErr) {
             console.error("Error fetching esteira role:", fetchErr);
@@ -109,32 +105,10 @@ export function useUserRole() {
           return;
         }
 
-        // Check Supabase auth (fallback)
-        const { data: { user } } = await supabase.auth.getUser();
-
-        if (!user) {
-          setRole(null);
-          setRoles([]);
-          setEsteiraActive(false);
-          setLoading(false);
-          return;
-        }
-
-        const { data: roleData } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (roleData?.role) {
-          setRole(roleData.role as UserRole);
-          setRoles([roleData.role as UserRole]);
-          setEsteiraActive(true);
-        } else {
-          setRole(null);
-          setRoles([]);
-          setEsteiraActive(false);
-        }
+        setRole(null);
+        setRoles([]);
+        setEsteiraActive(false);
+        setLoading(false);
       } catch (error) {
         console.error("Error fetching user role:", error);
         const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");

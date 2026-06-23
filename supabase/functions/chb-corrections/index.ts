@@ -324,7 +324,7 @@ async function reextractAndUpdateCorrection(
       console.log(`[chb-corrections] Re-extraction found location, updating correction ${correctionId}`);
       
       await client.execute(`
-        UPDATE ai_agente.t_dachser_chb_user_corrections
+        UPDATE dados_dachser.t_chb_user_corrections
         SET location_reference = ?,
             location_context = ?,
             location_confidence = ?,
@@ -365,7 +365,7 @@ async function reextractAndUpdateCorrection(
 
 // Fetch document content from DB-extracted data (raw_text + extracted_fields).
 // This replaces fetching the binary file URL — the analysis pipeline already
-// persists the readable content of every analyzed doc in t_dachser_chb_extracted_data.
+// persists the readable content of every analyzed doc in t_chb_extracted_data.
 async function fetchDocContentFromDb(
   client: Client,
   itemId: number | string,
@@ -395,7 +395,7 @@ async function fetchDocContentFromDb(
     // 1) Exact filename match
     let rows = await client.query(
       `SELECT filename, raw_text, extracted_fields
-         FROM ai_agente.t_dachser_chb_extracted_data
+         FROM dados_dachser.t_chb_extracted_data
         WHERE item_id = ? AND filename = ?
         LIMIT 1`,
       [itemId, filename]
@@ -415,7 +415,7 @@ async function fetchDocContentFromDb(
       const likeParams = tokens.map((t) => `%${t}%`);
       rows = await client.query(
         `SELECT filename, raw_text, extracted_fields
-           FROM ai_agente.t_dachser_chb_extracted_data
+           FROM dados_dachser.t_chb_extracted_data
           WHERE item_id = ? AND (${likeConditions})
           ORDER BY updated_at DESC
           LIMIT 1`,
@@ -428,7 +428,7 @@ async function fetchDocContentFromDb(
     // 3) Fallback: aggregate ALL extracted docs for this item — gives Gemini full context
     rows = await client.query(
       `SELECT filename, raw_text, extracted_fields
-         FROM ai_agente.t_dachser_chb_extracted_data
+         FROM dados_dachser.t_chb_extracted_data
         WHERE item_id = ?
         ORDER BY updated_at DESC`,
       [itemId]
@@ -470,7 +470,7 @@ async function saveExtractionRule(
     // First, ensure the processing_instruction column exists
     try {
       await client.execute(`
-        ALTER TABLE ai_agente.t_dachser_chb_extraction_rules
+        ALTER TABLE dados_dachser.t_chb_extraction_rules
         ADD COLUMN IF NOT EXISTS processing_instruction VARCHAR(1000) DEFAULT NULL
       `);
     } catch (alterError) {
@@ -481,7 +481,7 @@ async function saveExtractionRule(
     // Check if rule already exists
     const existing = await client.query(`
       SELECT id, times_used, success_rate, processing_instruction 
-      FROM ai_agente.t_dachser_chb_extraction_rules
+      FROM dados_dachser.t_chb_extraction_rules
       WHERE field_name = ? AND document_type = ?
       LIMIT 1
     `, [fieldName, documentType]);
@@ -496,7 +496,7 @@ async function saveExtractionRule(
       const effectiveInstruction = processingInstruction || rule.processing_instruction || null;
       
       await client.execute(`
-        UPDATE ai_agente.t_dachser_chb_extraction_rules
+        UPDATE dados_dachser.t_chb_extraction_rules
         SET extraction_pattern = ?,
             location_hint = ?,
             example_value = ?,
@@ -511,7 +511,7 @@ async function saveExtractionRule(
     } else {
       // Insert new rule
       await client.execute(`
-        INSERT INTO ai_agente.t_dachser_chb_extraction_rules
+        INSERT INTO dados_dachser.t_chb_extraction_rules
         (field_name, document_type, extraction_pattern, location_hint, example_value, times_used, success_rate, processing_instruction)
         VALUES (?, ?, ?, ?, ?, 1, 80.00, ?)
       `, [fieldName, documentType, pattern, extractionHint, exampleValue, processingInstruction]);
@@ -529,7 +529,7 @@ async function ensureTableExists(client: Client): Promise<void> {
   try {
     // Create corrections table
     await client.execute(`
-      CREATE TABLE IF NOT EXISTS ai_agente.t_dachser_chb_user_corrections (
+      CREATE TABLE IF NOT EXISTS dados_dachser.t_chb_user_corrections (
         id INT AUTO_INCREMENT PRIMARY KEY,
         item_id INT NOT NULL,
         filename VARCHAR(255) NOT NULL,
@@ -555,7 +555,7 @@ async function ensureTableExists(client: Client): Promise<void> {
     // Create extraction rules table for learning - EXPLICITLY LOG SUCCESS/FAILURE
     console.log('[chb-corrections] Creating extraction rules table if not exists...');
     await client.execute(`
-      CREATE TABLE IF NOT EXISTS ai_agente.t_dachser_chb_extraction_rules (
+      CREATE TABLE IF NOT EXISTS dados_dachser.t_chb_extraction_rules (
         id INT AUTO_INCREMENT PRIMARY KEY,
         field_name VARCHAR(100) NOT NULL,
         document_type VARCHAR(50),
@@ -574,7 +574,7 @@ async function ensureTableExists(client: Client): Promise<void> {
     console.error('[chb-corrections] Table creation error:', e);
     // Attempt to verify extraction rules table exists
     try {
-      await client.query('SELECT 1 FROM ai_agente.t_dachser_chb_extraction_rules LIMIT 1');
+      await client.query('SELECT 1 FROM dados_dachser.t_chb_extraction_rules LIMIT 1');
       console.log('[chb-corrections] Extraction rules table already exists');
     } catch {
       console.error('[chb-corrections] CRITICAL: Extraction rules table does NOT exist and could not be created');
@@ -617,7 +617,7 @@ serve(async (req) => {
         SELECT id, item_id, filename, field_name, original_value, corrected_value,
                location_reference, location_context, location_confidence,
                corrected_by, applied_count, is_validated, created_at
-        FROM ai_agente.t_dachser_chb_user_corrections
+        FROM dados_dachser.t_chb_user_corrections
         WHERE item_id = ?
         ORDER BY created_at DESC
       `, [parseInt(itemId)]);
@@ -670,7 +670,7 @@ serve(async (req) => {
           console.log(`[chb-corrections] file_content not provided, fetching DB-extracted content for item=${item_id}, filename="${filename}"`);
           effectiveFileContent = await fetchDocContentFromDb(client, item_id, filename);
           if (effectiveFileContent) {
-            console.log(`[chb-corrections] Loaded ${effectiveFileContent.length} chars from t_dachser_chb_extracted_data`);
+            console.log(`[chb-corrections] Loaded ${effectiveFileContent.length} chars from t_chb_extracted_data`);
           } else {
             console.log(`[chb-corrections] No DB-extracted content found for item ${item_id}, filename "${filename}"`);
           }
@@ -693,7 +693,7 @@ serve(async (req) => {
 
         // Check if correction already exists
         const existing = await client.query(`
-          SELECT id FROM ai_agente.t_dachser_chb_user_corrections
+          SELECT id FROM dados_dachser.t_chb_user_corrections
           WHERE item_id = ? AND filename = ? AND field_name = ?
           LIMIT 1
         `, [item_id, filename, field_name]);
@@ -704,7 +704,7 @@ serve(async (req) => {
           // Update existing
           correctionId = existing[0].id;
           await client.execute(`
-            UPDATE ai_agente.t_dachser_chb_user_corrections
+            UPDATE dados_dachser.t_chb_user_corrections
             SET corrected_value = ?,
                 original_value = ?,
                 location_reference = ?,
@@ -726,7 +726,7 @@ serve(async (req) => {
         } else {
           // Insert new
           const insertResult = await client.execute(`
-            INSERT INTO ai_agente.t_dachser_chb_user_corrections
+            INSERT INTO dados_dachser.t_chb_user_corrections
             (item_id, filename, field_name, original_value, corrected_value,
              location_reference, location_context, location_confidence,
              corrected_by, is_validated)
@@ -772,7 +772,7 @@ serve(async (req) => {
 
               // Update the correction in DB with better location
               await client.execute(`
-                UPDATE ai_agente.t_dachser_chb_user_corrections
+                UPDATE dados_dachser.t_chb_user_corrections
                 SET location_reference = ?,
                     location_context = ?,
                     location_confidence = ?,
@@ -832,7 +832,7 @@ serve(async (req) => {
         }
 
         await client.execute(
-          'DELETE FROM ai_agente.t_dachser_chb_user_corrections WHERE id = ?',
+          'DELETE FROM dados_dachser.t_chb_user_corrections WHERE id = ?',
           [correction_id]
         );
 
@@ -856,7 +856,7 @@ serve(async (req) => {
         }
 
         await client.execute(`
-          UPDATE ai_agente.t_dachser_chb_user_corrections
+          UPDATE dados_dachser.t_chb_user_corrections
           SET applied_count = applied_count + 1, updated_at = NOW()
           WHERE id = ?
         `, [correction_id]);
@@ -875,7 +875,7 @@ serve(async (req) => {
         // Get all corrections with low confidence
         const pendingCorrections = await client.query(`
           SELECT id, item_id, filename, field_name, corrected_value
-          FROM ai_agente.t_dachser_chb_user_corrections
+          FROM dados_dachser.t_chb_user_corrections
           WHERE location_confidence = 'baixa' 
              OR location_reference LIKE '%Erro%'
              OR location_reference LIKE '%manual%'
@@ -915,7 +915,7 @@ serve(async (req) => {
               if (reextractionResult.found) {
                 // Update correction with location
                 await client.execute(`
-                  UPDATE ai_agente.t_dachser_chb_user_corrections
+                  UPDATE dados_dachser.t_chb_user_corrections
                   SET location_reference = ?,
                       location_context = ?,
                       location_confidence = ?,
@@ -983,7 +983,7 @@ serve(async (req) => {
         let rulesCount = 0;
         try {
           const rules = await client.query(`
-            SELECT COUNT(*) as cnt FROM ai_agente.t_dachser_chb_extraction_rules
+            SELECT COUNT(*) as cnt FROM dados_dachser.t_chb_extraction_rules
           `);
           rulesCount = rules?.[0]?.cnt || 0;
         } catch {

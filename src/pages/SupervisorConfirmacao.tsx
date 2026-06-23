@@ -1,6 +1,5 @@
 import { useSearchParams } from "react-router-dom";
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
 
 type Status = "loading" | "approved" | "rejected" | "reject_form" | "error";
 

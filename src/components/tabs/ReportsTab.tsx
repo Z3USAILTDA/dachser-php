@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/services/apiClient";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Download, FileSpreadsheet, CalendarIcon, FileText } from "lucide-react";
 import { format } from "date-fns";
@@ -40,20 +40,15 @@ export function ReportsTab() {
     try {
       setLoading(true);
       
-      // Fetch from MariaDB via mariadb-proxy
-      const { data: response, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'export_vouchers_report',
-          etapa: filters.etapa,
-          statusBaixa: filters.statusBaixa,
-          statusIntegracaoRm: filters.statusIntegracaoRm,
-          tipoExecucaoPagamento: filters.tipoExecucaoPagamento,
-          dataInicio: filters.dataInicio ? format(filters.dataInicio, 'yyyy-MM-dd') : undefined,
-          dataFim: filters.dataFim ? format(filters.dataFim, 'yyyy-MM-dd') : undefined,
-        }
-      });
-
-      if (error) throw error;
+      // Fetch from Express API
+      const params = new URLSearchParams();
+      if (filters.etapa && filters.etapa !== 'all') params.set('etapa', filters.etapa);
+      if (filters.statusBaixa && filters.statusBaixa !== 'all') params.set('statusBaixa', filters.statusBaixa);
+      if (filters.statusIntegracaoRm && filters.statusIntegracaoRm !== 'all') params.set('statusIntegracaoRm', filters.statusIntegracaoRm);
+      if (filters.tipoExecucaoPagamento && filters.tipoExecucaoPagamento !== 'all') params.set('tipoExecucaoPagamento', filters.tipoExecucaoPagamento);
+      if (filters.dataInicio) params.set('dataInicio', format(filters.dataInicio, 'yyyy-MM-dd'));
+      if (filters.dataFim) params.set('dataFim', format(filters.dataFim, 'yyyy-MM-dd'));
+      const response = await apiGet(`/api/fin/vouchers/report?${params}`);
 
       const data = response?.vouchers || [];
 
@@ -112,9 +107,7 @@ export function ReportsTab() {
 
       if (includeRmPending) {
         try {
-          const { data: rmResp } = await supabase.functions.invoke('mariadb-proxy', {
-            body: { action: 'get_vouchers_pendentes_rm' }
-          });
+          const rmResp = await apiGet('/api/fin/vouchers/pendentes-rm');
           const rmRows: any[] = rmResp?.data || [];
           const existingSPOs = new Set(mappedVouchers.map(v => v.numeroSPO));
           const mapFormaPag = (fp: string | null): string => {

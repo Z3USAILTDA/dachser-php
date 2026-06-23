@@ -15,7 +15,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { supabase } from "@/integrations/supabase/client"; // kept: extract-boleto-barcode edge fn requires Supabase
 import { useToast } from "@/hooks/use-toast";
 import { Link2, Unlink, Loader2, FileText, Paperclip, CheckCircle2, Search, Layers, Lock, X, PackageSearch, Trash2 } from "lucide-react";
 import { TIPOS_ANEXO } from "@/utils/batchVoucherImport";
@@ -308,11 +307,14 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
 
 
           try {
-            const { data: ext, error: extErr } = await supabase.functions.invoke("extract-boleto-barcode", {
-              body: { fileUrl: target.fileUrl },
+            const extResp = await fetch("/api/parsers/boleto-barcode", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ fileUrl: target.fileUrl }),
             });
-            if (extErr || !ext?.success || !ext?.linhaDigitavel) {
-              console.warn("Lote: extração de linha digitável falhou", extErr || ext?.error);
+            const ext = await extResp.json();
+            if (!extResp.ok || !ext?.success || !ext?.linhaDigitavel) {
+              console.warn("Lote: extração de linha digitável falhou", ext?.error);
               continue;
             }
             for (const vid of eligibleVids) {

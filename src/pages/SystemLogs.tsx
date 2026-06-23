@@ -8,7 +8,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDevAccess } from "@/hooks/useDevAccess";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faSearch, faDownload, faSync, faSignOut } from "@fortawesome/free-solid-svg-icons";
 import { ArrowLeft, Terminal, HelpCircle } from "lucide-react";
@@ -66,36 +65,13 @@ export default function SystemLogs() {
   const fetchLogs = async () => {
     setIsLoadingLogs(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        toast.error("Sessão não encontrada");
-        return;
-      }
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-system-logs`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            functionName: selectedFunction,
-            logType: 'analysis',
-            limit: 100
-          })
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch logs');
-      }
-
-      const data = await response.json();
-      setLogs(data.logs || []);
-      toast.success(`${data.logs?.length || 0} logs carregados`);
+      const params = new URLSearchParams({ limit: '100' });
+      if (selectedFunction !== 'all') params.set('functionName', selectedFunction);
+      const res = await fetch(`/api/system-logs?${params}`);
+      const data = await res.json();
+      const fetched = data.data || data.logs || [];
+      setLogs(fetched);
+      toast.success(`${fetched.length} logs carregados`);
     } catch (error) {
       console.error("Error fetching logs:", error);
       toast.error("Erro ao carregar logs");
@@ -107,34 +83,12 @@ export default function SystemLogs() {
   const fetchDatabaseLogs = async () => {
     setIsLoadingDbLogs(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        toast.error("Sessão não encontrada");
-        return;
-      }
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-database-logs`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ limit: 100 })
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch database logs');
-      }
-
-      const data = await response.json();
-      setDbLogs(data.logs || []);
-      
-      if (data.logs && data.logs.length > 0) {
-        toast.success(`${data.logs.length} database logs carregados`);
+      const res = await fetch('/api/system-logs?logType=database&limit=100');
+      const data = await res.json();
+      const fetched = data.data || data.logs || [];
+      setDbLogs(fetched);
+      if (fetched.length > 0) {
+        toast.success(`${fetched.length} database logs carregados`);
       } else {
         toast.info("Nenhum database log encontrado");
       }
@@ -149,44 +103,12 @@ export default function SystemLogs() {
   const fetchEdgeFunctionLogs = async () => {
     setIsLoadingEdgeLogs(true);
     try {
-      const allLogs: any[] = [];
-      
-      // Fetch logs for each edge function
-      for (const funcName of edgeFunctions) {
-        if (funcName === 'all') continue;
-        
-        try {
-          const { data, error } = await supabase.functions.invoke('get-system-logs', {
-            body: {
-              functionName: funcName,
-              logType: 'edge',
-              limit: 20
-            }
-          });
-          
-          if (data?.logs && Array.isArray(data.logs)) {
-            allLogs.push(...data.logs.map((log: any) => ({
-              ...log,
-              function: funcName,
-              timestamp: log.timestamp || log.created_at
-            })));
-          }
-        } catch (err) {
-          console.error(`Error fetching logs for ${funcName}:`, err);
-        }
-      }
-      
-      // Sort by timestamp descending
-      allLogs.sort((a, b) => {
-        const timeA = new Date(a.timestamp || 0).getTime();
-        const timeB = new Date(b.timestamp || 0).getTime();
-        return timeB - timeA;
-      });
-      
-      setEdgeLogs(allLogs.slice(0, 100));
-      
-      if (allLogs.length > 0) {
-        toast.success(`${allLogs.length} edge function logs carregados`);
+      const res = await fetch('/api/system-logs?logType=edge&limit=100');
+      const data = await res.json();
+      const fetched = data.data || data.logs || [];
+      setEdgeLogs(fetched);
+      if (fetched.length > 0) {
+        toast.success(`${fetched.length} edge function logs carregados`);
       } else {
         toast.info("Nenhum edge function log encontrado");
       }

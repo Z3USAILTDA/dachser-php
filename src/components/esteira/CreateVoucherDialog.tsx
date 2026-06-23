@@ -40,7 +40,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client"; // kept: Supabase Storage (public URLs for extract-boleto-barcode), extract-boleto-barcode, send-voucher-notification
+import { supabase } from "@/integrations/supabase/client"; // kept: Supabase Storage (upload de arquivos)
 import { cn } from "@/lib/utils";
 import { CalendarIcon } from "lucide-react";
 import { 
@@ -600,14 +600,15 @@ export const CreateVoucherDialog = ({
         if (!linhaDigitavelExtraida && values.formaPagamento === "BOLETO") {
           try {
             console.log("Extraindo linha digitável do boleto...");
-            const { data: extractionResult, error: extractionError } = await supabase.functions.invoke("extract-boleto-barcode", {
-              body: {
-                fileUrl: publicUrl.publicUrl
-              },
+            const extractionResp = await fetch("/api/parsers/boleto-barcode", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ fileUrl: publicUrl.publicUrl }),
             });
+            const extractionResult = await extractionResp.json();
 
-            if (extractionError) {
-              console.error("Erro na extração de código de barras:", extractionError);
+            if (!extractionResp.ok) {
+              console.error("Erro na extração de código de barras:", extractionResult?.error);
             } else if (extractionResult?.success && extractionResult?.linhaDigitavel) {
               // Salvar a linha digitável no MariaDB
               const ldResp = await fetch(`/api/fin/vouchers/${voucherId}`, {
@@ -682,16 +683,11 @@ export const CreateVoucherDialog = ({
             moeda: values.moeda,
             vencimento: values.vencimento?.toISOString(),
           };
-          await supabase.functions.invoke("send-voucher-notification", {
-            body: { type: "URGENCIA_SOLICITADA", ...urgencyBody },
-          });
-          // Confirmação informativa ao solicitante (sem botões de ação)
+          await fetch('/api/notifications/voucher', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'URGENCIA_SOLICITADA', ...urgencyBody }) });
           try {
-            await supabase.functions.invoke("send-voucher-notification", {
-              body: { type: "URGENCIA_SOLICITADA_CONFIRMACAO", ...urgencyBody },
-            });
+            await fetch('/api/notifications/voucher', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'URGENCIA_SOLICITADA_CONFIRMACAO', ...urgencyBody }) });
           } catch (confirmErr) {
-            console.log("Urgency confirmation email skipped:", confirmErr);
+            console.log('Urgency confirmation email skipped:', confirmErr);
           }
         } catch (emailErr) {
           console.log("Email notification skipped:", emailErr);

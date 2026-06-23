@@ -1,10 +1,6 @@
 // @ts-nocheck
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-
-// Type assertion to bypass strict typing
-const db = supabase as any;
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -80,14 +76,9 @@ const Logs = () => {
 
   const fetchLogs = async () => {
     try {
-      const { data, error } = await supabase
-        .from("log_entry")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(500);
-
-      if (error) throw error;
-      setLogs(data || []);
+      const res = await fetch('/api/system-logs?limit=500');
+      const data = await res.json();
+      setLogs(data.data || data.logs || []);
     } catch (error) {
       console.error("Error fetching logs:", error);
       toast.error("Erro ao carregar logs");
@@ -95,35 +86,8 @@ const Logs = () => {
   };
 
   const fetchStats = async () => {
-    try {
-      const { count: totalLogs } = await supabase
-        .from("log_entry")
-        .select("*", { count: "exact", head: true });
-
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const { count: todayLogs } = await supabase
-        .from("log_entry")
-        .select("*", { count: "exact", head: true })
-        .gte("created_at", today.toISOString());
-
-      const { count: totalChecks } = await supabase
-        .from("awb_check")
-        .select("*", { count: "exact", head: true });
-
-      const { count: totalMatrices } = await supabase
-        .from("rule_matrix")
-        .select("*", { count: "exact", head: true });
-
-      setStats({
-        totalLogs: totalLogs || 0,
-        todayLogs: todayLogs || 0,
-        totalChecks: totalChecks || 0,
-        totalMatrices: totalMatrices || 0,
-      });
-    } catch (error) {
-      console.error("Error fetching stats:", error);
-    }
+    // Stats não disponíveis — tabelas log_entry/awb_check/rule_matrix eram Supabase-nativas
+    setStats({ totalLogs: 0, todayLogs: 0, totalChecks: 0, totalMatrices: 0 });
   };
 
   const filteredLogs = logs.filter(log => {

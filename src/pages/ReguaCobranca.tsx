@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
@@ -170,17 +169,12 @@ function ReguaCobrancaContent() {
   const fetchCounts = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_regua_counts_cr" },
-      });
-
-      if (error) throw error;
+      const res = await fetch('/api/fin/regua/counts');
+      const data = await res.json();
       if (data?.success && data.counts) {
         setCounts(data.counts);
         setTotalTitles(Object.values(data.counts as StageCounts).reduce((a, b) => a + b, 0));
-        if (data.amounts) {
-          setAmounts(data.amounts);
-        }
+        if (data.amounts) setAmounts(data.amounts);
       }
     } catch (err) {
       console.error("Erro ao carregar contagens:", err);
@@ -188,25 +182,15 @@ function ReguaCobrancaContent() {
       setHasError(true);
     } finally {
       setLoading(false);
-      
     }
   }, [toast]);
 
   const fetchDbStats = useCallback(async () => {
     setIsLoadingDbStats(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_financeiro_nfs_stats_cr" },
-      });
-
-      if (error) {
-        console.error("Error fetching db stats:", error);
-        return;
-      }
-
-      if (data?.success && data?.stats) {
-        setDbStats(data.stats);
-      }
+      const res = await fetch('/api/fin/regua/stats');
+      const data = await res.json();
+      if (data?.success && data?.stats) setDbStats(data.stats);
     } catch (error) {
       console.error("Error in fetchDbStats:", error);
     } finally {
@@ -219,9 +203,8 @@ function ReguaCobrancaContent() {
     let cancelled = false;
     (async () => {
       try {
-        const { data } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "get_regua_aging_defaults" },
-        });
+        const res = await fetch('/api/fin/regua/aging-defaults');
+        const data = await res.json();
         if (!cancelled && data?.success) {
           setAgingDefaults({
             recipients: data.recipients || "",
@@ -257,11 +240,8 @@ function ReguaCobrancaContent() {
   const fetchStageRows = async (stage: string) => {
     setStageLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_regua_stage_cr", stage },
-      });
-
-      if (error) throw error;
+      const res = await fetch(`/api/fin/regua/stage?stage=${encodeURIComponent(stage)}`);
+      const data = await res.json();
       if (data?.success && data.rows) {
         setStageRows(data.rows);
       } else {
@@ -301,11 +281,8 @@ function ReguaCobrancaContent() {
     setSelectedClienteCnpjs(new Set()); // Clear selection when searching
     
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_regua_clientes_resumo_cr", cliente: clienteSearch.trim() },
-      });
-      
-      if (error) throw error;
+      const res = await fetch(`/api/fin/regua/clientes-resumo?cliente=${encodeURIComponent(clienteSearch.trim())}`);
+      const data = await res.json();
       setClienteRows(data?.rows || []);
     } catch (err) {
       console.error("Erro ao buscar cliente:", err);
@@ -422,18 +399,12 @@ Financeiro Dachser`;
     
     setSendingAging(true);
     try {
-      const { data, error } = await supabase.functions.invoke("regua-send-aging", {
-        body: {
-          cnpjs: agrupamentoCnpjs,
-          razao_bases: razaoBases,
-          cliente: "Clientes Agrupados",
-          email_to: agingRecipients,
-          custom_text: agingEmailText,
-        },
+      const agRes = await fetch('/api/fin/regua/send-aging', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cnpjs: agrupamentoCnpjs, razao_bases: razaoBases, cliente: "Clientes Agrupados", email_to: agingRecipients, custom_text: agingEmailText }),
       });
-
-      if (error) throw error;
-      
+      const data = await agRes.json();
       if (data?.success) {
         toast({
           title: "E-mail enviado!",
@@ -509,18 +480,12 @@ Financeiro Dachser`;
     
     setSendingAging(true);
     try {
-      const { data, error } = await supabase.functions.invoke("regua-send-aging", {
-        body: {
-          cnpj: selectedRow.cnpj,
-          razao_base: selectedRow.razao_base || selectedRow.razao_social,
-          cliente: selectedRow.razao_base || selectedRow.razao_social,
-          email_to: agingRecipients,
-          custom_text: agingEmailText,
-        },
+      const agRes = await fetch('/api/fin/regua/send-aging', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cnpj: selectedRow.cnpj, razao_base: selectedRow.razao_base || selectedRow.razao_social, cliente: selectedRow.razao_base || selectedRow.razao_social, email_to: agingRecipients, custom_text: agingEmailText }),
       });
-
-      if (error) throw error;
-      
+      const data = await agRes.json();
       if (data?.success) {
         toast({
           title: "E-mail enviado!",
@@ -569,17 +534,12 @@ Financeiro Dachser`;
     setSendingBulk(true);
     setBulkResult(null);
     try {
-      const { data, error } = await supabase.functions.invoke("regua-send-emails", {
-        body: {
-          stage: openStage,
-          dryRun: false,
-          testMode: true,
-          confirmInternalSend: "SEND_TO_DEVS_ONLY",
-        },
+      const bulkRes = await fetch('/api/fin/regua/send-emails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: openStage, dryRun: false, testMode: true, confirmInternalSend: "SEND_TO_DEVS_ONLY" }),
       });
-
-      if (error) throw error;
-      
+      const data = await bulkRes.json();
       if (data?.success) {
         setBulkResult({
           sent: data.sent || 0,

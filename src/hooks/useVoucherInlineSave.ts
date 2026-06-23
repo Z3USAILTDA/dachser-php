@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { apiPatch } from "@/services/apiClient";
 import { useToast } from "@/hooks/use-toast";
 
 /**
@@ -29,20 +29,15 @@ export function useVoucherInlineSave(voucherId: string, onSaved?: () => void) {
             })()
           : null;
 
-        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "update_voucher_esteira",
-            voucher_id: voucherId,
-            updates: { [field]: value === "" ? null : value },
-            user_id: localUser?.id ? String(localUser.id) : null,
-            user_name:
-              localUser?.username ||
-              localUser?.name ||
-              localUser?.email ||
-              "Sistema",
-          },
+        const data = await apiPatch(`/api/fin/vouchers/${voucherId}/esteira`, {
+          updates: { [field]: value === "" ? null : value },
+          user_id: localUser?.id ? String(localUser.id) : null,
+          user_name:
+            localUser?.username ||
+            localUser?.name ||
+            localUser?.email ||
+            "Sistema",
         });
-        if (error) throw error;
         if (!data?.success) throw new Error(data?.error || "Erro ao salvar");
 
         setSavedField(field);

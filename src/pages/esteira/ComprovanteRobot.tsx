@@ -197,10 +197,13 @@ export default function ComprovanteRobot() {
 
         const base64 = await fileToBase64(fileMatch.file);
 
-        const { data, error } = await supabase.functions.invoke("parse-comprovante-pdf", {
-          body: { pdfBase64: base64, fileName: fileMatch.fileName },
+        const parseResp = await fetch("/api/parsers/comprovante-pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pdfBase64: base64, fileName: fileMatch.fileName }),
         });
-        if (error) throw error;
+        const data = await parseResp.json();
+        if (!parseResp.ok) throw new Error(data?.error || "Erro ao interpretar comprovante");
 
         const extractedData = data?.data;
 

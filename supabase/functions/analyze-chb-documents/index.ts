@@ -2347,7 +2347,7 @@ async function processAnalysisInBackground(
     console.log(`[BG] Processing ${files.length} files for step ${stepId}`);
 
     // =========================================================================
-    // STEP 0: PER-FILE EXTRACTION → t_chb_file_extractions (auditable truth)
+    // STEP 0: PER-FILE EXTRACTION → t_chb_extractions (auditable truth)
     // =========================================================================
     let perFileExtractions: Array<{
       filename: string;
@@ -2363,7 +2363,7 @@ async function processAnalysisInBackground(
     // This avoids racing with file registration and lets us persist the actual raw OCR text.
 
     // =========================================================================
-    // FLUXO ÚNICO: extrair → gravar em t_chb_file_extractions → reler raw_ocr_text
+    // FLUXO ÚNICO: extrair → gravar em t_chb_extractions → reler raw_ocr_text
     // → alimentar análise SOMENTE com o conteúdo persistido (fonte única de verdade).
     // Sem fallback para extração em memória — se a gravação ou releitura falhar,
     // a análise é marcada como erro.
@@ -2407,7 +2407,7 @@ async function processAnalysisInBackground(
         if (dbCount === 0) {
           console.warn(`[BG][pre-analysis] DB readback returned 0 usable rows (itemId=${itemId}, etapa=${stepId}) — proceeding with in-memory OCR`);
         } else {
-          console.log(`[BG][pre-analysis] Read back ${dbCount} raw_ocr_text rows from t_chb_file_extractions (DB wins where available)`);
+          console.log(`[BG][pre-analysis] Read back ${dbCount} raw_ocr_text rows from t_chb_extractions (DB wins where available)`);
         }
       } catch (readErr) {
         console.warn('[BG][pre-analysis] DB readback failed — proceeding with in-memory OCR:', (readErr as Error).message);
@@ -2464,12 +2464,12 @@ async function processAnalysisInBackground(
 
 
     // =========================================================================
-    // RAW OCR PERSISTIDO — fonte única de verdade vinda de t_chb_file_extractions
+    // RAW OCR PERSISTIDO — fonte única de verdade vinda de t_chb_extractions
     // =========================================================================
     if (Object.keys(dbOcrByFilename).length > 0) {
       cachedContext += `
 ═══════════════════════════════════════════════════════════════════════════════
-📚 OCR BRUTO PERSISTIDO (t_chb_file_extractions) — FONTE ÚNICA DE VERDADE
+📚 OCR BRUTO PERSISTIDO (t_chb_extractions) — FONTE ÚNICA DE VERDADE
 ═══════════════════════════════════════════════════════════════════════════════
 
 Os textos abaixo foram extraídos de cada arquivo e gravados em banco ANTES desta

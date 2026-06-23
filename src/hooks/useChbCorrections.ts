@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 export interface ChbCorrection {
@@ -40,33 +39,16 @@ export function useChbCorrections(itemId?: number) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Fetch corrections for an item
   const fetchCorrections = useCallback(async (id?: number) => {
     const targetId = id || itemId;
     if (!targetId) return;
 
     setIsLoading(true);
     try {
-      // Use fetch directly to pass query params
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chb-corrections?item_id=${targetId}`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch corrections');
-      }
-
+      const response = await fetch(`/api/chb/corrections?item_id=${targetId}`);
+      if (!response.ok) throw new Error('Failed to fetch corrections');
       const result = await response.json();
-      if (result.success) {
-        setCorrections(result.corrections || []);
-      }
+      if (result.success) setCorrections(result.corrections || []);
     } catch (error) {
       console.error('[useChbCorrections] fetchCorrections error:', error);
     } finally {
@@ -74,36 +56,29 @@ export function useChbCorrections(itemId?: number) {
     }
   }, [itemId]);
 
-  // Save a correction
   const saveCorrection = useCallback(async (params: SaveCorrectionParams): Promise<{
     success: boolean;
     location?: LocationResult;
   }> => {
     setIsSaving(true);
     try {
-      const { data, error } = await supabase.functions.invoke('chb-corrections', {
-        body: {
-          ...params,
-          action: 'save'
-        },
+      const response = await fetch('/api/chb/corrections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...params, action: 'save' }),
       });
 
-      if (error) throw error;
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || 'Failed to save correction');
 
       if (data?.success) {
-        // Refresh corrections list
         await fetchCorrections(params.item_id);
-        
         const location = data.location as LocationResult;
         if (location?.found) {
-          toast.success(
-            `Correção salva! Localizado: ${location.location}`,
-            { duration: 4000 }
-          );
+          toast.success(`Correção salva! Localizado: ${location.location}`, { duration: 4000 });
         } else {
           toast.success('Correção salva. Localização automática não disponível.');
         }
-
         return { success: true, location };
       }
 
@@ -117,17 +92,16 @@ export function useChbCorrections(itemId?: number) {
     }
   }, [fetchCorrections]);
 
-  // Delete a correction
   const deleteCorrection = useCallback(async (correctionId: number): Promise<boolean> => {
     try {
-      const { data, error } = await supabase.functions.invoke('chb-corrections', {
-        body: {
-          correction_id: correctionId,
-          action: 'delete'
-        },
+      const response = await fetch('/api/chb/corrections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ correction_id: correctionId, action: 'delete' }),
       });
 
-      if (error) throw error;
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || 'Failed to delete correction');
 
       if (data?.success) {
         setCorrections(prev => prev.filter(c => c.id !== correctionId));
@@ -143,18 +117,12 @@ export function useChbCorrections(itemId?: number) {
     }
   }, []);
 
-  // Get correction for a specific field/file
   const getCorrectionForField = useCallback((filename: string, fieldName: string): ChbCorrection | undefined => {
-    return corrections.find(
-      c => c.filename === filename && c.field_name === fieldName
-    );
+    return corrections.find(c => c.filename === filename && c.field_name === fieldName);
   }, [corrections]);
 
-  // Check if a field has a correction
   const hasCorrection = useCallback((filename: string, fieldName: string): boolean => {
-    return corrections.some(
-      c => c.filename === filename && c.field_name === fieldName
-    );
+    return corrections.some(c => c.filename === filename && c.field_name === fieldName);
   }, [corrections]);
 
   return {

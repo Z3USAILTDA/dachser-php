@@ -11,7 +11,16 @@
       "PowerShell(Stop-Process -Name \"node\" -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; Start-Process -FilePath \"node\" -ArgumentList \"server/index.js\" -WorkingDirectory \"c:\\\\Users\\\\Larissa\\\\dachser\" -NoNewWindow -PassThru | Out-Null; Start-Sleep -Seconds 3; try { $r = Invoke-WebRequest -Uri \"http://localhost:3001/api/fin/stats\" -UseBasicParsing -TimeoutSec 5; \"HTTP $\\($r.StatusCode\\): $\\($r.Content.Substring\\(0,[Math]::Min\\(200,$r.Content.Length\\)\\)\\)\" } catch { \"ERRO: $_\" })",
       "Bash(xargs grep -l \"save.*tracking\\\\|tracking.*save\")",
       "Bash(xargs grep -l \"draft-save-tracking\")",
-      "Bash(xargs grep -l \"t_consulta_armador.*INSERT\\\\|INSERT.*t_consulta_armador\")"
+      "Bash(xargs grep -l \"t_consulta_armador.*INSERT\\\\|INSERT.*t_consulta_armador\")",
+      "Bash(xargs -I {} ls -la {})",
+      "Bash(grep -n \"app\\\\.\\\\\\(get\\\\|post\\\\|put\\\\|patch\\\\|delete\\\\\\).*\\\\/api\\\\/demurrage\" c:/Users/Larissa/dachser/server/index.js)",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\(Object.keys\\(p.dependencies\\)\\)\\)\")",
+      "Bash(grep -n \"\\\\/api\\\\/fin\\\\/vouchers'\" \"c:/Users/Larissa/dachser/server/index.js\")"
+    ],
+    "additionalDirectories": [
+      "C:\\draft_track_hapag",
+      "C:\\draft_track_msc",
+      "C:\\draft_track_one"
     ]
   }
 }

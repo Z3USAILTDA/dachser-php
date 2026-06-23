@@ -6273,8 +6273,8 @@ Deno.serve(async (req) => {
         console.log('Fetching CHB items');
         const items = await client.query(`
           SELECT i.*, 
-            (SELECT MAX(r.created_at) FROM ai_agente.t_dachser_chb_runs r WHERE r.item_id = i.id) as last_run_at
-          FROM ai_agente.t_dachser_chb_items i 
+            (SELECT MAX(r.created_at) FROM dados_dachser.t_chb_runs r WHERE r.item_id = i.id) as last_run_at
+          FROM dados_dachser.t_chb_items i 
           WHERE i.active = 1 
           ORDER BY i.created_at DESC
         `);
@@ -6286,7 +6286,7 @@ Deno.serve(async (req) => {
         const { id: itemId } = body;
         console.log('Fetching CHB item:', itemId);
         const items = await client.query(`
-          SELECT * FROM ai_agente.t_dachser_chb_items WHERE id = ?
+          SELECT * FROM dados_dachser.t_chb_items WHERE id = ?
         `, [itemId]);
         result = { success: true, data: items?.[0] || null };
         break;
@@ -6297,7 +6297,7 @@ Deno.serve(async (req) => {
         console.log('Creating CHB item:', { reference, consignee });
         
         const insertResult = await client.execute(`
-          INSERT INTO ai_agente.t_dachser_chb_items 
+          INSERT INTO dados_dachser.t_chb_items 
           (reference, consignee, status_macro, step1_status, step2_status, step3_status, active, created_by)
           VALUES (?, ?, 'pre_alerta_pendente', 'pendente', 'pendente', 'pendente', 1, ?)
         `, [reference || null, consignee || null, userId || null]);
@@ -6322,7 +6322,7 @@ Deno.serve(async (req) => {
         
         for (const { col, type } of alterColumns) {
           try {
-            await client.execute(`ALTER TABLE ai_agente.t_dachser_chb_items MODIFY COLUMN ${col} ${type} NULL`);
+            await client.execute(`ALTER TABLE dados_dachser.t_chb_items MODIFY COLUMN ${col} ${type} NULL`);
             console.log(`[CHB] Column ${col} altered to ${type}`);
           } catch (alterErr) {
             // Ignore - column might already be correct or doesn't exist
@@ -6340,7 +6340,7 @@ Deno.serve(async (req) => {
         if (fields.length > 0) {
           values.push(itemId);
           await client.execute(`
-            UPDATE ai_agente.t_dachser_chb_items SET ${fields.join(', ')} WHERE id = ?
+            UPDATE dados_dachser.t_chb_items SET ${fields.join(', ')} WHERE id = ?
           `, values);
         }
         
@@ -6352,7 +6352,7 @@ Deno.serve(async (req) => {
         const { id: itemId } = body;
         console.log('Soft-deleting CHB item:', itemId);
         await client.execute(`
-          UPDATE ai_agente.t_dachser_chb_items SET active = 0 WHERE id = ?
+          UPDATE dados_dachser.t_chb_items SET active = 0 WHERE id = ?
         `, [itemId]);
         result = { success: true };
         break;
@@ -6363,8 +6363,8 @@ Deno.serve(async (req) => {
         console.log('Fetching CHB files for item:', itemId);
         const files = await client.query(`
           SELECT f.*, d.etapa, d.doc_role, d.is_active as doc_active
-          FROM ai_agente.t_dachser_chb_files f
-          INNER JOIN ai_agente.t_dachser_chb_docs d ON d.file_id = f.id
+          FROM dados_dachser.t_chb_files f
+          INNER JOIN dados_dachser.t_chb_docs d ON d.file_id = f.id
           WHERE d.item_id = ? AND d.is_active = 1
           ORDER BY d.etapa, f.created_at
         `, [itemId]);
@@ -6379,7 +6379,7 @@ Deno.serve(async (req) => {
         // First, ensure the doc_role column can accept longer values (ALTER TABLE if needed)
         try {
           await client.execute(`
-            ALTER TABLE ai_agente.t_dachser_chb_docs MODIFY COLUMN doc_role VARCHAR(50) NULL
+            ALTER TABLE dados_dachser.t_chb_docs MODIFY COLUMN doc_role VARCHAR(50) NULL
           `);
           console.log('[CHB] Successfully altered doc_role column to VARCHAR(50)');
         } catch (alterErr) {
@@ -6389,7 +6389,7 @@ Deno.serve(async (req) => {
         
         // Insert file
         const fileResult = await client.execute(`
-          INSERT INTO ai_agente.t_dachser_chb_files 
+          INSERT INTO dados_dachser.t_chb_files 
           (filename, mime, size_bytes, sha256, rel_path, url, created_by)
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `, [filename, mime || null, sizeBytes || null, sha256 || null, relPath ?? '', url ?? '', userId || null]);
@@ -6403,7 +6403,7 @@ Deno.serve(async (req) => {
         
         // Link file to item
         await client.execute(`
-          INSERT INTO ai_agente.t_dachser_chb_docs 
+          INSERT INTO dados_dachser.t_chb_docs 
           (item_id, file_id, etapa, doc_role, version, is_active, created_by)
           VALUES (?, ?, ?, ?, 1, 1, ?)
         `, [itemId, fileId, etapa || '1', rawDocRole, userId || null]);
@@ -6417,7 +6417,7 @@ Deno.serve(async (req) => {
         const { fileId, itemId } = body;
         console.log('Soft-deleting CHB doc:', { fileId, itemId });
         await client.execute(`
-          UPDATE ai_agente.t_dachser_chb_docs SET is_active = 0 WHERE file_id = ? AND item_id = ?
+          UPDATE dados_dachser.t_chb_docs SET is_active = 0 WHERE file_id = ? AND item_id = ?
         `, [fileId, itemId]);
         result = { success: true };
         break;
@@ -6429,7 +6429,7 @@ Deno.serve(async (req) => {
         
         let query = `
           SELECT r.*, u.username as created_by_name, u.email as created_by_email
-          FROM ai_agente.t_dachser_chb_runs r
+          FROM dados_dachser.t_chb_runs r
           LEFT JOIN ai_agente.t_users_dachser u ON u.id = r.created_by
           WHERE r.item_id = ?
         `;
@@ -6454,7 +6454,7 @@ Deno.serve(async (req) => {
         // Support custom UUID for async background processing
         if (customId) {
           await client.execute(`
-            INSERT INTO ai_agente.t_dachser_chb_runs 
+            INSERT INTO dados_dachser.t_chb_runs 
             (id, item_id, etapa, status, result_text, result_html, result_json, used_as_ctx, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           `, [
@@ -6471,7 +6471,7 @@ Deno.serve(async (req) => {
           result = { success: true, runId: customId };
         } else {
           const insertResult = await client.execute(`
-            INSERT INTO ai_agente.t_dachser_chb_runs 
+            INSERT INTO dados_dachser.t_chb_runs 
             (item_id, etapa, status, result_text, result_html, result_json, used_as_ctx, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           `, [
@@ -6495,7 +6495,7 @@ Deno.serve(async (req) => {
         console.log('Saving CHB extracted data:', { itemId, filename, etapa });
         
         await client.execute(`
-          INSERT INTO ai_agente.t_dachser_chb_extracted_data 
+          INSERT INTO dados_dachser.t_chb_extracted_data 
           (item_id, filename, etapa, extracted_fields, raw_text, updated_at)
           VALUES (?, ?, ?, ?, ?, NOW())
           ON DUPLICATE KEY UPDATE 
@@ -6521,7 +6521,7 @@ Deno.serve(async (req) => {
         
         const data = await client.query(`
           SELECT filename, extracted_fields, raw_text 
-          FROM ai_agente.t_dachser_chb_extracted_data 
+          FROM dados_dachser.t_chb_extracted_data 
           WHERE item_id = ?
         `, [itemId]);
         
@@ -6537,7 +6537,7 @@ Deno.serve(async (req) => {
         // Buscar TODAS as correções do item (usuário é fonte de verdade)
         const corrections = await client.query(`
           SELECT filename, field_name, corrected_value, location_reference, location_context, location_confidence
-          FROM ai_agente.t_dachser_chb_user_corrections
+          FROM dados_dachser.t_chb_user_corrections
           WHERE item_id = ?
           ORDER BY updated_at DESC
         `, [itemId]);
@@ -6553,7 +6553,7 @@ Deno.serve(async (req) => {
         
         const runs = await client.query(`
           SELECT status, result_html, result_text, result_json 
-          FROM ai_agente.t_dachser_chb_runs 
+          FROM dados_dachser.t_chb_runs 
           WHERE id = ? 
           LIMIT 1
         `, [runId]);
@@ -6570,7 +6570,7 @@ Deno.serve(async (req) => {
         console.log('[CHB-SNAPSHOT] Saving approved snapshot:', { itemId, etapa, runId });
 
         await client.execute(`
-          INSERT INTO dados_dachser.t_dachser_chb_approved_snapshots
+          INSERT INTO dados_dachser.t_chb_approved_snapshots
             (item_id, etapa, run_id, snapshot, result_html, summary, approved_by, approved_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
           ON DUPLICATE KEY UPDATE
@@ -6602,7 +6602,7 @@ Deno.serve(async (req) => {
         const hasMax = maxEtapa !== undefined && maxEtapa !== null;
         const rows = await client.query(`
           SELECT etapa, run_id, snapshot, result_html, summary, approved_by, approved_at
-          FROM dados_dachser.t_dachser_chb_approved_snapshots
+          FROM dados_dachser.t_chb_approved_snapshots
           WHERE item_id = ?
             ${hasMax ? 'AND etapa < ?' : ''}
           ORDER BY etapa ASC
@@ -6641,7 +6641,7 @@ Deno.serve(async (req) => {
         });
 
         const insertResult = await client.execute(`
-          INSERT INTO dados_dachser.t_chb_file_extractions
+          INSERT INTO dados_dachser.t_chb_extractions
           (item_id, file_id, filename, doc_role, etapa, file_sha256,
            extractor_model, extractor_prompt_version, extractor_confidence,
            raw_ocr_text, structured_fields, field_evidence,
@@ -6676,10 +6676,10 @@ Deno.serve(async (req) => {
         const rows = hasEtapa
           ? await client.query(`
               SELECT e.*
-              FROM dados_dachser.t_chb_file_extractions e
+              FROM dados_dachser.t_chb_extractions e
               INNER JOIN (
                 SELECT file_id, MAX(id) AS max_id
-                FROM dados_dachser.t_chb_file_extractions
+                FROM dados_dachser.t_chb_extractions
                 WHERE item_id = ? AND etapa = ?
                 GROUP BY file_id
               ) latest ON latest.max_id = e.id
@@ -6687,10 +6687,10 @@ Deno.serve(async (req) => {
             `, [itemId, String(etapa)])
           : await client.query(`
               SELECT e.*
-              FROM dados_dachser.t_chb_file_extractions e
+              FROM dados_dachser.t_chb_extractions e
               INNER JOIN (
                 SELECT file_id, MAX(id) AS max_id
-                FROM dados_dachser.t_chb_file_extractions
+                FROM dados_dachser.t_chb_extractions
                 WHERE item_id = ?
                 GROUP BY file_id
               ) latest ON latest.max_id = e.id
@@ -6717,7 +6717,7 @@ Deno.serve(async (req) => {
         const { runId, usedAsCtx } = body;
         console.log('Updating CHB run context flag:', runId);
         await client.execute(`
-          UPDATE ai_agente.t_dachser_chb_runs SET used_as_ctx = ? WHERE id = ?
+          UPDATE dados_dachser.t_chb_runs SET used_as_ctx = ? WHERE id = ?
         `, [usedAsCtx ? 1 : 0, runId]);
         result = { success: true };
         break;
@@ -6754,7 +6754,7 @@ Deno.serve(async (req) => {
         
         params.push(runId);
         await client.execute(`
-          UPDATE ai_agente.t_dachser_chb_runs SET ${updates.join(', ')} WHERE id = ?
+          UPDATE dados_dachser.t_chb_runs SET ${updates.join(', ')} WHERE id = ?
         `, params);
         
         result = { success: true };
@@ -16647,7 +16647,7 @@ Deno.serve(async (req) => {
       case 'get_chb_client_configs': {
         console.log('Fetching CHB client configs from ai_agente');
         const configs = await client.query(`
-          SELECT * FROM ai_agente.t_chb_client_config
+          SELECT * FROM dados_dachser.t_chb_client_config
           WHERE ativo = 1
           ORDER BY cliente_nome ASC
         `);
@@ -16672,7 +16672,7 @@ Deno.serve(async (req) => {
         console.log('Fetching CHB client config for CNPJ:', cnpj);
         
         const configs = await client.query(`
-          SELECT * FROM ai_agente.t_chb_client_config
+          SELECT * FROM dados_dachser.t_chb_client_config
           WHERE cliente_cnpj = ? AND ativo = 1
           LIMIT 1
         `, [cnpj]);
@@ -16703,7 +16703,7 @@ Deno.serve(async (req) => {
         
         const newId = crypto.randomUUID();
         await client.execute(`
-          INSERT INTO ai_agente.t_chb_client_config (
+          INSERT INTO dados_dachser.t_chb_client_config (
             id, cliente_cnpj, cliente_nome, tolerancia_peso, tolerancia_valor,
             campos_obrigatorios, regras_comparacao, instrucoes_personalizadas,
             armador, agente_destino, contato_email, prazo_resposta_dias,
@@ -16775,7 +16775,7 @@ Deno.serve(async (req) => {
           values.push(configId);
           
           await client.execute(`
-            UPDATE ai_agente.t_chb_client_config
+            UPDATE dados_dachser.t_chb_client_config
             SET ${setClauses.join(', ')}
             WHERE id = ?
           `, values);
@@ -16791,7 +16791,7 @@ Deno.serve(async (req) => {
         
         // Soft delete
         await client.execute(`
-          UPDATE ai_agente.t_chb_client_config
+          UPDATE dados_dachser.t_chb_client_config
           SET ativo = 0, updated_at = NOW()
           WHERE id = ?
         `, [deleteConfigId]);
@@ -16946,8 +16946,8 @@ Deno.serve(async (req) => {
 
         const docs = await client.query(
           `SELECT d.id, d.doc_role, d.created_at, f.filename, f.url as file_url, f.size_bytes as file_size, d.etapa
-           FROM ai_agente.t_dachser_chb_docs d
-           JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
+           FROM dados_dachser.t_chb_docs d
+           JOIN dados_dachser.t_chb_files f ON d.file_id = f.id
            WHERE d.item_id = ? AND d.is_active = 1
            ORDER BY d.created_at ASC`,
           [item_id]
@@ -16967,7 +16967,7 @@ Deno.serve(async (req) => {
         }
 
         await client.execute(
-          'DELETE FROM ai_agente.t_dachser_chb_docs WHERE id = ?',
+          'DELETE FROM dados_dachser.t_chb_docs WHERE id = ?',
           [doc_id]
         );
 
@@ -19530,7 +19530,7 @@ Deno.serve(async (req) => {
         
         let query = `
           SELECT field_name, document_type, extraction_pattern, location_hint, example_value, times_used, success_rate
-          FROM ai_agente.t_dachser_chb_extraction_rules
+          FROM dados_dachser.t_chb_extraction_rules
           WHERE times_used > 0 AND success_rate >= 50
         `;
         const params: any[] = [];
@@ -19571,7 +19571,7 @@ Deno.serve(async (req) => {
           // Check if rule exists
           const existing = await client.query(`
             SELECT id, times_used, success_rate 
-            FROM ai_agente.t_dachser_chb_extraction_rules
+            FROM dados_dachser.t_chb_extraction_rules
             WHERE field_name = ? AND document_type = ?
             LIMIT 1
           `, [field_name, document_type || 'Outros']);
@@ -19583,7 +19583,7 @@ Deno.serve(async (req) => {
             const newSuccessRate = Math.min(100, ((Number(rule.success_rate) || 50) + 100) / 2);
             
             await client.execute(`
-              UPDATE ai_agente.t_dachser_chb_extraction_rules
+              UPDATE dados_dachser.t_chb_extraction_rules
               SET extraction_pattern = ?,
                   location_hint = ?,
                   example_value = ?,
@@ -19597,7 +19597,7 @@ Deno.serve(async (req) => {
           } else {
             // Insert new
             const insertResult = await client.execute(`
-              INSERT INTO ai_agente.t_dachser_chb_extraction_rules
+              INSERT INTO dados_dachser.t_chb_extraction_rules
               (field_name, document_type, extraction_pattern, location_hint, example_value, times_used, success_rate)
               VALUES (?, ?, ?, ?, ?, 1, 80.00)
             `, [field_name, document_type || 'Outros', extraction_pattern, location_hint, example_value]);
