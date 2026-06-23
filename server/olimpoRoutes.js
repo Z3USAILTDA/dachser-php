@@ -167,7 +167,7 @@ function agingBaseSubquery() {
   return `
     SELECT t.*,
       CASE WHEN EXISTS (
-        SELECT 1 FROM ai_agente.t_fin_disputas d
+        SELECT 1 FROM ${DB}.t_fin_disputas d
         WHERE (((COALESCE(d.documento,'') <> 'CR'
               AND d.documento COLLATE utf8mb4_unicode_ci = t.documento COLLATE utf8mb4_unicode_ci
               AND COALESCE(d.nf,'') COLLATE utf8mb4_unicode_ci = COALESCE(t.numero_nf,'') COLLATE utf8mb4_unicode_ci
@@ -178,7 +178,7 @@ function agingBaseSubquery() {
       ) THEN 1 ELSE 0 END AS is_disputa
     FROM ${DB}.v_fin_regua_contas_receber t
     WHERE NOT EXISTS (
-      SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+      SELECT 1 FROM ${DB}.t_fin_soft_delete sd
       WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
         AND sd.active = 0
     )
@@ -505,17 +505,17 @@ export function registerOlimpoRoutes(app) {
                  SUBSTRING_INDEX(GROUP_CONCAT(success ORDER BY sent_at DESC), ',', 1) AS last_success,
                  SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(error_message,'') ORDER BY sent_at DESC SEPARATOR '||'), '||', 1) AS last_error,
                  MAX(sent_at) AS last_sent_at
-          FROM ai_agente.t_financeiro_email_log
+          FROM ${DB}.t_fin_email_log
           GROUP BY REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-','')
         ) le
           ON le.cnpj_clean COLLATE utf8mb4_unicode_ci = REPLACE(REPLACE(REPLACE(COALESCE(t.cnpj,''),'.',''),'/',''),'-','') COLLATE utf8mb4_unicode_ci
         WHERE NOT EXISTS (
-            SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+            SELECT 1 FROM ${DB}.t_fin_soft_delete sd
             WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
               AND sd.active = 0
           )
           AND NOT EXISTS (
-            SELECT 1 FROM ai_agente.t_fin_disputas d
+            SELECT 1 FROM ${DB}.t_fin_disputas d
             WHERE (
                     (COALESCE(d.documento,'') <> 'CR'
                      AND d.documento COLLATE utf8mb4_unicode_ci = t.documento COLLATE utf8mb4_unicode_ci
@@ -625,7 +625,7 @@ export function registerOlimpoRoutes(app) {
     try {
       const cnpj = onlyDigits(req.query.cnpj);
       if (!cnpj) return res.json({ success: true, logsByEmail: {} });
-      const rows = await query(`SELECT id, stage, LOWER(TRIM(email_to)) AS email_to, subject, sent_at, success, error_message FROM ai_agente.t_financeiro_email_log WHERE REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-','') COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci ORDER BY sent_at DESC LIMIT 200`, [cnpj]);
+      const rows = await query(`SELECT id, stage, LOWER(TRIM(email_to)) AS email_to, subject, sent_at, success, error_message FROM ${DB}.t_fin_email_log WHERE REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-','') COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci ORDER BY sent_at DESC LIMIT 200`, [cnpj]);
       const logsByEmail = {};
       for (const r of rows || []) {
         const key = String(r.email_to || '').toLowerCase().trim();
