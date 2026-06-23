@@ -50,10 +50,10 @@ const Login = () => {
     try {
       const data = await authLogin(username, password);
 
-      if (!data.success || !data.user) {
+      if (!data?.success || !data?.user) {
         toast({
           title: "Erro no login",
-          description: data.error || "Usuário ou Senha incorretos.",
+          description: data?.error || "Usuario ou Senha incorretos.",
           variant: "destructive",
         });
         return;
@@ -78,7 +78,7 @@ const Login = () => {
       console.error('Login error:', error);
       toast({
         title: "Erro no login",
-        description: "Usuário ou Senha incorretos.",
+        description: error instanceof Error ? error.message : "Usuario ou Senha incorretos.",
         variant: "destructive",
       });
     } finally {
