@@ -25,6 +25,10 @@ async function parseAndCheck(res: Response): Promise<any> {
     const msg = body?.error || `Erro ${res.status} ao comunicar com a API`;
     throw new Error(msg);
   }
+  if (body === null && res.status !== 204) {
+    throw new Error("Resposta invalida da API. Verifique se o backend esta publicado e se /api esta encaminhando para o servidor.");
+  }
+
   return body;
 }
 
