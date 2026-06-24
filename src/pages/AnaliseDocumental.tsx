@@ -20,7 +20,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
-import { supabase } from "@/integrations/supabase/client";
 
 interface AnaliseProcess {
   id: string;
@@ -55,12 +54,9 @@ const AnaliseDocumental = () => {
   const fetchHistory = useCallback(async () => {
     try {
       setIsLoading(true);
-      const { data, error } = (await supabase
-        .from("analise_documental_historico" as any)
-        .select("*")
-        .order("created_at", { ascending: false })) as { data: AnaliseProcess[] | null; error: any };
-
-      if (error) throw error;
+      const res = await fetch('/api/fin/analise-documental');
+      if (!res.ok) throw new Error(await res.text());
+      const data: AnaliseProcess[] = await res.json();
       setProcesses(data || []);
     } catch (error) {
       console.error("Error fetching history:", error);
@@ -156,12 +152,8 @@ const AnaliseDocumental = () => {
     if (!itemToDelete) return;
 
     try {
-      const { error } = await supabase
-        .from("analise_documental_historico" as any)
-        .delete()
-        .eq("id", itemToDelete.id);
-
-      if (error) throw error;
+      const res = await fetch(`/api/fin/analise-documental/${itemToDelete.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(await res.text());
 
       setProcesses((prev) => prev.filter((p) => p.id !== itemToDelete.id));
       toast.success("Análise excluída com sucesso");

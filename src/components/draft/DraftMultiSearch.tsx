@@ -13,7 +13,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { 
   Clipboard, 
@@ -123,11 +122,12 @@ export const DraftMultiSearch = ({ onComplete }: DraftMultiSearchProps) => {
     setSingleResult(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke('draft-track-hapag-multi', {
-        body: { searchType, searchValue: singleSearchValue.trim() }
+      const res = await fetch('/api/sea/draft/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ carrier: 'hapag', searchType, searchValue: singleSearchValue.trim() }),
       });
-
-      if (error) throw error;
+      const data = await res.json();
 
       if (data?.success) {
         setSingleResult(data);
@@ -164,11 +164,12 @@ export const DraftMultiSearch = ({ onComplete }: DraftMultiSearchProps) => {
       setEstimatedTime(calculateEstimatedTime(mbls.length - i - 1));
 
       try {
-        const { data, error } = await supabase.functions.invoke('draft-track-hapag-multi', {
-          body: { searchType, searchValue: mbl }
+        const res = await fetch('/api/sea/draft/track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ carrier: 'hapag', searchType, searchValue: mbl }),
         });
-
-        if (error) throw error;
+        const data = await res.json();
 
         if (data?.success) {
           newResults.push({
@@ -218,14 +219,13 @@ export const DraftMultiSearch = ({ onComplete }: DraftMultiSearchProps) => {
 
     try {
       for (const result of successResults) {
-        await supabase.functions.invoke('draft-save-tracking', {
-          body: {
-            trackingData: {
-              mbl_id: result.mbl_id,
-              booking: result.booking,
-              status_armador: result.status
-            }
-          }
+        await fetch('/api/sea/draft/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            carrier: 'hapag',
+            trackingData: { mbl_id: result.mbl_id, booking: result.booking, status_armador: result.status },
+          }),
         });
       }
 

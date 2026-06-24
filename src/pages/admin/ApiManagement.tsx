@@ -4,7 +4,6 @@ import { Activity, Server, TrendingUp, AlertCircle, RefreshCw, Loader2, Calendar
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChartTooltip } from "@/components/ui/chart";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell } from "recharts";
@@ -584,14 +583,16 @@ const DashboardTab = ({
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={async (e) => { 
-                        e.stopPropagation(); 
+                      onClick={async (e) => {
+                        e.stopPropagation();
                         try {
                           toast.loading("Enviando alerta...", { id: "test-alert" });
-                          const { data, error } = await supabase.functions.invoke("anthropic-balance-alert", {
-                            body: { force: true }
+                          const res = await fetch('/api/admin/anthropic-balance-alert', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ force: true }),
                           });
-                          if (error) throw error;
+                          if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Erro'); }
                           toast.success("Alerta enviado com sucesso!", { id: "test-alert" });
                         } catch (err: any) {
                           toast.error(`Erro: ${err.message}`, { id: "test-alert" });
@@ -1331,17 +1332,14 @@ export default function ApiManagement() {
         console.log(`[API Alert] ${api.api_name} atingiu ${currentUsage}/${limitConfig.monthlyLimit} (threshold: ${limitConfig.alertThreshold})`);
         
         try {
-          const { data, error } = await supabase.functions.invoke("send-api-usage-alert", {
-            body: {
-              api_name: api.api_name,
-              current_usage: currentUsage,
-              period_start: formatDateBR(periodStart),
-              period_end: formatDateBR(periodEnd)
-            }
+          const res = await fetch('/api/admin/api-usage-alert', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ api_name: api.api_name, current_usage: currentUsage, period_start: formatDateBR(periodStart), period_end: formatDateBR(periodEnd) }),
           });
-          
-          if (error) throw error;
-          
+          if (!res.ok) throw new Error('Erro ao enviar alerta');
+          const data = await res.json();
+
           if (data?.alert_sent) {
             // Marcar como enviado para evitar duplicatas
             sentAlerts[api.api_name] = true;
@@ -1362,11 +1360,9 @@ export default function ApiManagement() {
   const fetchApiStats = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_api_stats" },
-      });
-
-      if (error) throw error;
+      const res = await fetch('/api/admin/api-stats');
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
 
       if (data?.success) {
         const stats = data.stats || [];
@@ -1394,13 +1390,10 @@ export default function ApiManagement() {
 
   const fetchUsageCycles = async () => {
     try {
-      const { data, error } = await supabase
-        .from('api_usage_cycles')
-        .select('*')
-        .order('cycle_start_date', { ascending: false });
-      
-      if (error) throw error;
-      setUsageCycles(data || []);
+      const res = await fetch('/api/admin/api-usage-cycles');
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setUsageCycles(data?.cycles || []);
     } catch (error) {
       console.error("Error fetching usage cycles:", error);
     }
@@ -1414,44 +1407,42 @@ export default function ApiManagement() {
 
     try {
       const now = new Date();
-      const savedCount = { success: 0, skipped: 0 };
+      const savedCount = { success: 0 };
 
       for (const api of apiStats) {
         const limitConfig = API_LIMITS[api.api_name];
-        const billingCycle = limitConfig 
-          ? getBillingCycleDates(limitConfig.renewalDay) 
+        const billingCycle = limitConfig
+          ? getBillingCycleDates(limitConfig.renewalDay)
           : { startDate: new Date(now.getFullYear(), now.getMonth(), 1), endDate: new Date(now.getFullYear(), now.getMonth() + 1, 0) };
 
         const cycleStartStr = billingCycle.startDate.toISOString().split('T')[0];
         const cycleEndStr = billingCycle.endDate.toISOString().split('T')[0];
-        
         const totalCalls = Number(api.total_calls || 0);
         const totalErrors = Number(api.error_count || 0);
         const monthlyLimit = limitConfig?.monthlyLimit || null;
         const usagePercentage = monthlyLimit ? (totalCalls / monthlyLimit) * 100 : null;
         const estimatedCost = getApiCost(api.api_name, totalCalls);
 
-        const { error } = await supabase
-          .from('api_usage_cycles')
-          .upsert({
-            api_name: api.api_name,
-            cycle_start_date: cycleStartStr,
-            cycle_end_date: cycleEndStr,
-            total_calls: totalCalls,
-            total_errors: totalErrors,
-            monthly_limit: monthlyLimit,
-            usage_percentage: usagePercentage,
-            estimated_cost_usd: estimatedCost,
-            plan_name: limitConfig?.plan || null,
-            updated_at: new Date().toISOString()
-          }, { 
-            onConflict: 'api_name,cycle_start_date' 
+        try {
+          const res = await fetch('/api/admin/api-usage-cycles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              api_name: api.api_name,
+              cycle_start_date: cycleStartStr,
+              cycle_end_date: cycleEndStr,
+              total_calls: totalCalls,
+              total_errors: totalErrors,
+              monthly_limit: monthlyLimit,
+              usage_percentage: usagePercentage,
+              estimated_cost_usd: estimatedCost,
+              plan_name: limitConfig?.plan || null,
+            }),
           });
-
-        if (error) {
-          console.error(`Error saving cycle for ${api.api_name}:`, error);
-        } else {
-          savedCount.success++;
+          if (res.ok) savedCount.success++;
+          else console.error(`Error saving cycle for ${api.api_name}:`, await res.text());
+        } catch (err) {
+          console.error(`Error saving cycle for ${api.api_name}:`, err);
         }
       }
 

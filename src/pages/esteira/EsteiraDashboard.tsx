@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Clock, 
@@ -51,35 +50,21 @@ const EsteiraDashboard = () => {
     try {
       setLoading(true);
 
-      const { data: vouchers, error } = await (supabase as any)
-        .from("vouchers")
-        .select("etapa_atual, urgencia_tipo, vencimento, status_baixa");
+      const res = await fetch("/api/fin/esteira/metrics");
+      const data = await res.json();
+      if (!data?.success) throw new Error(data?.error || "Erro ao carregar métricas");
 
-      if (error) throw error;
-
-      const now = new Date();
-      const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-
-      const newMetrics: DashboardMetrics = {
-        pendentesOperacao: vouchers?.filter((v: any) => v.etapa_atual === "OPERACAO").length || 0,
-        pendentesFiscal: vouchers?.filter((v: any) => v.etapa_atual === "FISCAL").length || 0,
-        pendentesSupervisor: vouchers?.filter((v: any) => v.etapa_atual === "SUPERVISOR").length || 0,
-        pendentesFinanceiro: vouchers?.filter((v: any) => v.etapa_atual === "FINANCEIRO").length || 0,
-        urgentesReal: vouchers?.filter((v: any) => v.urgencia_tipo === "URGENTE_REAL").length || 0,
-        urgentesAutomatico: vouchers?.filter((v: any) => v.urgencia_tipo === "URGENTE_AUTOMATICO").length || 0,
-        vencendo24h: vouchers?.filter((v: any) => {
-          const vencimento = new Date(v.vencimento);
-          return vencimento >= now && vencimento <= tomorrow && v.etapa_atual !== "ROBO";
-        }).length || 0,
-        vencidos: vouchers?.filter((v: any) => {
-          const vencimento = new Date(v.vencimento);
-          return vencimento < now && v.etapa_atual !== "ROBO";
-        }).length || 0,
-        baixados: vouchers?.filter((v: any) => v.etapa_atual === "ROBO" || v.status_baixa !== "PENDENTE").length || 0,
-      };
-
-      setMetrics(newMetrics);
+      setMetrics({
+        pendentesOperacao:   data.pendentesOperacao,
+        pendentesFiscal:     data.pendentesFiscal,
+        pendentesSupervisor: data.pendentesSupervisor,
+        pendentesFinanceiro: data.pendentesFinanceiro,
+        urgentesReal:        data.urgentesReal,
+        urgentesAutomatico:  data.urgentesAutomatico,
+        vencendo24h:         data.vencendo24h,
+        vencidos:            data.vencidos,
+        baixados:            data.baixados,
+      });
     } catch (error: any) {
       toast({
         title: "Erro ao carregar métricas",

@@ -3,7 +3,6 @@ import { usePageVisibility } from "@/hooks/usePageVisibility";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { apiGet } from "@/services/apiClient";
-import { supabase } from "@/integrations/supabase/client"; // olimpo-proxy (Phase 6)
 import { filterByYearIfNotZ3us, isZ3usAdmin } from "@/utils/adminAccess";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -2594,14 +2593,12 @@ const Index = () => {
                 onClick={async () => {
                   setForceSwapLoading(true);
                   try {
-                    const { data, error } = await supabase.functions.invoke('olimpo-proxy', {
-                      body: {
-                        action: 'force_master_swap_log',
-                        awb: forceSwapNewMawb,
-                        old_mawb: forceSwapDialog.awb,
-                      }
+                    const swapRes = await fetch('/api/air/olimpo/force-swap-log', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ awb: forceSwapNewMawb, old_mawb: forceSwapDialog.awb }),
                     });
-                    if (error) throw error;
+                    if (!swapRes.ok) throw new Error(await swapRes.text());
                     toast({ title: "Novo Master registrado", description: `${forceSwapDialog.awb} → ${forceSwapNewMawb}` });
                     setForceSwapDialog({ open: false, awb: "" });
                     await fetchStatusAereoData();

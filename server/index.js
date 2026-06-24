@@ -3081,7 +3081,8 @@ async function seaBuildLlmContent(files) {
     let base64 = file.content || file.fileBase64 || null;
 
     if (!base64 && file.url) {
-      const response = await fetch(file.url);
+      const resolvedUrl = file.url.startsWith('/') ? `http://localhost:${PORT}${file.url}` : file.url;
+      const response = await fetch(resolvedUrl);
       if (!response.ok) throw new Error(`Falha ao carregar arquivo ${name}: ${response.status}`);
       const arrayBuffer = await response.arrayBuffer();
       base64 = Buffer.from(arrayBuffer).toString('base64');
@@ -3162,7 +3163,8 @@ async function seaAnalyzeWithGemini(analysisType, files, context = {}) {
     const mime = file.mimeType || file.type || file.file_type || 'application/octet-stream';
     let base64 = file.content || file.fileBase64 || null;
     if (!base64 && file.url) {
-      const response = await fetch(file.url);
+      const resolvedUrl = file.url.startsWith('/') ? `http://localhost:${PORT}${file.url}` : file.url;
+      const response = await fetch(resolvedUrl);
       if (!response.ok) throw new Error(`Falha ao carregar arquivo ${name}: ${response.status}`);
       base64 = Buffer.from(await response.arrayBuffer()).toString('base64');
     }
@@ -4435,6 +4437,24 @@ app.post('/api/fin/sync/baixados', async (req, res) => {
     `ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS is_pronto_para_robo TINYINT(1) DEFAULT 0 NULL`,
     `ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS origem_processo VARCHAR(255) NULL`,
   ]) { try { await finQuery(col); } catch (_) {} }
+})();
+
+// Migração: coluna file_content para arquivos SEA e tabela de tokens de supervisor
+(async () => {
+  try { await seaQuery(`ALTER TABLE ai_agente.t_dachser_sea_files ADD COLUMN IF NOT EXISTS file_content MEDIUMBLOB NULL`); } catch (_) {}
+  try {
+    await finQuery(`
+      CREATE TABLE IF NOT EXISTS ai_agente.t_supervisor_email_tokens (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        token VARCHAR(36) NOT NULL UNIQUE,
+        voucher_id VARCHAR(100) NOT NULL,
+        action_type ENUM('APPROVE','REJECT') NOT NULL,
+        used TINYINT(1) NOT NULL DEFAULT 0,
+        expires_at DATETIME NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+  } catch (_) {}
 })();
 
 // POST /api/fin/vouchers/anexos — upload arquivo como BLOB
@@ -9751,6 +9771,455 @@ app.get('/api/sea/cct/events', async (req, res) => {
   }
 });
 
+// ==================== SEA: VESSEL IMO RESOLUTION ====================
+
+// POST /api/sea/resolve-vessel-imo — resolve-vessel-imo edge function
+app.post('/api/sea/resolve-vessel-imo', async (req, res) => {
+  try {
+    const shipperName = typeof req.body?.shipperName === 'string' ? req.body.shipperName
+      : (typeof req.body?.vesselName === 'string' ? req.body.vesselName : '');
+    if (!shipperName || shipperName.trim().length < 2) {
+      return res.status(400).json({ error: 'shipperName required (min 2 chars)' });
+    }
+    const normalized = shipperName.trim().toUpperCase().replace(/\s+/g, ' ').slice(0, 120);
+
+    // Ensure cache table exists
+    await queryWithRetry(`
+      CREATE TABLE IF NOT EXISTS dados_dachser.t_vessel_registry (
+        vessel_name_normalized VARCHAR(120) NOT NULL,
+        vessel_name_original VARCHAR(180) NULL,
+        imo VARCHAR(20) NULL,
+        mmsi VARCHAR(20) NULL,
+        flag VARCHAR(80) NULL,
+        source VARCHAR(20) NULL,
+        hit_count INT NOT NULL DEFAULT 1,
+        last_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (vessel_name_normalized)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    // Cache lookup
+    const cached = await queryWithRetry(
+      'SELECT imo, mmsi FROM dados_dachser.t_vessel_registry WHERE vessel_name_normalized = ? LIMIT 1',
+      [normalized]
+    );
+    if (cached.length > 0 && cached[0].imo) {
+      await queryWithRetry('UPDATE dados_dachser.t_vessel_registry SET hit_count = hit_count + 1 WHERE vessel_name_normalized = ?', [normalized]);
+      return res.json({ imo: cached[0].imo, mmsi: cached[0].mmsi || null, source: 'cache' });
+    }
+
+    // Scrape fallback
+    let scraped = null;
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 8000);
+      const httpRes = await fetch(`https://www.vesselfinder.com/vessels?name=${encodeURIComponent(normalized)}`, {
+        signal: ctrl.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      });
+      clearTimeout(t);
+      if (httpRes.ok) {
+        const html = await httpRes.text();
+        const m1 = html.match(/\/vessels\/details\/(\d{7})/);
+        const m2 = html.match(/data-imo=["'](\d{7})["']/);
+        if (m1) scraped = { imo: m1[1] };
+        else if (m2) scraped = { imo: m2[1] };
+      }
+    } catch (scrapeErr) {
+      console.log('[resolve-vessel-imo] scrape failed:', scrapeErr.message);
+    }
+
+    if (scraped?.imo) {
+      await queryWithRetry(
+        `INSERT INTO dados_dachser.t_vessel_registry (vessel_name_normalized, vessel_name_original, imo, mmsi, source)
+         VALUES (?, ?, ?, ?, 'scrape')
+         ON DUPLICATE KEY UPDATE imo = VALUES(imo), mmsi = VALUES(mmsi), source = 'scrape', hit_count = hit_count + 1`,
+        [normalized, shipperName.trim().slice(0, 180), scraped.imo, scraped.mmsi || null]
+      );
+      return res.json({ imo: scraped.imo, mmsi: scraped.mmsi || null, source: 'scrape' });
+    }
+
+    res.json({ source: 'none' });
+  } catch (err) {
+    console.error('[POST /api/sea/resolve-vessel-imo]', err.message);
+    res.json({ source: 'none', error: err.message });
+  }
+});
+
+// ==================== AIR: OLIMPO PROXY ====================
+
+// POST /api/air/olimpo/force-swap-log — registra troca forçada de master AWB (porta olimpo-proxy)
+app.post('/api/air/olimpo/force-swap-log', async (req, res) => {
+  try {
+    const { awb, old_mawb } = req.body || {};
+    if (!awb || !old_mawb) return res.status(400).json({ error: 'awb e old_mawb são obrigatórios' });
+    await queryWithRetry(
+      `CREATE TABLE IF NOT EXISTS ai_agente.t_awb_master_swap_log (
+         id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+         old_mawb    VARCHAR(50) NOT NULL,
+         new_mawb    VARCHAR(50) NOT NULL,
+         created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+    );
+    await finQuery(
+      `INSERT INTO ai_agente.t_awb_master_swap_log (old_mawb, new_mawb) VALUES (?, ?)`,
+      [old_mawb, awb]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[POST /api/air/olimpo/force-swap-log]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==================== SEA: DRAFT TRACKING PROXY ====================
+
+const DRAFT_HAPAG_URL = process.env.DRAFT_HAPAG_URL || 'http://localhost:4001';
+const DRAFT_MSC_URL   = process.env.DRAFT_MSC_URL   || 'http://localhost:4002';
+const DRAFT_ONE_URL   = process.env.DRAFT_ONE_URL   || 'http://localhost:4003';
+
+function getDraftServiceUrl(carrier) {
+  const c = (carrier || '').toLowerCase();
+  if (c === 'msc') return DRAFT_MSC_URL;
+  if (c === 'one') return DRAFT_ONE_URL;
+  return DRAFT_HAPAG_URL;
+}
+
+// POST /api/sea/draft/track — proxy para serviço de tracking do armador correto
+app.post('/api/sea/draft/track', async (req, res) => {
+  try {
+    const { carrier, searchType, searchValue } = req.body || {};
+    if (!searchValue) return res.status(400).json({ success: false, error: 'searchValue é obrigatório' });
+    const baseUrl = getDraftServiceUrl(carrier);
+    const upstream = await fetch(`${baseUrl}/api/track`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ searchType: searchType || 'BL', searchValue }),
+    });
+    const data = await upstream.json();
+    res.status(upstream.status).json(data);
+  } catch (err) {
+    console.error('[POST /api/sea/draft/track]', err.message);
+    res.status(502).json({ success: false, error: `Serviço de tracking indisponível: ${err.message}` });
+  }
+});
+
+// POST /api/sea/draft/save — salva resultado de tracking em dados_dachser.t_consulta_armador
+app.post('/api/sea/draft/save', async (req, res) => {
+  try {
+    const { trackingData } = req.body || {};
+    if (!trackingData?.mbl_id) return res.status(400).json({ success: false, error: 'trackingData.mbl_id é obrigatório' });
+    const { mbl_id, booking, origem, destino, navio, voyage, etd, eta, status_armador, transaction_id } = trackingData;
+    await queryWithRetry(
+      `INSERT INTO dados_dachser.t_consulta_armador
+         (mbl_id, booking, origem, destino, navio, voyage, etd, eta,
+          tipo_processo, status_armador, transaction_id, data_hora_consulta, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'SEA EXPORT', ?, ?, NOW(), NOW())
+       ON DUPLICATE KEY UPDATE
+         booking          = COALESCE(VALUES(booking), booking),
+         origem           = COALESCE(VALUES(origem), origem),
+         destino          = COALESCE(VALUES(destino), destino),
+         navio            = COALESCE(VALUES(navio), navio),
+         voyage           = COALESCE(VALUES(voyage), voyage),
+         etd              = COALESCE(VALUES(etd), etd),
+         eta              = COALESCE(VALUES(eta), eta),
+         status_armador   = VALUES(status_armador),
+         transaction_id   = COALESCE(VALUES(transaction_id), transaction_id),
+         data_hora_consulta = NOW()`,
+      [mbl_id, booking || null, origem || null, destino || null, navio || null,
+       voyage || null, etd || null, eta || null, status_armador || null, transaction_id || null]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[POST /api/sea/draft/save]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ==================== ANALISE DOCUMENTAL ====================
+
+(async () => {
+  await finQuery(`
+    CREATE TABLE IF NOT EXISTS ai_agente.t_analise_documental_historico (
+      id            CHAR(36)     NOT NULL DEFAULT (UUID()) PRIMARY KEY,
+      pdf_file_name VARCHAR(512) NOT NULL,
+      excel_file_name VARCHAR(512) NOT NULL,
+      overall_status VARCHAR(50) NOT NULL DEFAULT 'pending',
+      success_count  INT         NOT NULL DEFAULT 0,
+      warning_count  INT         NOT NULL DEFAULT 0,
+      error_count    INT         NOT NULL DEFAULT 0,
+      total_items    INT         NOT NULL DEFAULT 0,
+      pdf_summary    LONGTEXT    NULL,
+      excel_summary  LONGTEXT    NULL,
+      comparison     LONGTEXT    NULL,
+      analysis       LONGTEXT    NULL,
+      metadata       LONGTEXT    NULL,
+      created_by_user_id VARCHAR(100) NULL,
+      created_at     DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+})();
+
+// GET /api/fin/analise-documental — lista histórico ordenado por data desc
+app.get('/api/fin/analise-documental', async (req, res) => {
+  try {
+    const rows = await finQuery(
+      `SELECT id, pdf_file_name, excel_file_name, overall_status,
+              success_count, warning_count, error_count, total_items,
+              created_by_user_id, created_at
+       FROM ai_agente.t_analise_documental_historico
+       ORDER BY created_at DESC`
+    );
+    res.json(rows || []);
+  } catch (err) {
+    console.error('[GET /api/fin/analise-documental]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/fin/analise-documental/:id — detalhe completo
+app.get('/api/fin/analise-documental/:id', async (req, res) => {
+  try {
+    const rows = await finQuery(
+      `SELECT * FROM ai_agente.t_analise_documental_historico WHERE id = ?`,
+      [req.params.id]
+    );
+    if (!rows || rows.length === 0) return res.status(404).json({ error: 'Não encontrado' });
+    const row = rows[0];
+    // Parse JSON columns
+    for (const col of ['pdf_summary', 'excel_summary', 'comparison', 'analysis', 'metadata']) {
+      if (row[col] && typeof row[col] === 'string') {
+        try { row[col] = JSON.parse(row[col]); } catch (_) {}
+      }
+    }
+    res.json(row);
+  } catch (err) {
+    console.error('[GET /api/fin/analise-documental/:id]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/fin/analise-documental/:id
+app.delete('/api/fin/analise-documental/:id', async (req, res) => {
+  try {
+    await finQuery(
+      `DELETE FROM ai_agente.t_analise_documental_historico WHERE id = ?`,
+      [req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[DELETE /api/fin/analise-documental/:id]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==================== OTHELLO IMPORT ====================
+
+(async () => {
+  const tables = [
+    `CREATE TABLE IF NOT EXISTS dados_dachser.t_othello_base_totvs (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      arquivo_origem VARCHAR(512) NOT NULL,
+      aba_origem VARCHAR(100) NOT NULL,
+      linha_excel INT NOT NULL,
+      processo BIGINT NULL,
+      faturado_em DATE NULL,
+      filial INT NULL,
+      modal VARCHAR(20) NULL,
+      cliente VARCHAR(512) NULL,
+      valor_total_faturado DECIMAL(15,2) NULL,
+      faturado_no_othello_por_base_original VARCHAR(512) NULL,
+      faturado_no_rm_por_base_original VARCHAR(100) NULL,
+      faturado_no_othello_por VARCHAR(255) NULL,
+      faturado_no_rm_por VARCHAR(255) NULL,
+      regiao VARCHAR(100) NULL,
+      divisao_por_modal VARCHAR(100) NULL,
+      othello_rm VARCHAR(512) NULL,
+      ana_mazzo VARCHAR(100) NULL, ana_mazzo_participacao DECIMAL(4,2) NULL,
+      integrador_othello_rm VARCHAR(100) NULL, integrador_othello_rm_participacao DECIMAL(4,2) NULL,
+      loreno_santos VARCHAR(100) NULL, loreno_santos_participacao DECIMAL(4,2) NULL,
+      mariana_melo VARCHAR(100) NULL, mariana_melo_participacao DECIMAL(4,2) NULL,
+      marina_marques VARCHAR(100) NULL, marina_marques_participacao DECIMAL(4,2) NULL,
+      vitoria_santos VARCHAR(100) NULL, vitoria_santos_participacao DECIMAL(4,2) NULL,
+      simone_santos VARCHAR(100) NULL, simone_santos_participacao DECIMAL(4,2) NULL,
+      gil_luan VARCHAR(100) NULL, gil_luan_participacao DECIMAL(4,2) NULL,
+      juliana_pansonato VARCHAR(100) NULL, juliana_pansonato_participacao DECIMAL(4,2) NULL,
+      igor_ferreira VARCHAR(100) NULL, igor_ferreira_participacao DECIMAL(4,2) NULL,
+      reinaldo_fascina VARCHAR(100) NULL, reinaldo_fascina_participacao DECIMAL(4,2) NULL,
+      thays_prado VARCHAR(100) NULL, thays_prado_participacao DECIMAL(4,2) NULL,
+      carlos_almeida VARCHAR(100) NULL, carlos_almeida_participacao DECIMAL(4,2) NULL,
+      imported_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS dados_dachser.t_othello_nacional_rls (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      arquivo_origem VARCHAR(512) NOT NULL,
+      aba_origem VARCHAR(100) NOT NULL,
+      linha_excel INT NOT NULL,
+      id_ref_object BIGINT NULL,
+      settlement_id VARCHAR(100) NULL,
+      branch VARCHAR(50) NULL,
+      object_type VARCHAR(100) NULL,
+      service_date DATE NULL,
+      cost_center_iv VARCHAR(100) NULL,
+      deb_cred_no VARCHAR(100) NULL,
+      deb_cred_name VARCHAR(512) NULL,
+      settlement_type VARCHAR(100) NULL,
+      status_settl VARCHAR(100) NULL,
+      status_interpreter VARCHAR(100) NULL,
+      flag VARCHAR(50) NULL,
+      revenue DECIMAL(15,2) NULL,
+      revenue_transit DECIMAL(15,2) NULL,
+      total_revenue DECIMAL(15,2) NULL,
+      faturado_em DATE NULL,
+      comentarios TEXT NULL,
+      imported_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS dados_dachser.t_othello_interacional_rls (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      arquivo_origem VARCHAR(512) NOT NULL,
+      aba_origem VARCHAR(100) NOT NULL,
+      linha_excel INT NOT NULL,
+      id_ref_object BIGINT NULL,
+      branch VARCHAR(50) NULL,
+      service_date DATE NULL,
+      cost_center_iv VARCHAR(100) NULL,
+      deb_cred_name VARCHAR(512) NULL,
+      flag VARCHAR(50) NULL,
+      revenue DECIMAL(15,2) NULL,
+      comentarios TEXT NULL,
+      imported_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS dados_dachser.t_othello_nacional_nao_rls (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      arquivo_origem VARCHAR(512) NOT NULL,
+      aba_origem VARCHAR(100) NOT NULL,
+      linha_excel INT NOT NULL,
+      id_ref_object BIGINT NULL,
+      settlement_id VARCHAR(100) NULL,
+      branch VARCHAR(50) NULL,
+      object_type VARCHAR(100) NULL,
+      service_date DATE NULL,
+      cost_center_iv VARCHAR(100) NULL,
+      deb_cred_no VARCHAR(100) NULL,
+      deb_cred_name VARCHAR(512) NULL,
+      settlement_type VARCHAR(100) NULL,
+      status_settl VARCHAR(100) NULL,
+      status_interpreter VARCHAR(100) NULL,
+      flag VARCHAR(50) NULL,
+      revenue DECIMAL(15,2) NULL,
+      revenue_transit DECIMAL(15,2) NULL,
+      total_revenue DECIMAL(15,2) NULL,
+      etd DATE NULL, atd DATE NULL, eta DATE NULL, ata DATE NULL,
+      comentarios TEXT NULL,
+      imported_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS dados_dachser.t_othello_internacional_nao_rls (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      arquivo_origem VARCHAR(512) NOT NULL,
+      aba_origem VARCHAR(100) NOT NULL,
+      linha_excel INT NOT NULL,
+      id_ref_object BIGINT NULL,
+      branch VARCHAR(50) NULL,
+      service_date DATE NULL,
+      cost_center_iv VARCHAR(100) NULL,
+      deb_cred_name VARCHAR(512) NULL,
+      status_settl VARCHAR(100) NULL,
+      flag VARCHAR(50) NULL,
+      revenue DECIMAL(15,2) NULL,
+      etd DATE NULL, atd DATE NULL, eta DATE NULL, ata DATE NULL,
+      comentarios TEXT NULL,
+      imported_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  ];
+  for (const sql of tables) { try { await queryWithRetry(sql); } catch (_) {} }
+})();
+
+// POST /api/fin/othello/import — porta fin-othello-import edge function
+app.post('/api/fin/othello/import', async (req, res) => {
+  try {
+    const { arquivo_origem, nacional, interacional, base_totvs, nacional_nao_rls, internacional_nao_rls } = req.body || {};
+    if (!arquivo_origem) return res.status(400).json({ error: 'arquivo_origem é obrigatório' });
+
+    // Limpa registros anteriores do mesmo arquivo
+    await queryWithRetry(`DELETE FROM dados_dachser.t_othello_base_totvs WHERE arquivo_origem = ?`, [arquivo_origem]);
+    await queryWithRetry(`DELETE FROM dados_dachser.t_othello_nacional_rls WHERE arquivo_origem = ?`, [arquivo_origem]);
+    await queryWithRetry(`DELETE FROM dados_dachser.t_othello_interacional_rls WHERE arquivo_origem = ?`, [arquivo_origem]);
+    await queryWithRetry(`DELETE FROM dados_dachser.t_othello_nacional_nao_rls WHERE arquivo_origem = ?`, [arquivo_origem]);
+    await queryWithRetry(`DELETE FROM dados_dachser.t_othello_internacional_nao_rls WHERE arquivo_origem = ?`, [arquivo_origem]);
+
+    const batchInsert = async (table, rows, cols) => {
+      if (!rows || rows.length === 0) return;
+      const placeholders = rows.map(() => `(${cols.map(() => '?').join(',')})`).join(',');
+      const values = rows.flatMap(r => cols.map(c => r[c] ?? null));
+      await queryWithRetry(`INSERT INTO ${table} (${cols.join(',')}) VALUES ${placeholders}`, values);
+    };
+
+    const totvsCols = [
+      'arquivo_origem','aba_origem','linha_excel','processo','faturado_em','filial','modal','cliente',
+      'valor_total_faturado','faturado_no_othello_por_base_original','faturado_no_rm_por_base_original',
+      'faturado_no_othello_por','faturado_no_rm_por','regiao','divisao_por_modal','othello_rm',
+      'ana_mazzo','ana_mazzo_participacao','integrador_othello_rm','integrador_othello_rm_participacao',
+      'loreno_santos','loreno_santos_participacao','mariana_melo','mariana_melo_participacao',
+      'marina_marques','marina_marques_participacao','vitoria_santos','vitoria_santos_participacao',
+      'simone_santos','simone_santos_participacao','gil_luan','gil_luan_participacao',
+      'juliana_pansonato','juliana_pansonato_participacao','igor_ferreira','igor_ferreira_participacao',
+      'reinaldo_fascina','reinaldo_fascina_participacao','thays_prado','thays_prado_participacao',
+      'carlos_almeida','carlos_almeida_participacao',
+    ];
+    const nacionalCols = [
+      'arquivo_origem','aba_origem','linha_excel','id_ref_object','settlement_id','branch','object_type',
+      'service_date','cost_center_iv','deb_cred_no','deb_cred_name','settlement_type','status_settl',
+      'status_interpreter','flag','revenue','revenue_transit','total_revenue','faturado_em','comentarios',
+    ];
+    const interacionalCols = [
+      'arquivo_origem','aba_origem','linha_excel','id_ref_object','branch','service_date',
+      'cost_center_iv','deb_cred_name','flag','revenue','comentarios',
+    ];
+    const nacNaoRlsCols = [
+      'arquivo_origem','aba_origem','linha_excel','id_ref_object','settlement_id','branch','object_type',
+      'service_date','cost_center_iv','deb_cred_no','deb_cred_name','settlement_type','status_settl',
+      'status_interpreter','flag','revenue','revenue_transit','total_revenue','etd','atd','eta','ata','comentarios',
+    ];
+    const intNaoRlsCols = [
+      'arquivo_origem','aba_origem','linha_excel','id_ref_object','branch','service_date',
+      'cost_center_iv','deb_cred_name','status_settl','flag','revenue','etd','atd','eta','ata','comentarios',
+    ];
+
+    // Insert em lotes de 500 para evitar queries gigantes
+    const CHUNK = 500;
+    const chunk = (arr, size) => Array.from({ length: Math.ceil(arr.length / size) }, (_, i) => arr.slice(i * size, i * size + size));
+
+    for (const batch of chunk(base_totvs || [], CHUNK))         await batchInsert('dados_dachser.t_othello_base_totvs', batch, totvsCols);
+    for (const batch of chunk(nacional || [], CHUNK))           await batchInsert('dados_dachser.t_othello_nacional_rls', batch, nacionalCols);
+    for (const batch of chunk(interacional || [], CHUNK))       await batchInsert('dados_dachser.t_othello_interacional_rls', batch, interacionalCols);
+    for (const batch of chunk(nacional_nao_rls || [], CHUNK))   await batchInsert('dados_dachser.t_othello_nacional_nao_rls', batch, nacNaoRlsCols);
+    for (const batch of chunk(internacional_nao_rls || [], CHUNK)) await batchInsert('dados_dachser.t_othello_internacional_nao_rls', batch, intNaoRlsCols);
+
+    res.json({
+      success: true,
+      counts: {
+        base_totvs: (base_totvs || []).length,
+        nacional: (nacional || []).length,
+        interacional: (interacional || []).length,
+        nacional_nao_rls: (nacional_nao_rls || []).length,
+        internacional_nao_rls: (internacional_nao_rls || []).length,
+      },
+    });
+  } catch (err) {
+    console.error('[POST /api/fin/othello/import]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ==================== LOCAL CHARGES & FEE CHANGES ====================
 
 // GET /api/fin/local-charges — get_local_charges
@@ -10315,6 +10784,481 @@ app.get('/api/admin/metric-users', async (req, res) => {
     res.json({ success: true, users });
   } catch (err) {
     console.error('[GET /api/admin/metric-users]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ==================== ADMIN: DATABASE STATS ====================
+
+// GET /api/admin/database-stats — fetch-database-stats
+app.get('/api/admin/database-stats', async (req, res) => {
+  try {
+    const [masterGeneral, masterByModal, uniqueInsertsRows, finNfs, finVoucher, baixas] = await Promise.all([
+      queryWithRetry(`
+        SELECT MAX(data_insert) as last_update, COUNT(*) as total_records,
+          SUM(CASE WHEN data_insert >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as recent_inserts
+        FROM dados_dachser.t_master_dados WHERE active = 1
+      `),
+      queryWithRetry(`
+        SELECT
+          CASE WHEN tipo_processo IN ('AIR IMPORT','AIR EXPORT') THEN 'AIR'
+               WHEN tipo_processo IN ('SEA IMPORT','SEA EXPORT') THEN 'SEA' ELSE 'OTHER' END as modal,
+          tipo_processo,
+          MAX(data_insert) as last_update, COUNT(*) as total_records,
+          SUM(CASE WHEN data_insert >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as recent_inserts
+        FROM dados_dachser.t_master_dados
+        WHERE active = 1 AND tipo_processo IN ('AIR IMPORT','AIR EXPORT','SEA IMPORT','SEA EXPORT')
+        GROUP BY modal, tipo_processo ORDER BY modal, tipo_processo
+      `),
+      queryWithRetry(`
+        SELECT tipo_processo, COUNT(*) as unique_inserts
+        FROM (
+          SELECT DISTINCT n.mawb, n.hawb, n.tipo_processo
+          FROM dados_dachser.t_master_dados n
+          WHERE n.active = 1 AND n.data_insert >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+            AND n.tipo_processo IN ('AIR IMPORT','AIR EXPORT','SEA IMPORT','SEA EXPORT')
+            AND NOT EXISTS (
+              SELECT 1 FROM dados_dachser.t_master_dados a
+              WHERE a.mawb = n.mawb AND a.hawb = n.hawb AND a.active = 1
+                AND a.data_insert < DATE_SUB(NOW(), INTERVAL 24 HOUR)
+            )
+        ) AS unicos GROUP BY tipo_processo
+      `),
+      finQuery(`SELECT MAX(data_insert) as last_update, COUNT(*) as total_records, SUM(CASE WHEN data_insert >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as recent_inserts FROM dados_dachser.t_dados_financeiro_nfs`),
+      finQuery(`SELECT MAX(data_insert) as last_update, COUNT(*) as total_records, SUM(CASE WHEN data_insert >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as recent_inserts FROM dados_dachser.t_dados_financeiro_voucher`),
+      finQuery(`SELECT MAX(data_insert) as last_update, COUNT(*) as total_records, SUM(CASE WHEN data_insert >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as recent_inserts FROM dados_dachser.tbaixas`),
+    ]);
+
+    const uniqueMap = {};
+    for (const row of uniqueInsertsRows) uniqueMap[row.tipo_processo] = Number(row.unique_inserts || 0);
+
+    const airB = { lastUpdate: null, totalRecords: 0, recentInserts: 0, uniqueInserts: 0, breakdown: { 'AIR IMPORT': { lastUpdate: null, count: 0, recentInserts: 0, uniqueInserts: 0 }, 'AIR EXPORT': { lastUpdate: null, count: 0, recentInserts: 0, uniqueInserts: 0 } } };
+    const seaB = { lastUpdate: null, totalRecords: 0, recentInserts: 0, uniqueInserts: 0, breakdown: { 'SEA IMPORT': { lastUpdate: null, count: 0, recentInserts: 0, uniqueInserts: 0 }, 'SEA EXPORT': { lastUpdate: null, count: 0, recentInserts: 0, uniqueInserts: 0 } } };
+    let airMax = null, seaMax = null;
+
+    for (const row of masterByModal) {
+      const lu = row.last_update ? new Date(row.last_update).toISOString() : null;
+      const cnt = Number(row.total_records);
+      const ri = Number(row.recent_inserts || 0);
+      const ui = uniqueMap[row.tipo_processo] || 0;
+      if (row.modal === 'AIR') {
+        airB.totalRecords += cnt; airB.recentInserts += ri; airB.uniqueInserts += ui;
+        airB.breakdown[row.tipo_processo] = { lastUpdate: lu, count: cnt, recentInserts: ri, uniqueInserts: ui };
+        if (row.last_update) { const d = new Date(row.last_update); if (!airMax || d > airMax) airMax = d; }
+      } else if (row.modal === 'SEA') {
+        seaB.totalRecords += cnt; seaB.recentInserts += ri; seaB.uniqueInserts += ui;
+        seaB.breakdown[row.tipo_processo] = { lastUpdate: lu, count: cnt, recentInserts: ri, uniqueInserts: ui };
+        if (row.last_update) { const d = new Date(row.last_update); if (!seaMax || d > seaMax) seaMax = d; }
+      }
+    }
+    airB.lastUpdate = airMax ? airMax.toISOString() : null;
+    seaB.lastUpdate = seaMax ? seaMax.toISOString() : null;
+
+    res.json({
+      t_master_dados: {
+        lastUpdate: masterGeneral[0]?.last_update ? new Date(masterGeneral[0].last_update).toISOString() : null,
+        totalRecords: Number(masterGeneral[0]?.total_records || 0),
+        recentInserts: Number(masterGeneral[0]?.recent_inserts || 0),
+        applications: ['AIR', 'SEA', 'CCT', 'TRACKING', 'OLIMPO'],
+        byModal: { AIR: airB, SEA: seaB },
+      },
+      t_dados_financeiro_nfs: {
+        lastUpdate: finNfs[0]?.last_update ? new Date(finNfs[0].last_update).toISOString() : null,
+        totalRecords: Number(finNfs[0]?.total_records || 0),
+        recentInserts: Number(finNfs[0]?.recent_inserts || 0),
+        applications: ['REGUA'],
+      },
+      t_dados_financeiro_voucher: {
+        lastUpdate: finVoucher[0]?.last_update ? new Date(finVoucher[0].last_update).toISOString() : null,
+        totalRecords: Number(finVoucher[0]?.total_records || 0),
+        recentInserts: Number(finVoucher[0]?.recent_inserts || 0),
+        applications: ['ESTEIRA'],
+      },
+      tbaixas: {
+        lastUpdate: baixas[0]?.last_update ? new Date(baixas[0].last_update).toISOString() : null,
+        totalRecords: Number(baixas[0]?.total_records || 0),
+        recentInserts: Number(baixas[0]?.recent_inserts || 0),
+        applications: ['ESTEIRA'],
+      },
+      fetchedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('[GET /api/admin/database-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==================== ADMIN: MAPBOX TOKEN ====================
+
+// GET /api/admin/mapbox-token — returns MAPBOX_TOKEN from env (replaces get-mapbox-token edge function)
+app.get('/api/admin/mapbox-token', (req, res) => {
+  const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_TOKEN || null;
+  if (!token) return res.status(404).json({ error: 'Mapbox token not configured' });
+  res.json({ token });
+});
+
+// ==================== ADMIN: API USAGE CYCLES ====================
+
+// GET /api/admin/api-usage-cycles — fetchUsageCycles
+app.get('/api/admin/api-usage-cycles', async (req, res) => {
+  try {
+    await finQuery(`
+      CREATE TABLE IF NOT EXISTS ai_agente.t_api_usage_cycles (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        api_name VARCHAR(100) NOT NULL,
+        cycle_start_date DATE NOT NULL,
+        cycle_end_date DATE NOT NULL,
+        total_calls INT NOT NULL DEFAULT 0,
+        total_errors INT NOT NULL DEFAULT 0,
+        monthly_limit INT NULL,
+        usage_percentage DECIMAL(6,2) NULL,
+        estimated_cost_usd DECIMAL(10,4) NULL,
+        plan_name VARCHAR(200) NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_api_cycle (api_name, cycle_start_date)
+      )
+    `);
+    const cycles = await finQuery(`SELECT * FROM ai_agente.t_api_usage_cycles ORDER BY cycle_start_date DESC`);
+    res.json({ success: true, cycles: cycles || [] });
+  } catch (err) {
+    console.error('[GET /api/admin/api-usage-cycles]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/admin/api-usage-cycles — handleSaveCurrentCycle (upsert)
+app.post('/api/admin/api-usage-cycles', async (req, res) => {
+  try {
+    const { api_name, cycle_start_date, cycle_end_date, total_calls, total_errors, monthly_limit, usage_percentage, estimated_cost_usd, plan_name } = req.body || {};
+    if (!api_name || !cycle_start_date) return res.status(400).json({ success: false, error: 'api_name e cycle_start_date são obrigatórios' });
+
+    await finQuery(`
+      INSERT INTO ai_agente.t_api_usage_cycles (api_name, cycle_start_date, cycle_end_date, total_calls, total_errors, monthly_limit, usage_percentage, estimated_cost_usd, plan_name, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+      ON DUPLICATE KEY UPDATE
+        cycle_end_date = VALUES(cycle_end_date),
+        total_calls = VALUES(total_calls),
+        total_errors = VALUES(total_errors),
+        monthly_limit = VALUES(monthly_limit),
+        usage_percentage = VALUES(usage_percentage),
+        estimated_cost_usd = VALUES(estimated_cost_usd),
+        plan_name = VALUES(plan_name),
+        updated_at = NOW()
+    `, [api_name, cycle_start_date, cycle_end_date || null, total_calls || 0, total_errors || 0, monthly_limit || null, usage_percentage || null, estimated_cost_usd || null, plan_name || null]);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[POST /api/admin/api-usage-cycles]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ==================== ADMIN: FIRECRAWL MONITOR ====================
+
+// GET /api/admin/firecrawl-stats — firecrawl-monitor-stats
+app.get('/api/admin/firecrawl-stats', async (req, res) => {
+  try {
+    const [rows, latestRow] = await Promise.all([
+      queryWithRetry(`
+        SELECT
+          MAX(CASE WHEN origin IS NOT NULL AND origin != '' AND destination IS NOT NULL AND destination != '' THEN scraped_at ELSE NULL END) as lastUpdate,
+          COUNT(*) as totalRecords,
+          SUM(CASE WHEN scraped_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as recentInserts,
+          COUNT(DISTINCT CASE WHEN scraped_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN awb ELSE NULL END) as uniqueAwbs
+        FROM dados_dachser.t_aereo_ws_firecrawl
+      `),
+      queryWithRetry(`SELECT origin, destination, scraped_at FROM dados_dachser.t_aereo_ws_firecrawl ORDER BY scraped_at DESC LIMIT 1`),
+    ]);
+
+    const row = rows[0] || {};
+    const latest = latestRow[0] || {};
+    const hasEmptyFields = !latest.origin || latest.origin === '' || !latest.destination || latest.destination === '';
+    const minutesSinceUpdate = row.lastUpdate
+      ? Math.round((Date.now() - new Date(row.lastUpdate).getTime()) / 60000)
+      : 9999;
+    const status = minutesSinceUpdate <= 5 ? 'healthy' : minutesSinceUpdate <= 60 ? 'warning' : 'critical';
+
+    res.json({
+      lastUpdate: row.lastUpdate ? new Date(row.lastUpdate).toISOString() : null,
+      totalRecords: Number(row.totalRecords || 0),
+      recentInserts: Number(row.recentInserts || 0),
+      uniqueAwbs: Number(row.uniqueAwbs || 0),
+      minutesSinceUpdate,
+      status,
+      hasEmptyFields,
+      fetchedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('[GET /api/admin/firecrawl-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/firecrawl-alert — firecrawl-monitor-alert
+app.post('/api/admin/firecrawl-alert', async (req, res) => {
+  const ALERT_THRESHOLD_MINUTES = 120;
+  const RECIPIENTS = ['devs@z3us.ai', 'rodrigo@z3us.ai', 'larissa@z3us.ai'];
+  const LOGO_URL = process.env.EMAIL_LOGO_URL || 'https://z3us.ai/logo-z3us.png';
+  const fmt = (m) => m < 60 ? `${m} min` : `${Math.floor(m/60)}h${m%60 > 0 ? ` ${m%60}min` : ''}`;
+
+  try {
+    const { test: isTest = false, force: isForce = false } = req.body || {};
+
+    const statsRows = await queryWithRetry(`
+      SELECT
+        MAX(CASE WHEN origin IS NOT NULL AND origin != '' AND destination IS NOT NULL AND destination != '' THEN scraped_at ELSE NULL END) as lastUpdate,
+        COUNT(*) as totalRecords,
+        SUM(CASE WHEN scraped_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as recentInserts
+      FROM dados_dachser.t_aereo_ws_firecrawl
+    `);
+    const row = statsRows[0] || {};
+    const minutesSinceUpdate = row.lastUpdate ? Math.round((Date.now() - new Date(row.lastUpdate).getTime()) / 60000) : 9999;
+    const totalRecords = Number(row.totalRecords || 0);
+    const recentInserts = Number(row.recentInserts || 0);
+    const isCritical = minutesSinceUpdate >= ALERT_THRESHOLD_MINUTES;
+
+    await finQuery(`
+      CREATE TABLE IF NOT EXISTS ai_agente.t_firecrawl_monitor_alerts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        recovered_at DATETIME DEFAULT NULL,
+        minutes_since_update INT NOT NULL,
+        alert_type VARCHAR(20) NOT NULL DEFAULT 'critical'
+      )
+    `);
+    const openAlerts = await finQuery(`SELECT id FROM ai_agente.t_firecrawl_monitor_alerts WHERE recovered_at IS NULL ORDER BY sent_at DESC LIMIT 1`);
+    const hasOpenAlert = openAlerts.length > 0;
+
+    let action = 'none';
+    if (isTest) {
+      await resend.emails.send({
+        from: 'Z3US.AI Monitor <noreply@hermes.z3us.ai>',
+        to: RECIPIENTS,
+        subject: `[TESTE] ⚠️ Firecrawl Parado — sem dados há ${fmt(minutesSinceUpdate)}`,
+        html: `<p>Firecrawl parado há <strong>${fmt(minutesSinceUpdate)}</strong>. Total: ${totalRecords.toLocaleString('pt-BR')}. Inserções 24h: ${recentInserts.toLocaleString('pt-BR')}.</p>`,
+      });
+      action = 'test_alert_sent';
+    } else if (isCritical && (!hasOpenAlert || isForce)) {
+      await resend.emails.send({
+        from: 'Z3US.AI Monitor <noreply@hermes.z3us.ai>',
+        to: RECIPIENTS,
+        subject: `⚠️ Firecrawl Parado — sem dados há ${fmt(minutesSinceUpdate)}`,
+        html: `<p>Firecrawl parado há <strong>${fmt(minutesSinceUpdate)}</strong>. Total: ${totalRecords.toLocaleString('pt-BR')}. Inserções 24h: ${recentInserts.toLocaleString('pt-BR')}.</p>`,
+      });
+      await finQuery(`INSERT INTO ai_agente.t_firecrawl_monitor_alerts (minutes_since_update, alert_type) VALUES (?, 'critical')`, [minutesSinceUpdate]);
+      action = 'alert_sent';
+    } else if (!isCritical && hasOpenAlert) {
+      await resend.emails.send({
+        from: 'Z3US.AI Monitor <noreply@hermes.z3us.ai>',
+        to: RECIPIENTS,
+        subject: `✅ Firecrawl Recuperado — dados normalizados (${fmt(minutesSinceUpdate)})`,
+        html: `<p>Firecrawl normalizado. Último dado há <strong>${fmt(minutesSinceUpdate)}</strong>.</p>`,
+      });
+      await finQuery(`UPDATE ai_agente.t_firecrawl_monitor_alerts SET recovered_at = NOW() WHERE recovered_at IS NULL`);
+      action = 'recovery_sent';
+    } else {
+      action = isCritical ? 'already_alerted' : 'healthy';
+    }
+
+    res.json({ minutesSinceUpdate, isCritical, action, threshold: ALERT_THRESHOLD_MINUTES });
+  } catch (err) {
+    console.error('[POST /api/admin/firecrawl-alert]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==================== ADMIN: API MANAGEMENT ====================
+
+// GET /api/admin/api-stats — get_api_stats (mariadb-proxy)
+app.get('/api/admin/api-stats', async (req, res) => {
+  try {
+    const cycleStart = `CASE WHEN DAY(NOW()) >= 25 THEN DATE_FORMAT(NOW(), '%Y-%m-25') ELSE DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 1 MONTH), '%Y-%m-25') END`;
+
+    const [stats, recentLogs, dailyTrendOther, dailyLeadcomex] = await Promise.all([
+      finQuery(`
+        SELECT api_name, COUNT(*) as total_calls, MAX(created_at) as last_call,
+          ROUND(AVG(response_time_ms), 0) as avg_response_time_ms,
+          SUM(CASE WHEN status_code >= 400 OR error_message IS NOT NULL THEN 1 ELSE 0 END) as error_count,
+          ROUND(100.0 * SUM(CASE WHEN status_code < 400 AND error_message IS NULL THEN 1 ELSE 0 END) / COUNT(*), 1) as success_rate
+        FROM ai_agente.t_api_usage_logs
+        WHERE created_at >= ${cycleStart}
+        GROUP BY api_name ORDER BY total_calls DESC
+      `),
+      finQuery(`
+        SELECT id, api_name, endpoint, method, status_code, response_time_ms, created_at, user_email, edge_function, error_message
+        FROM ai_agente.t_api_usage_logs
+        WHERE created_at >= ${cycleStart}
+        ORDER BY created_at DESC LIMIT 100
+      `),
+      finQuery(`
+        SELECT DATE(created_at) as date, api_name, COUNT(*) as calls,
+          SUM(CASE WHEN status_code >= 400 OR error_message IS NOT NULL THEN 1 ELSE 0 END) as errors,
+          ROUND(AVG(response_time_ms), 0) as avg_response_time
+        FROM ai_agente.t_api_usage_logs
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND api_name != 'Leadcomex'
+        GROUP BY DATE(created_at), api_name ORDER BY date ASC, api_name
+      `),
+      finQuery(`
+        SELECT DATE(created_at) as date, 'Leadcomex' as api_name, COUNT(*) as calls,
+          SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as errors,
+          ROUND(AVG(response_time_ms), 0) as avg_response_time
+        FROM ai_agente.t_api_usage_logs
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND api_name = 'Leadcomex'
+        GROUP BY DATE(created_at) ORDER BY date ASC
+      `),
+    ]);
+
+    const dailyTrend = [...dailyTrendOther, ...dailyLeadcomex];
+    const dailyTotalMap = new Map();
+    for (const row of dailyTrend) {
+      const d = String(row.date);
+      const entry = dailyTotalMap.get(d) || { total_calls: 0, total_errors: 0 };
+      entry.total_calls += Number(row.calls) || 0;
+      entry.total_errors += Number(row.errors) || 0;
+      dailyTotalMap.set(d, entry);
+    }
+    const dailyTotal = Array.from(dailyTotalMap.entries()).map(([date, v]) => ({ date, ...v }));
+
+    res.json({
+      success: true,
+      stats: stats.map(r => ({
+        api_name: r.api_name,
+        total_calls: Number(r.total_calls) || 0,
+        last_call: r.last_call,
+        avg_response_time_ms: r.avg_response_time_ms != null ? Number(r.avg_response_time_ms) : null,
+        error_count: Number(r.error_count) || 0,
+        success_rate: Number(r.success_rate) || 0,
+      })),
+      recent_logs: recentLogs,
+      daily_trend: dailyTrend.map(r => ({
+        date: r.date, api_name: r.api_name,
+        calls: Number(r.calls) || 0, errors: Number(r.errors) || 0,
+        avg_response_time: r.avg_response_time != null ? Number(r.avg_response_time) : null,
+      })),
+      daily_total: dailyTotal,
+    });
+  } catch (err) {
+    console.error('[GET /api/admin/api-stats]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/admin/anthropic-balance-alert — anthropic-balance-alert
+app.post('/api/admin/anthropic-balance-alert', async (req, res) => {
+  const ALERT_THRESHOLD = 5.00;
+  const ALERT_RECIPIENTS = ['rodrigo@z3us.ai', 'herbert@z3us.ai', 'larissa@z3us.ai'];
+  const TEST_EMAIL = 'devs@z3us.ai';
+  try {
+    const { force: forceAlert = false, test: testMode = false } = req.body || {};
+    const recipients = testMode ? [TEST_EMAIL] : ALERT_RECIPIENTS;
+    const costPerCall = 0.015;
+
+    const lastAdjustmentResult = await finQuery(`
+      SELECT id, credit_date, amount_usd, created_at, consumption_baseline
+      FROM ai_agente.t_anthropic_credits WHERE is_balance_adjustment = 1
+      ORDER BY created_at DESC LIMIT 1
+    `);
+
+    let estimatedBalance = 0;
+    if (lastAdjustmentResult.length > 0) {
+      const adj = lastAdjustmentResult[0];
+      const [topupsResult, consumptionResult] = await Promise.all([
+        finQuery(`SELECT COALESCE(SUM(amount_usd), 0) as total FROM ai_agente.t_anthropic_credits WHERE is_balance_adjustment = 0 AND created_at > ?`, [adj.created_at]),
+        finQuery(`SELECT COUNT(*) as successful_calls FROM ai_agente.t_api_usage_logs WHERE api_name = 'Anthropic' AND created_at > ? AND status_code < 400 AND error_message IS NULL`, [adj.created_at]),
+      ]);
+      estimatedBalance = Math.max(0, Number(adj.amount_usd) + Number(topupsResult[0]?.total || 0) - Number(consumptionResult[0]?.successful_calls || 0) * costPerCall);
+    } else {
+      const [creditsResult, consumptionResult] = await Promise.all([
+        finQuery(`SELECT COALESCE(SUM(amount_usd), 0) as total FROM ai_agente.t_anthropic_credits WHERE is_balance_adjustment = 0 OR is_balance_adjustment IS NULL`),
+        finQuery(`SELECT COUNT(*) as successful_calls FROM ai_agente.t_api_usage_logs WHERE api_name = 'Anthropic' AND status_code < 400 AND error_message IS NULL`),
+      ]);
+      estimatedBalance = Math.max(0, Number(creditsResult[0]?.total || 0) - Number(consumptionResult[0]?.successful_calls || 0) * costPerCall);
+    }
+
+    if (estimatedBalance > ALERT_THRESHOLD && !forceAlert) {
+      return res.json({ success: true, message: 'Balance above threshold', estimated_balance: estimatedBalance });
+    }
+
+    await finQuery(`
+      CREATE TABLE IF NOT EXISTS ai_agente.t_anthropic_alerts (
+        id INT AUTO_INCREMENT PRIMARY KEY, alert_type VARCHAR(50) NOT NULL,
+        balance_at_alert DECIMAL(10,2), sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX idx_sent_at (sent_at)
+      )
+    `);
+
+    const recentAlert = await finQuery(`SELECT id FROM ai_agente.t_anthropic_alerts WHERE alert_type = 'low_balance' AND sent_at > DATE_SUB(NOW(), INTERVAL 24 HOUR) ORDER BY sent_at DESC LIMIT 1`);
+    if (recentAlert.length > 0 && !forceAlert) {
+      return res.json({ success: true, message: 'Alert already sent in last 24 hours' });
+    }
+
+    await resend.emails.send({
+      from: 'Z3US.AI - Alertas <alertas@hermes.z3us.ai>',
+      to: recipients,
+      subject: `🚨 ALERTA: Saldo Anthropic Baixo - $${estimatedBalance.toFixed(2)}`,
+      html: `<p>Saldo estimado Anthropic: <strong>$${estimatedBalance.toFixed(2)}</strong> (limite: $${ALERT_THRESHOLD.toFixed(2)}). Acesse <a href="https://console.anthropic.com">console.anthropic.com</a> para recarregar.</p>`,
+    });
+
+    if (!testMode) {
+      await finQuery(`INSERT INTO ai_agente.t_anthropic_alerts (alert_type, balance_at_alert) VALUES ('low_balance', ?)`, [estimatedBalance]);
+    }
+
+    res.json({ success: true, message: 'Alert sent', estimated_balance: estimatedBalance });
+  } catch (err) {
+    console.error('[POST /api/admin/anthropic-balance-alert]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/api-usage-alert — send-api-usage-alert
+app.post('/api/admin/api-usage-alert', async (req, res) => {
+  const ALERT_RECIPIENTS = ['rodrigo@z3us.ai', 'herbert@z3us.ai', 'larissa@z3us.ai'];
+  const API_LIMITS = {
+    JSONCargo: { name: 'JSONCargo', monthlyLimit: 2500, alertThreshold: 2000, unit: 'chamadas', plan: 'Navigator (€299/mês)' },
+  };
+  try {
+    const { api_name, current_usage, period_start, period_end, test_mode = false } = req.body || {};
+    if (!api_name || current_usage === undefined) return res.status(400).json({ success: false, error: 'api_name e current_usage são obrigatórios' });
+
+    const limit = API_LIMITS[api_name];
+    if (!limit) return res.status(400).json({ success: false, error: `Limite não configurado para API: ${api_name}` });
+
+    if (!test_mode && current_usage < limit.alertThreshold) {
+      return res.json({ success: true, alert_sent: false, message: `Uso abaixo do threshold (${limit.alertThreshold})` });
+    }
+
+    const now = new Date();
+    const cycleKey = `${api_name}_${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    if (!test_mode) {
+      await finQuery(`
+        CREATE TABLE IF NOT EXISTS ai_agente.t_api_alerts_sent (
+          id INT AUTO_INCREMENT PRIMARY KEY, api_name VARCHAR(100) NOT NULL,
+          cycle_key VARCHAR(50) NOT NULL, sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE KEY uk_api_cycle (api_name, cycle_key)
+        )
+      `);
+      const existing = await finQuery(`SELECT id FROM ai_agente.t_api_alerts_sent WHERE api_name = ? AND cycle_key = ? LIMIT 1`, [api_name, cycleKey]);
+      if (existing.length > 0) return res.json({ success: true, alert_sent: false, already_sent: true });
+    }
+
+    const recipients = test_mode ? ['devs@z3us.ai'] : ALERT_RECIPIENTS;
+    const pct = ((current_usage / limit.monthlyLimit) * 100).toFixed(0);
+    const prefix = test_mode ? '[TESTE] ' : '';
+
+    await resend.emails.send({
+      from: 'Z3US.AI - Alertas <alertas@hermes.z3us.ai>',
+      to: recipients,
+      subject: `${prefix}⚠️ Alerta: API ${api_name} em ${pct}% do limite mensal`,
+      html: `<p>API <strong>${api_name}</strong> atingiu ${pct}% do limite. Uso: ${current_usage}/${limit.monthlyLimit} ${limit.unit}. Período: ${period_start} a ${period_end}. Plano: ${limit.plan}.</p>`,
+    });
+
+    if (!test_mode) {
+      await finQuery(`INSERT IGNORE INTO ai_agente.t_api_alerts_sent (api_name, cycle_key) VALUES (?, ?)`, [api_name, cycleKey]);
+    }
+
+    res.json({ success: true, alert_sent: true, recipients });
+  } catch (err) {
+    console.error('[POST /api/admin/api-usage-alert]', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -12657,6 +13601,944 @@ app.use((req, res, next) => {
 
   next();
 });
+// ═══════════════════════════════════════════════════════════════════
+// FIN — Esteira metrics dashboard
+// ═══════════════════════════════════════════════════════════════════
+
+// GET /api/fin/esteira/metrics
+app.get('/api/fin/esteira/metrics', async (req, res) => {
+  try {
+    const rows = await finQuery(`
+      SELECT
+        SUM(etapa_atual = 'OPERACAO')                                                    AS pendentes_operacao,
+        SUM(etapa_atual = 'FISCAL')                                                      AS pendentes_fiscal,
+        SUM(etapa_atual = 'SUPERVISOR')                                                  AS pendentes_supervisor,
+        SUM(etapa_atual = 'FINANCEIRO')                                                  AS pendentes_financeiro,
+        SUM(urgencia_tipo = 'URGENTE_REAL')                                              AS urgentes_real,
+        SUM(urgencia_tipo = 'URGENTE_AUTOMATICO')                                        AS urgentes_automatico,
+        SUM(vencimento >= CURDATE() AND vencimento < DATE_ADD(CURDATE(), INTERVAL 1 DAY) AND etapa_atual != 'ROBO') AS vencendo_24h,
+        SUM(vencimento < CURDATE() AND etapa_atual != 'ROBO')                            AS vencidos,
+        SUM(etapa_atual = 'ROBO' OR status_baixa != 'PENDENTE')                         AS baixados
+      FROM dados_dachser.t_vouchers
+    `);
+    const r = rows[0] || {};
+    res.json({
+      success: true,
+      pendentesOperacao:    Number(r.pendentes_operacao    || 0),
+      pendentesFiscal:      Number(r.pendentes_fiscal      || 0),
+      pendentesSupervisor:  Number(r.pendentes_supervisor  || 0),
+      pendentesFinanceiro:  Number(r.pendentes_financeiro  || 0),
+      urgentesReal:         Number(r.urgentes_real         || 0),
+      urgentesAutomatico:   Number(r.urgentes_automatico   || 0),
+      vencendo24h:          Number(r.vencendo_24h          || 0),
+      vencidos:             Number(r.vencidos              || 0),
+      baixados:             Number(r.baixados              || 0),
+    });
+  } catch (err) {
+    console.error('[GET /api/fin/esteira/metrics]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// ADMIN — Bulk insert master (AIR / SEA) e Clientes Base
+// ═══════════════════════════════════════════════════════════════════
+
+// POST /api/admin/bulk-insert-master
+app.post('/api/admin/bulk-insert-master', async (req, res) => {
+  try {
+    const { rows, modal } = req.body || {};
+    if (!rows || !Array.isArray(rows) || rows.length === 0)
+      return res.status(400).json({ success: false, error: 'Nenhuma linha para inserir' });
+    if (!modal || !['AIR', 'SEA'].includes(modal))
+      return res.status(400).json({ success: false, error: 'Modal deve ser AIR ou SEA' });
+
+    const tableName = modal === 'AIR' ? 'dados_dachser.t_air_master' : 'dados_dachser.t_sea_master';
+    const db = getPoolFor('sea');
+
+    try {
+      if (modal === 'AIR') {
+        await db.execute(`CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_master_hawb ON dados_dachser.t_air_master (master(100), hawb(100))`);
+      } else {
+        await db.execute(`CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_master_hbl ON dados_dachser.t_sea_master (master(100), hbl(100))`);
+      }
+    } catch (_) {}
+
+    let inserted = 0, updated = 0;
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      try {
+        let sql, params;
+        if (modal === 'SEA') {
+          sql = `INSERT INTO ${tableName} (
+            nome_analista, customer_no, po, hbl, hawb, master,
+            etd, pre_alert_sent, oea_cl_doc, customer_order,
+            accrual, dep, eta_ata, email_title, te, at_field,
+            wh_treatment, cct_transm, remarks, tipo_processo, data_insert,
+            deadline_draft_vgm, drafts_sent, deadline_load, cargo_departed,
+            d_term, pod_available, dn_available
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          ON DUPLICATE KEY UPDATE
+            nome_analista=COALESCE(VALUES(nome_analista),nome_analista),
+            customer_no=COALESCE(VALUES(customer_no),customer_no),
+            po=COALESCE(VALUES(po),po),
+            hawb=COALESCE(VALUES(hawb),hawb),
+            etd=COALESCE(VALUES(etd),etd),
+            pre_alert_sent=COALESCE(VALUES(pre_alert_sent),pre_alert_sent),
+            oea_cl_doc=COALESCE(VALUES(oea_cl_doc),oea_cl_doc),
+            customer_order=COALESCE(VALUES(customer_order),customer_order),
+            accrual=COALESCE(VALUES(accrual),accrual),
+            dep=COALESCE(VALUES(dep),dep),
+            eta_ata=COALESCE(VALUES(eta_ata),eta_ata),
+            email_title=COALESCE(VALUES(email_title),email_title),
+            te=COALESCE(VALUES(te),te),
+            at_field=COALESCE(VALUES(at_field),at_field),
+            wh_treatment=COALESCE(VALUES(wh_treatment),wh_treatment),
+            cct_transm=COALESCE(VALUES(cct_transm),cct_transm),
+            remarks=COALESCE(VALUES(remarks),remarks),
+            tipo_processo=COALESCE(VALUES(tipo_processo),tipo_processo),
+            data_insert=COALESCE(VALUES(data_insert),data_insert),
+            deadline_draft_vgm=COALESCE(VALUES(deadline_draft_vgm),deadline_draft_vgm),
+            drafts_sent=COALESCE(VALUES(drafts_sent),drafts_sent),
+            deadline_load=COALESCE(VALUES(deadline_load),deadline_load),
+            cargo_departed=COALESCE(VALUES(cargo_departed),cargo_departed),
+            d_term=COALESCE(VALUES(d_term),d_term),
+            pod_available=COALESCE(VALUES(pod_available),pod_available),
+            dn_available=COALESCE(VALUES(dn_available),dn_available)`;
+          params = [
+            row.nome_analista||null, row.customer_no||null, row.po||null,
+            row.hbl||null, row.hawb||null, row.master||null,
+            row.etd||null, row.pre_alert_sent||null, row.oea_cl_doc??null,
+            row.customer_order||null, row.accrual??null, row.dep??null,
+            row.eta_ata||null, row.email_title||null, row.te||null, row.at_field||null,
+            row.wh_treatment||null, row.cct_transm||null, row.remarks||null,
+            row.tipo_processo||null, row.data_insert||null,
+            row.deadline_draft_vgm||null, row.drafts_sent??null, row.deadline_load||null,
+            row.cargo_departed||null, row.d_term||null, row.pod_available??null, row.dn_available??null,
+          ];
+        } else {
+          sql = `INSERT INTO ${tableName} (
+            nome_analista, customer_no, po, hawb, master,
+            etd, pre_alert_sent, oea_cl_doc, cargo_departed,
+            d_term, pod_dn_available, remarks, tipo_processo, data_insert,
+            wh_treatment, cct_transm, eta_ata, email_title
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          ON DUPLICATE KEY UPDATE
+            nome_analista=COALESCE(VALUES(nome_analista),nome_analista),
+            customer_no=COALESCE(VALUES(customer_no),customer_no),
+            po=COALESCE(VALUES(po),po),
+            etd=COALESCE(VALUES(etd),etd),
+            pre_alert_sent=COALESCE(VALUES(pre_alert_sent),pre_alert_sent),
+            oea_cl_doc=COALESCE(VALUES(oea_cl_doc),oea_cl_doc),
+            cargo_departed=COALESCE(VALUES(cargo_departed),cargo_departed),
+            d_term=COALESCE(VALUES(d_term),d_term),
+            pod_dn_available=COALESCE(VALUES(pod_dn_available),pod_dn_available),
+            remarks=COALESCE(VALUES(remarks),remarks),
+            tipo_processo=COALESCE(VALUES(tipo_processo),tipo_processo),
+            data_insert=COALESCE(VALUES(data_insert),data_insert),
+            wh_treatment=COALESCE(VALUES(wh_treatment),wh_treatment),
+            cct_transm=COALESCE(VALUES(cct_transm),cct_transm),
+            eta_ata=COALESCE(VALUES(eta_ata),eta_ata),
+            email_title=COALESCE(VALUES(email_title),email_title)`;
+          params = [
+            row.nome_analista||null, row.customer_no||null, row.po||null,
+            row.hawb||null, row.master||null,
+            row.etd||null, row.pre_alert_sent||null, row.oea_cl_doc??null,
+            row.cargo_departed||null, row.d_term||null, row.pod_dn_available||null,
+            row.remarks||null, row.tipo_processo||null, row.data_insert||null,
+            row.wh_treatment||null, row.cct_transm||null, row.eta_ata||null, row.email_title||null,
+          ];
+        }
+        const [upsertResult] = await db.execute(sql, params);
+        if (upsertResult.affectedRows === 1) inserted++;
+        else if (upsertResult.affectedRows === 2) updated++;
+        else inserted++;
+      } catch (err) {
+        errors.push({ index: i, message: err.message });
+      }
+    }
+
+    res.json({ success: true, inserted, updated, rejected: errors.length, errors });
+  } catch (err) {
+    console.error('[POST /api/admin/bulk-insert-master]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/admin/bulk-insert-clientes
+app.post('/api/admin/bulk-insert-clientes', async (req, res) => {
+  try {
+    const { rows } = req.body || {};
+    if (!rows || !Array.isArray(rows) || rows.length === 0)
+      return res.status(400).json({ success: false, error: 'Nenhuma linha para inserir' });
+
+    const db = getPoolFor('sea');
+    let clienteInserted = 0;
+    const clienteErrors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      try {
+        await db.execute(`
+          INSERT INTO dados_dachser.t_clientes_base (
+            ativo, classificacao, cod_rm, dchr_customer_number, cnpj,
+            nome_cliente, cidade_uf, pais, logradouro, cep, info_complementar
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        `, [
+          row.ativo??1, row.classificacao||null, row.cod_rm??null,
+          row.dchr_customer_number||null, row.cnpj||null, row.nome_cliente||null,
+          row.cidade_uf||null, row.pais||null, row.logradouro||null,
+          row.cep||null, row.info_complementar||null,
+        ]);
+        clienteInserted++;
+      } catch (err) {
+        clienteErrors.push({ index: i, message: err.message });
+      }
+    }
+
+    res.json({ success: true, inserted: clienteInserted, rejected: clienteErrors.length, errors: clienteErrors });
+  } catch (err) {
+    console.error('[POST /api/admin/bulk-insert-clientes]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// FIN — Voucher batch import (preview + create)
+// ═══════════════════════════════════════════════════════════════════
+
+// Helpers de parse (paralelos ao mariadb-proxy edge function)
+const _biBRMoney = (v) => {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return isFinite(v) ? v : null;
+  let s = String(v).trim().replace(/[R$\s]/g, '');
+  if (!s) return null;
+  const lc = s.lastIndexOf(','), ld = s.lastIndexOf('.');
+  if (lc > ld) s = s.replace(/\./g, '').replace(',', '.');
+  else if (ld > lc) s = s.replace(/,/g, '');
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+};
+const _biDate = (v) => {
+  if (!v) return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return null;
+};
+const _BI_FORMA = { B:'BOLETO',BOLETO:'BOLETO',BOL:'BOLETO',PIX:'PIX',T:'TRANSFERENCIA',TRANSFERENCIA:'TRANSFERENCIA','TRANSFERÊNCIA':'TRANSFERENCIA',TED:'TRANSFERENCIA',TRANSF:'TRANSFERENCIA',DEPOSITO:'DEPOSITO','DEPÓSITO':'DEPOSITO',DARF:'DARF',GPS:'GPS',CAMBIO:'CAMBIO','CÂMBIO':'CAMBIO',ADF:'ADF',CARTAO:'CARTAO','CARTÃO':'CARTAO',DEBITO:'DEBITO','DÉBITO':'DEBITO' };
+const _biNormProc = (s) => String(s??'').toUpperCase().replace(/\s+/g,'').replace(/ /g,'');
+const _biRound2   = (n) => { const v = typeof n==='number'?n:Number(n); return isFinite(v)?Math.round(v*100)/100:null; };
+const _biAmbigKey = (proc,valor,venc) => {
+  const p=_biNormProc(proc), v=_biRound2(valor), d=venc?String(venc).slice(0,10):null;
+  if(!p||v==null||!d) return null;
+  return `${p}|${v.toFixed(2)}|${d}`;
+};
+const _biNormSpo = (s) => String(s??'').trim().replace(/\s+/g,' ').toUpperCase();
+const _biSpoPfx  = (s) => { const n=_biNormSpo(s); const m=n.match(/^(\d{2,4}-\d{4,})/); return m?m[1]:n; };
+const _biEtapa   = (raw) => { const s=String(raw||'').trim().toUpperCase(); const m={FISCAL:'Fiscal',FINANCEIRO:'Financeiro',SUPERVISOR:'Supervisor',PAGAMENTOS:'Pagamentos',BAIXA:'Baixa',CONCLUIDO:'Concluído','CONCLUÍDO':'Concluído'}; return m[s]||(!s?'Desconhecida':s.charAt(0)+s.slice(1).toLowerCase()); };
+
+const _biParseRow = (raw, idx) => {
+  const get = (...keys) => {
+    for (const k of keys) {
+      for (const rk of Object.keys(raw||{})) {
+        if (rk.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim() === k.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim()) {
+          const v = raw[rk]; if (v!==null&&v!==undefined&&String(v).trim()!=='') return v;
+        }
+      }
+    } return null;
+  };
+  const formaRaw = get('Forma pagto','Forma Pagto (contas pagar)','Forma Pagto','Forma Pagamento','Forma Pag');
+  const formaKey = formaRaw ? String(formaRaw).trim().toUpperCase() : null;
+  const fiscalRaw = get('Fiscal','Contabilizacao Fiscal','Contabilização Fiscal','Cobranca em Nome de','Cobrança em Nome de');
+  let cobrancaEm = null;
+  if (fiscalRaw) {
+    const f = String(fiscalRaw).trim().toUpperCase();
+    if (['N','NAO','NÃO','CLIENTE','NO'].includes(f)) cobrancaEm='CLIENTE';
+    else if (['S','SIM','DACHSER','YES'].includes(f)) cobrancaEm='DACHSER';
+  }
+  const urgenteRaw = get('Urgente','Pagamento Urgente');
+  const urgente = urgenteRaw ? ['SIM','S','TRUE','1','YES','Y'].includes(String(urgenteRaw).trim().toUpperCase()) : false;
+  const pRaw = get('Processo','Numero Processo','Nº Processo','N° Processo');
+  return {
+    row_index: idx, spo: null,
+    processo: pRaw ? String(pRaw) : null,
+    origem_processo: 'CHB',
+    fornecedor: get('Fornecedor') ? String(get('Fornecedor')) : null,
+    cnpj_fornecedor: get('CNPJ','CNPJ Fornecedor') ? String(get('CNPJ','CNPJ Fornecedor')).replace(/\D/g,'')||null : null,
+    valor: _biBRMoney(get('Valor solicitado','Valor Solicitação','Valor Solicitacao','Valor','Valor NF')),
+    moeda: get('Moeda') ? String(get('Moeda')).toUpperCase() : null,
+    vencimento: _biDate(get('Data vencimento','Vencimento','Data Vencimento')),
+    data_emissao: _biDate(get('Data fatura','Data Fatura','Data Emissão','Data Emissao')),
+    tipo_documento: get('Tipo de documento','Tipo Documento','Tipo de Documento') ? String(get('Tipo de documento','Tipo Documento','Tipo de Documento')).toUpperCase() : null,
+    filial: get('Filial') ? String(get('Filial')) : null,
+    forma_pagamento: formaKey ? (_BI_FORMA[formaKey]||null) : null,
+    cobranca_em_nome_de: cobrancaEm, urgente,
+    comentarios: get('Comentarios','Comentários','Observação','Observacao','Historico (Contas pagar)','Historico','Histórico') ? String(get('Comentarios','Comentários','Observação','Observacao','Historico (Contas pagar)','Historico','Histórico')) : null,
+    fatura: get('Fatura','Numero NF','Número NF') ? String(get('Fatura','Numero NF','Número NF')) : null,
+    raw_json: raw,
+  };
+};
+
+const _biFetchDfv = async (triples) => {
+  const byKey = new Map(), uniq = new Map();
+  for (const t of triples) {
+    const p=_biNormProc(t.processo), v=_biRound2(t.valor), d=t.vencimento?String(t.vencimento).slice(0,10):null;
+    if (!p||v==null||!d) continue;
+    const k=`${p}|${v.toFixed(2)}|${d}`;
+    if (!uniq.has(k)) uniq.set(k,{p,v,d});
+  }
+  if (uniq.size===0) return byKey;
+  try {
+    const clauses=[], params=[];
+    for (const t of uniq.values()) {
+      clauses.push(`(UPPER(REPLACE(REPLACE(TRIM(numero_processo),' ',''),CHAR(160),'')) COLLATE utf8mb4_unicode_ci=? AND ROUND(valor_nf,2)=? AND DATE(data_vencimento)=?)`);
+      params.push(t.p,t.v,t.d);
+    }
+    const rows = await finQuery(
+      `SELECT id_rm,nd,nome_beneficiario,nome_cobranca,numero_processo,data_emissao,data_vencimento,valor_nf,moeda,cnpj,razao_social,data_insert FROM dados_dachser.t_dados_financeiro_spo WHERE ${clauses.join(' OR ')}`,
+      params
+    );
+    for (const r of (rows||[])) {
+      const k=_biAmbigKey(r.numero_processo,r.valor_nf,_biDate(r.data_vencimento));
+      if (!k) continue;
+      const arr=byKey.get(k)||[]; arr.push(r); byKey.set(k,arr);
+    }
+    for (const [k,arr] of byKey.entries()) {
+      const bySpo=new Map(), noSpo=[];
+      for (const r of arr) {
+        const sk=r?.nd?String(r.nd).trim():'';
+        if (!sk){noSpo.push(r);continue;}
+        const cur=bySpo.get(sk);
+        if (!cur){bySpo.set(sk,r);continue;}
+        if (new Date(r.data_insert||0)>new Date(cur.data_insert||0)) bySpo.set(sk,r);
+      }
+      byKey.set(k,[...bySpo.values(),...noSpo]);
+    }
+  } catch(e){ console.log('[_biFetchDfv]',e.message); }
+  return byKey;
+};
+
+const _biMerge = (sheet, dfv) => {
+  const origin={};
+  const pick=(sv,dv,key)=>{
+    const se=sv===null||sv===undefined||sv==='', de=dv===null||dv===undefined||dv==='';
+    if(!de&&se){origin[key]='DFV';return dv;}
+    if(!se){origin[key]='PLANILHA';return sv;}
+    origin[key]=null;return null;
+  };
+  const dfvSpo=dfv?.nd?String(dfv.nd).trim():null;
+  const dfvFornecedor=dfv?.nome_beneficiario||dfv?.razao_social||null;
+  const dfvValor=dfv?.valor_nf!=null?Number(dfv.valor_nf):null;
+  origin['spo']=dfvSpo?'DFV':null;
+  origin['fornecedor']=dfvFornecedor?'DFV':null;
+  const merged={
+    row_index:sheet.row_index, spo:dfvSpo, id_rm:dfv?.id_rm??null,
+    processo:pick(sheet.processo,dfv?.numero_processo||null,'processo'),
+    origem_processo:(()=>{origin['origem_processo']='PLANILHA';return sheet.origem_processo||'CHB';})(),
+    fornecedor:dfvFornecedor,
+    cnpj_fornecedor:pick(sheet.cnpj_fornecedor,dfv?.cnpj?String(dfv.cnpj).replace(/\D/g,'')||null:null,'cnpj_fornecedor'),
+    valor:(()=>{if(dfvValor!=null){origin['valor']='DFV';return dfvValor;}origin['valor']=sheet.valor!=null?'PLANILHA':null;return sheet.valor;})(),
+    moeda:pick(sheet.moeda,dfv?.moeda?String(dfv.moeda).toUpperCase():null,'moeda')||'BRL',
+    vencimento:(()=>{origin['vencimento']=sheet.vencimento?'PLANILHA':null;return sheet.vencimento;})(),
+    data_emissao:pick(sheet.data_emissao,dfv?.data_emissao?_biDate(dfv.data_emissao):null,'data_emissao'),
+    tipo_documento:(()=>{origin['tipo_documento']=sheet.tipo_documento?'PLANILHA':null;return sheet.tipo_documento;})(),
+    filial:pick(sheet.filial,dfv?.nome_cobranca||null,'filial'),
+    forma_pagamento:(()=>{origin['forma_pagamento']=sheet.forma_pagamento?'PLANILHA':null;return sheet.forma_pagamento;})(),
+    cobranca_em_nome_de:(()=>{origin['cobranca_em_nome_de']=sheet.cobranca_em_nome_de?'PLANILHA':null;return sheet.cobranca_em_nome_de||'DACHSER';})(),
+    urgente:!!sheet.urgente, comentarios:sheet.comentarios, fatura:sheet.fatura, raw_json:sheet.raw_json,
+    field_origin:origin, dfv_found:!!dfv,
+  };
+  const errs=[];
+  if (!merged.processo)          errs.push('processo obrigatório');
+  if (!merged.valor||merged.valor<=0) errs.push('valor inválido');
+  if (!merged.vencimento)        errs.push('vencimento obrigatório');
+  if (!dfv)                      errs.push('Nenhuma SPO encontrada em t_dados_financeiro_spo para este processo+valor+vencimento');
+  if (!merged.fornecedor)        errs.push('fornecedor obrigatório');
+  if (!merged.tipo_documento)    errs.push('tipo de documento obrigatório');
+  if (!merged.forma_pagamento)   errs.push('forma de pagamento obrigatória');
+  if (!merged.cobranca_em_nome_de) errs.push('contabilização fiscal obrigatória');
+  merged.status=errs.length?'ERROR':'VALID';
+  merged.validation_message=errs.length?errs.join('; '):null;
+  return merged;
+};
+
+const _biBuildPreview = async (rows) => {
+  const sheetRows=rows.map((r,i)=>_biParseRow(r,i));
+  const triples=sheetRows.filter(s=>s.processo&&s.valor!=null&&s.vencimento).map(s=>({processo:s.processo,valor:s.valor,vencimento:s.vencimento}));
+  const byKey=await _biFetchDfv(triples);
+  const results=[]; let outIdx=0;
+  for (const s of sheetRows) {
+    const k=_biAmbigKey(s.processo,s.valor,s.vencimento);
+    const matches=k?(byKey.get(k)||[]):[];
+    if (matches.length===0) {
+      const m=_biMerge(s,null); m.row_index=outIdx++; results.push(m);
+    } else if (matches.length===1) {
+      const m=_biMerge(s,matches[0]); m.row_index=outIdx++; results.push(m);
+    } else {
+      for (let i=0;i<matches.length;i++) {
+        const m=_biMerge(s,matches[i]); m.row_index=outIdx++;
+        m.expanded_from_processo=true; m.source_row_index=s.row_index;
+        m.is_ambiguous=true; m.ambiguous_group_key=k; m.ambiguous_total=matches.length;
+        m.is_duplicate=true; m.duplicate_of_row=s.row_index;
+        const ambigMsg=`SPO ambígua: ${matches.length} candidatas para o mesmo processo+valor+vencimento. Exclua ${matches.length-1} linha(s) para prosseguir.`;
+        const prev=String(m.validation_message||'').split(';').map(x=>x.trim()).filter(Boolean);
+        if (!prev.includes(ambigMsg)) prev.push(ambigMsg);
+        m.status='ERROR'; m.validation_message=prev.join('; ');
+        results.push(m);
+      }
+    }
+  }
+  return results;
+};
+
+const _biFetchExisting = async (items) => {
+  const found=new Map(), pairs=[], seen=new Set();
+  for (const it of items) {
+    const idRm=it?.id_rm!=null?Number(it.id_rm):NaN;
+    const spoRaw=it?.spo||it?.processo;
+    if (!Number.isFinite(idRm)||!spoRaw) continue;
+    const nsp=_biNormSpo(spoRaw);
+    if (!nsp) continue;
+    const key=`${idRm}|${nsp}`;
+    if (!seen.has(key)){seen.add(key);pairs.push([idRm,nsp]);}
+  }
+  if (pairs.length===0) return found;
+  try {
+    const ph=pairs.map(()=>'(?,?)').join(',');
+    const params=[]; for (const [id,spo] of pairs){params.push(id,spo);}
+    const rows=await finQuery(`SELECT id_rm,numero_spo,etapa_atual FROM dados_dachser.t_vouchers WHERE (id_rm,UPPER(TRIM(numero_spo))) IN (${ph})`,params);
+    for (const r of (rows||[])) {
+      const idRm=Number(r.id_rm), nsp=_biNormSpo(r.numero_spo), etapa=_biEtapa(r.etapa_atual);
+      found.set(`${idRm}|${nsp}`,etapa);
+      const pfx=_biSpoPfx(r.numero_spo);
+      if (/^\d{2,4}-\d{4,}$/.test(pfx)) found.set(`${idRm}|PFX|${pfx}`,etapa);
+    }
+  } catch(e){console.log('[_biFetchExisting]',e.message);}
+  return found;
+};
+
+const _biMarkExisting = (items, existing) => {
+  for (const it of items) {
+    const idRm=it?.id_rm!=null?Number(it.id_rm):NaN;
+    const spoRaw=it?.spo||it?.processo;
+    if (!Number.isFinite(idRm)||!spoRaw) continue;
+    const nsp=_biNormSpo(spoRaw);
+    let etapa=existing.get(`${idRm}|${nsp}`);
+    if (!etapa){const pfx=_biSpoPfx(spoRaw);if(/^\d{2,4}-\d{4,}$/.test(pfx))etapa=existing.get(`${idRm}|PFX|${pfx}`);}
+    if (!etapa) continue;
+    it.already_exists=true; it.existing_etapa=etapa; it.status='ERROR';
+    const msg=`Já existente na etapa ${etapa}`;
+    it.validation_message=it.validation_message?(String(it.validation_message).includes(msg)?it.validation_message:`${it.validation_message}; ${msg}`):msg;
+  }
+  return items;
+};
+
+const _biCleanup = async () => {
+  try {
+    const vRows=await finQuery(`SELECT id FROM dados_dachser.t_vouchers WHERE etapa_atual='AGUARDANDO_DOCUMENTOS_LOTE'`,[]);
+    const vIds=(vRows||[]).map(r=>r.id).filter(Boolean);
+    if (vIds.length>0) {
+      const ph=vIds.map(()=>'?').join(',');
+      await finQuery(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id IN (${ph})`,vIds);
+      await finQuery(`DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id IN (${ph})`,vIds);
+      await finQuery(`DELETE FROM dados_dachser.t_voucher_batch_import_item WHERE voucher_id IN (${ph})`,vIds);
+      await finQuery(`DELETE FROM dados_dachser.t_vouchers WHERE id IN (${ph}) AND etapa_atual='AGUARDANDO_DOCUMENTOS_LOTE'`,vIds);
+    }
+    const bRows=await finQuery(`SELECT id FROM dados_dachser.t_voucher_batch_import WHERE status='PENDING_DOCUMENTS'`,[]);
+    const bIds=(bRows||[]).map(b=>b.id);
+    if (bIds.length>0) {
+      const ph=bIds.map(()=>'?').join(',');
+      await finQuery(`DELETE FROM dados_dachser.t_voucher_batch_documents WHERE batch_id IN (${ph})`,bIds);
+      await finQuery(`DELETE FROM dados_dachser.t_voucher_batch_import_item WHERE batch_id IN (${ph})`,bIds);
+      await finQuery(`DELETE FROM dados_dachser.t_voucher_batch_import WHERE id IN (${ph})`,bIds);
+    }
+  } catch(e){console.log('[_biCleanup]',e.message);}
+};
+
+// POST /api/fin/vouchers/batch/preview
+app.post('/api/fin/vouchers/batch/preview', async (req, res) => {
+  try {
+    const { userId, rows } = req.body || {};
+    if (!userId) return res.status(403).json({ success: false, error: 'Usuário não autenticado.' });
+    const userRows = await finQuery('SELECT id FROM ai_agente.t_users_dachser WHERE id=?',[userId]);
+    if (!userRows||userRows.length===0) return res.status(403).json({ success: false, error: 'Usuário não encontrado.' });
+    try { await _biCleanup(); } catch(_) {}
+    const items = await _biBuildPreview(rows||[]);
+    const existing = await _biFetchExisting(items);
+    _biMarkExisting(items, existing);
+    const valid=items.filter(i=>i.status==='VALID').length;
+    const errors=items.filter(i=>i.status==='ERROR').length;
+    res.json({ success: true, items, total: items.length, valid, errors });
+  } catch (err) {
+    console.error('[POST /api/fin/vouchers/batch/preview]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/fin/vouchers/batch/create
+app.post('/api/fin/vouchers/batch/create', async (req, res) => {
+  try {
+    const { userId, rows, items: editedItems, file_name: fileName, pre_lancamento: preLancamento } = req.body || {};
+    if (!userId) return res.status(403).json({ success: false, error: 'Usuário não autenticado.' });
+    const userRows = await finQuery('SELECT username FROM ai_agente.t_users_dachser WHERE id=?',[userId]);
+    if (!userRows||userRows.length===0) return res.status(403).json({ success: false, error: 'Usuário não encontrado.' });
+    const adminUserName = userRows[0].username||'user';
+    try { await _biCleanup(); } catch(_) {}
+
+    const items = (Array.isArray(editedItems)&&editedItems.length) ? editedItems : await _biBuildPreview(rows||[]);
+    const existingNow = await _biFetchExisting(items);
+    _biMarkExisting(items, existingNow);
+
+    const validItems = items.filter(i=>i.status==='VALID');
+    const errs = items.length - validItems.length;
+    const db = getPoolFor('fin');
+    const batchId = crypto.randomUUID();
+
+    await db.execute(`
+      INSERT INTO dados_dachser.t_voucher_batch_import
+        (id,status,original_file_name,total_rows,valid_rows,error_rows,created_by_user_id,created_by_user_name)
+      VALUES (?,?,?,?,?,?,?,?)
+    `,[batchId,'PENDING_DOCUMENTS',fileName||null,items.length,validItems.length,errs,String(userId),adminUserName]);
+
+    let createdCount=0, skippedExisting=0;
+
+    for (const it of items) {
+      const itemId=crypto.randomUUID();
+      let voucherId=null, itemStatus=it.status, itemMsg=it.validation_message;
+
+      if (it.status==='VALID') {
+        voucherId=crypto.randomUUID();
+        const numeroSpo=it.spo||it.processo||`LOTE-${batchId.slice(0,8)}-${it.row_index+1}`;
+        try { await db.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS origem_criacao VARCHAR(50) DEFAULT NULL`); } catch(_) {}
+        const isUrgenteReal=!!it.urgente;
+        const tipoDocUp=String(it.tipo_documento||'').toUpperCase();
+        const autoUrgent=!isUrgenteReal&&(tipoDocUp==='ICMS'||tipoDocUp==='ARMAZENAGEM');
+        const urgenciaTipo=isUrgenteReal?'URGENTE_REAL':(autoUrgent?'URGENTE_AUTOMATICO':'NORMAL');
+        const etapaDestino=urgenciaTipo==='URGENTE_REAL'?'SUPERVISOR':(it.cobranca_em_nome_de==='CLIENTE'?'FINANCEIRO':'FISCAL');
+        const etapaAtual=preLancamento?'PRE_LANCAMENTO':'AGUARDANDO_DOCUMENTOS_LOTE';
+        it.__etapa_destino=preLancamento?'PRE_LANCAMENTO':etapaDestino;
+        const statusEnvioCliente=it.cobranca_em_nome_de==='CLIENTE'?'AGUARDANDO_CLIENTE':'NAO_APLICA';
+        const urgenteFlag=(isUrgenteReal||autoUrgent)?1:0;
+        const chavePixFinal=String(it.forma_pagamento||'').toUpperCase()==='PIX'?(it.chave_pix||null):null;
+
+        const [insertRes]=await db.execute(`
+          INSERT IGNORE INTO dados_dachser.t_vouchers (
+            id,numero_spo,id_rm,fornecedor,cnpj_fornecedor,valor,moeda,
+            vencimento,data_emissao_documento,forma_pagamento,tipo_documento,
+            cobranca_em_nome_de,etapa_atual,status_baixa,status_envio_cliente,status_financeiro,
+            remessa,urgente,urgencia_tipo,processo_id,origem_processo,
+            filial,comentarios_operacao,criado_por_user_id,chave_pix,status_documento_fiscal,
+            tipo_execucao_pagamento,origem_criacao,created_at,updated_at
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'PENDENTE',?,'PENDENTE','NENHUM',?,?,?,?,?,?,?,?,'PENDENTE','A_DEFINIR','LOTE_PLANILHA',NOW(),NOW())
+        `,[
+          voucherId,numeroSpo,it.id_rm||null,it.fornecedor,it.cnpj_fornecedor||null,it.valor,it.moeda||'BRL',
+          it.vencimento?`${it.vencimento} 00:00:00`:null,
+          it.data_emissao?`${it.data_emissao} 00:00:00`:null,
+          it.forma_pagamento,it.tipo_documento||'OUTROS',it.cobranca_em_nome_de||'DACHSER',
+          etapaAtual,statusEnvioCliente,urgenteFlag,urgenciaTipo,
+          it.processo,it.origem_processo,it.filial||null,it.comentarios||null,
+          String(userId),chavePixFinal,
+        ]);
+
+        if (Number(insertRes?.affectedRows??1)===0) {
+          voucherId=null; skippedExisting++;
+          itemStatus='ERROR';
+          const skipMsg='Já existente — pulado';
+          itemMsg=itemMsg?`${itemMsg}; ${skipMsg}`:skipMsg;
+        } else {
+          createdCount++;
+          try {
+            await db.execute(
+              `INSERT INTO dados_dachser.t_voucher_logs (id,voucher_id,user_id,user_name,acao,detalhe,data_hora) VALUES (?,?,?,?,'VOUCHER_CRIADO_LOTE',?,NOW())`,
+              [crypto.randomUUID(),voucherId,String(userId),adminUserName,`batch_id=${batchId}; row=${it.row_index}; spo=${it.spo??''}`]
+            );
+          } catch(_) {}
+        }
+      } else if (it.already_exists) { skippedExisting++; }
+
+      await db.execute(`
+        INSERT INTO dados_dachser.t_voucher_batch_import_item
+          (id,batch_id,row_index,voucher_id,processo,fornecedor,valor,vencimento,data_fatura,forma_pagamento,fatura,historico,status,validation_message,raw_json,etapa_destino)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `,[
+        itemId,batchId,it.row_index,voucherId,
+        it.processo,it.fornecedor,it.valor,it.vencimento,it.data_emissao,
+        it.forma_pagamento,it.fatura||it.spo,it.comentarios,
+        voucherId?'VOUCHER_CRIADO':itemStatus,itemMsg,
+        JSON.stringify(it.raw_json||it||{}),it.__etapa_destino||null,
+      ]);
+    }
+
+    res.json({ success: true, batch_id: batchId, total: items.length, created: createdCount, errors: errs, skipped_existing: skippedExisting });
+  } catch (err) {
+    console.error('[POST /api/fin/vouchers/batch/create]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// SUPERVISOR EMAIL ACTION
+// ═══════════════════════════════════════════════════════════════════
+
+// GET /api/fin/vouchers/supervisor-action — validate token, approve, or reject GET
+app.get('/api/fin/vouchers/supervisor-action', async (req, res) => {
+  const { token, action } = req.query;
+  if (!token || !action || !['approve', 'reject'].includes(String(action))) {
+    return res.status(400).json({ status: 'error', code: 'INVALID_PARAMS', message: 'Link inválido ou parâmetros ausentes.' });
+  }
+  try {
+    const tokenRows = await finQuery(
+      `SELECT id, token, voucher_id, action_type, used, expires_at FROM ai_agente.t_supervisor_email_tokens WHERE token = ? LIMIT 1`,
+      [token]
+    );
+    if (!tokenRows || tokenRows.length === 0) {
+      return res.status(400).json({ status: 'error', code: 'NOT_FOUND', message: 'Este link não é válido ou já foi removido.' });
+    }
+    const tr = tokenRows[0];
+    if (tr.used) {
+      return res.status(400).json({ status: 'error', code: 'ALREADY_USED', message: 'Este link já foi utilizado anteriormente.' });
+    }
+    if (new Date(tr.expires_at) < new Date()) {
+      return res.status(400).json({ status: 'error', code: 'EXPIRED', message: 'Este link expirou (validade de 48h). Acesse o sistema para realizar a ação.' });
+    }
+    const { voucher_id, action_type } = tr;
+    if ((action === 'approve' && action_type !== 'APPROVE') || (action === 'reject' && action_type !== 'REJECT')) {
+      return res.status(400).json({ status: 'error', code: 'ACTION_MISMATCH', message: 'O tipo de ação não corresponde ao token.' });
+    }
+    if (action === 'reject') {
+      return res.json({ status: 'valid', message: 'Token válido. Envie o motivo da rejeição.' });
+    }
+    // action === 'approve'
+    const vRows = await finQuery(
+      `SELECT numero_spo, cobranca_em_nome_de, id_rm, forma_pagamento, linha_digitavel, codigo_barras, chave_pix, fornecedor, cnpj_fornecedor FROM dados_dachser.t_vouchers WHERE id = ? LIMIT 1`,
+      [voucher_id]
+    );
+    const v = vRows?.[0] || null;
+    const voucherNumber = v?.numero_spo || voucher_id;
+    const proximaEtapa = v?.cobranca_em_nome_de === 'DACHSER' ? 'FISCAL' : 'FINANCEIRO';
+
+    await finQuery(
+      `UPDATE dados_dachser.t_vouchers SET etapa_atual = ?, status_financeiro = 'APROVADO', updated_at = NOW() WHERE id = ?`,
+      [proximaEtapa, voucher_id]
+    );
+    await finQuery(
+      `INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+       VALUES (UUID(), ?, '0', 'Supervisor (via e-mail)', 'APROVADO_SUPERVISOR', ?, NOW())`,
+      [voucher_id, `Voucher/SPO urgente aprovado via link do e-mail — encaminhado para ${proximaEtapa}`]
+    );
+    if (proximaEtapa === 'FINANCEIRO' && v) {
+      try {
+        const voucherBoleto = ['BOLETO', 'DARF', 'GPS'].includes(v.forma_pagamento || '')
+          ? (v.linha_digitavel || v.codigo_barras || null)
+          : null;
+        const finalIdRm = (v.id_rm && String(v.id_rm).trim()) ? v.id_rm : (v.numero_spo || 'DESCONHECIDO');
+        await finQuery(
+          `INSERT INTO dados_dachser.t_dados_rm (id_rm, nd, nf_disputa, voucher_boleto, chave_pix, forma_pag, fornecedor, regras_forma_pag, tipo_exec)
+           VALUES (?, ?, 0, ?, ?, ?, ?, 'DOC (Compe)', 'A_DEFINIR')`,
+          [finalIdRm, v.numero_spo || null, voucherBoleto, v.chave_pix || null, v.forma_pagamento || null, v.fornecedor || null]
+        );
+      } catch (_) {}
+    }
+    await finQuery(`UPDATE ai_agente.t_supervisor_email_tokens SET used = 1 WHERE token = ?`, [token]);
+    try {
+      await fetch(`http://localhost:${PORT}/api/notifications/voucher`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'URGENCIA_APROVADA', voucherId: voucher_id, voucherNumber, toStage: proximaEtapa, fromStage: 'SUPERVISOR', senderName: 'Supervisor (via e-mail)' }),
+      });
+    } catch (_) {}
+
+    const destinoLabel = proximaEtapa === 'FISCAL' ? 'Fiscal' : 'Financeiro';
+    res.json({ status: 'approved', message: `O voucher foi aprovado com sucesso e enviado para o ${destinoLabel}.` });
+  } catch (err) {
+    console.error('[GET /api/fin/vouchers/supervisor-action]', err.message);
+    res.status(500).json({ status: 'error', code: 'INTERNAL_ERROR', message: 'Ocorreu um erro ao processar sua ação. Tente novamente.' });
+  }
+});
+
+// POST /api/fin/vouchers/supervisor-action — reject voucher
+app.post('/api/fin/vouchers/supervisor-action', async (req, res) => {
+  const { token, action } = req.query;
+  if (!token || String(action) !== 'reject') {
+    return res.status(400).json({ status: 'error', code: 'INVALID_PARAMS', message: 'Link inválido.' });
+  }
+  const reason = (req.body?.reason || '').trim();
+  if (!reason || reason.length < 5) {
+    return res.status(400).json({ status: 'error', code: 'REASON_REQUIRED', message: 'Informe o motivo da rejeição (mínimo 5 caracteres).' });
+  }
+  try {
+    const tokenRows = await finQuery(
+      `SELECT id, voucher_id, action_type, used, expires_at FROM ai_agente.t_supervisor_email_tokens WHERE token = ? LIMIT 1`,
+      [token]
+    );
+    if (!tokenRows || tokenRows.length === 0) return res.status(400).json({ status: 'error', code: 'NOT_FOUND', message: 'Este link não é válido ou já foi removido.' });
+    const tr = tokenRows[0];
+    if (tr.used) return res.status(400).json({ status: 'error', code: 'ALREADY_USED', message: 'Este link já foi utilizado anteriormente.' });
+    if (new Date(tr.expires_at) < new Date()) return res.status(400).json({ status: 'error', code: 'EXPIRED', message: 'Este link expirou.' });
+    if (tr.action_type !== 'REJECT') return res.status(400).json({ status: 'error', code: 'ACTION_MISMATCH', message: 'O tipo de ação não corresponde ao token.' });
+
+    const { voucher_id } = tr;
+    const vRows = await finQuery(`SELECT numero_spo FROM dados_dachser.t_vouchers WHERE id = ? LIMIT 1`, [voucher_id]);
+    const voucherNumber = vRows?.[0]?.numero_spo || voucher_id;
+
+    await finQuery(
+      `UPDATE dados_dachser.t_vouchers SET etapa_atual = 'OPERACAO', status_financeiro = 'REJEITADO', ajuste_operacao = ?, updated_at = NOW() WHERE id = ?`,
+      [`REJEITADO PELO SUPERVISOR via e-mail: ${reason}`, voucher_id]
+    );
+    await finQuery(
+      `INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+       VALUES (UUID(), ?, '0', 'Supervisor (via e-mail)', 'REJEITADO_SUPERVISOR', ?, NOW())`,
+      [voucher_id, `Voucher/SPO rejeitado via e-mail. Motivo: ${reason}`]
+    );
+    await finQuery(`UPDATE ai_agente.t_supervisor_email_tokens SET used = 1 WHERE token = ?`, [token]);
+    try {
+      await fetch(`http://localhost:${PORT}/api/notifications/voucher`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'URGENCIA_REJEITADA', voucherId: voucher_id, voucherNumber, toStage: 'AJUSTE_OPERACAO', fromStage: 'SUPERVISOR', senderName: 'Supervisor (via e-mail)', reason }),
+      });
+    } catch (_) {}
+
+    res.json({ status: 'rejected', message: 'O voucher foi rejeitado e devolvido para a Operação.' });
+  } catch (err) {
+    console.error('[POST /api/fin/vouchers/supervisor-action]', err.message);
+    res.status(500).json({ status: 'error', code: 'INTERNAL_ERROR', message: 'Ocorreu um erro ao processar sua ação. Tente novamente.' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// SEA FILE STORAGE (BLOB)
+// ═══════════════════════════════════════════════════════════════════
+
+// GET /api/sea/files/:id/download — serve arquivo BLOB do DB
+app.get('/api/sea/files/:id/download', async (req, res) => {
+  try {
+    const rows = await seaQuery(
+      `SELECT filename, mime, file_content FROM ai_agente.t_dachser_sea_files WHERE id = ?`,
+      [req.params.id]
+    );
+    if (!rows || rows.length === 0) return res.status(404).json({ error: 'Arquivo não encontrado' });
+    const { filename, mime, file_content } = rows[0];
+    if (!file_content) return res.status(404).json({ error: 'Conteúdo não disponível' });
+    res.setHeader('Content-Type', mime || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename || 'arquivo')}"`);
+    res.send(file_content);
+  } catch (err) {
+    console.error('[GET /api/sea/files/:id/download]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/sea/upload-base-file — upload arquivo base para análise marítima (base64 JSON)
+app.post('/api/sea/upload-base-file', async (req, res) => {
+  try {
+    const { file_name, file_base64, mime_type, analysisType } = req.body || {};
+    if (!file_name || !file_base64 || !analysisType) {
+      return res.status(400).json({ error: 'file_name, file_base64 e analysisType são obrigatórios' });
+    }
+    const base64Data = file_base64.replace(/^data:[^;]+;base64,/, '');
+    const fileBuffer = Buffer.from(base64Data, 'base64');
+    const containerMatch = file_name.match(/\b([A-Z]{4}\d{7})\b/);
+    const container = containerMatch?.[1] || null;
+
+    const fileResult = await seaQuery(
+      `INSERT INTO ai_agente.t_dachser_sea_files (filename, mime, rel_path, url, size_bytes, file_content, created_at)
+       VALUES (?, ?, '', '', ?, ?, NOW())`,
+      [file_name, mime_type || 'application/octet-stream', fileBuffer.length, fileBuffer]
+    );
+    const arquivoId = fileResult.insertId;
+    const fileUrl = `/api/sea/files/${arquivoId}/download`;
+    await seaQuery(`UPDATE ai_agente.t_dachser_sea_files SET url = ? WHERE id = ?`, [fileUrl, arquivoId]);
+
+    const itemResult = await seaQuery(
+      `INSERT INTO ai_agente.t_dachser_sea_items (view, arquivo_id, arquivo_label, container, consignee, status, active, created_at)
+       VALUES (?, ?, ?, ?, NULL, 'pendente', 1, NOW())`,
+      [analysisType, arquivoId, file_name, container]
+    );
+    const itemId = itemResult.insertId;
+
+    res.json({
+      success: true,
+      item: {
+        id: String(itemId),
+        base_file_name: file_name,
+        base_file_url: fileUrl,
+        consignee: null,
+        container,
+        status: 'pendente',
+        analysis_type: analysisType,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    console.error('[POST /api/sea/upload-base-file]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/sea/extract-attachments — extrai arquivos de ZIP ou EML (base64 JSON)
+app.post('/api/sea/extract-attachments', async (req, res) => {
+  try {
+    const { file_name, file_base64 } = req.body || {};
+    if (!file_name || !file_base64) {
+      return res.status(400).json({ success: false, error: 'file_name e file_base64 são obrigatórios' });
+    }
+    const base64Data = file_base64.replace(/^data:[^;]+;base64,/, '');
+    const fileBuffer = Buffer.from(base64Data, 'base64');
+    const fileName = file_name.toLowerCase();
+
+    const classifyFile = (name) => {
+      const n = name.toLowerCase();
+      if (['invoice', 'fatura', 'nota', 'proforma', 'pro forma', 'inv'].some(k => n.includes(k))) return 'invoice';
+      if (['hbl', 'hb/l', 'hb-l', 'house bill', 'house-bill'].some(k => n.includes(k))) return 'hbl';
+      if (/\.(xlsx?|csv)$/i.test(n)) return 'invoice';
+      return 'other';
+    };
+
+    const storeExtractedFile = async (name, buffer, mime) => {
+      const r = await seaQuery(
+        `INSERT INTO ai_agente.t_dachser_sea_files (filename, mime, rel_path, url, size_bytes, file_content, created_at)
+         VALUES (?, ?, '', '', ?, ?, NOW())`,
+        [name, mime || 'application/octet-stream', buffer.length, buffer]
+      );
+      const fid = r.insertId;
+      await seaQuery(`UPDATE ai_agente.t_dachser_sea_files SET url = ? WHERE id = ?`, [`/api/sea/files/${fid}/download`, fid]);
+      return fid;
+    };
+
+    let extracted = [];
+
+    if (fileName.endsWith('.zip')) {
+      const { unzipSync } = await import('fflate');
+      const files = unzipSync(new Uint8Array(fileBuffer));
+      for (const [entryName, data] of Object.entries(files)) {
+        const baseName = entryName.split('/').pop() || entryName;
+        if (!/\.(pdf|xlsx?|csv)$/i.test(baseName) || data.length < 100) continue;
+        const mime = /\.pdf$/i.test(baseName) ? 'application/pdf' : 'application/octet-stream';
+        const fid = await storeExtractedFile(baseName, Buffer.from(data), mime);
+        extracted.push({ name: baseName, url: `/api/sea/files/${fid}/download`, classification: classifyFile(baseName), size: data.length });
+      }
+    } else if (fileName.endsWith('.eml')) {
+      const content = fileBuffer.toString('utf8');
+      const boundaryMatches = [...content.matchAll(/boundary[=:][\s]*["']?([^"'\r\n;]+)/gi)];
+      const boundaries = boundaryMatches.map(m => m[1].replace(/["']/g, '').trim()).filter(Boolean);
+
+      const patterns = [
+        /Content-Disposition:\s*attachment[^]*?filename[=*]*["']?([^"'\r\n;]+\.pdf)["']?/gi,
+        /Content-Type:\s*application\/pdf[^]*?name[=*]*["']?([^"'\r\n;]+\.pdf)["']?/gi,
+        /name[=*]*["']?([^"'\r\n;]+\.pdf)["']?/gi,
+      ];
+      const found = [];
+      for (const pat of patterns) {
+        let m;
+        while ((m = pat.exec(content)) !== null) {
+          const name = m[1].replace(/.*[/\\]/, '').trim();
+          if (name && !found.some(f => f.name === name)) found.push({ name, pos: m.index });
+        }
+      }
+
+      for (const att of found) {
+        try {
+          const after = content.substring(att.pos);
+          if (!/Content-Transfer-Encoding:\s*base64/i.test(after)) continue;
+          const headerEnd = after.indexOf('\r\n\r\n');
+          if (headerEnd === -1) continue;
+          let b64 = after.substring(headerEnd + 4);
+          let endPos = b64.length;
+          for (const b of boundaries) {
+            const p = b64.indexOf('--' + b);
+            if (p !== -1 && p < endPos) endPos = p;
+          }
+          const nextContent = b64.search(/\r\nContent-/i);
+          if (nextContent !== -1 && nextContent < endPos) endPos = nextContent;
+          b64 = b64.substring(0, endPos).replace(/[\r\n\s]/g, '').trim();
+          if (b64.length < 100) continue;
+          const bytes = Buffer.from(b64, 'base64');
+          if (!bytes.subarray(0, 5).toString('ascii').startsWith('%PDF')) continue;
+          const fid = await storeExtractedFile(att.name, bytes, 'application/pdf');
+          extracted.push({ name: att.name, url: `/api/sea/files/${fid}/download`, classification: classifyFile(att.name), size: bytes.length });
+        } catch (_) {}
+      }
+    } else {
+      return res.status(400).json({ success: false, error: 'Apenas arquivos .zip e .eml são suportados' });
+    }
+
+    extracted = extracted.filter(f => f.size >= 100);
+    res.json({ success: true, extracted, source: file_name });
+  } catch (err) {
+    console.error('[POST /api/sea/extract-attachments]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── SEA TRACKING — SEND STATUS EMAIL ──
+app.post('/api/sea/tracking/send-status-email', async (req, res) => {
+  try {
+    const p = req.body || {};
+    const to = p.to || p.email_cliente;
+    if (!to) return res.status(400).json({ success: false, error: 'Campo "to" é obrigatório' });
+
+    const logoUrl = process.env.EMAIL_LOGO_URL || 'https://i.ibb.co/sJkY7y5/logo-branco.png';
+    const isExterno = p.email_type === 'externo';
+
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0c0d1a;margin:0;padding:0}
+.wrap{max-width:600px;margin:32px auto;background:#111322;border-radius:16px;border:1px solid rgba(255,255,255,.1);overflow:hidden}
+.header{background:linear-gradient(135deg,#1a1d36,#0c0d1a);padding:28px 32px;text-align:center;border-bottom:1px solid rgba(255,255,255,.08)}
+.header img{height:32px}
+.body{padding:32px}
+.title{font-size:20px;font-weight:700;color:#f5f5f5;margin:0 0 8px}
+.sub{font-size:13px;color:#888;margin:0 0 28px}
+.row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.label{font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.06em}
+.value{font-size:14px;color:#f5f5f5;font-weight:600;text-align:right}
+.status-badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;letter-spacing:.04em;background:#1e3a5f;color:#60a5fa;margin-top:4px}
+.msg{background:rgba(245,184,67,.08);border:1px solid rgba(245,184,67,.2);border-radius:10px;padding:16px;margin-top:24px;font-size:13px;color:#f0d080;line-height:1.6}
+.footer{padding:20px 32px;text-align:center;font-size:11px;color:#444;border-top:1px solid rgba(255,255,255,.06)}
+</style></head><body>
+<div class="wrap">
+  <div class="header"><img src="${logoUrl}" alt="Z3US"></div>
+  <div class="body">
+    <div class="title">Atualização de Rastreamento Marítimo</div>
+    <div class="sub">Dachser · Logistics Intelligence</div>
+    <div class="row"><span class="label">BL / MBL</span><span class="value">${p.mbl||p.container||'-'}</span></div>
+    ${p.hbl ? `<div class="row"><span class="label">HBL</span><span class="value">${p.hbl}</span></div>` : ''}
+    ${p.consignee||p.cliente ? `<div class="row"><span class="label">Consignee</span><span class="value">${p.consignee||p.cliente}</span></div>` : ''}
+    <div class="row"><span class="label">Armador</span><span class="value">${p.shipping_line||'-'}</span></div>
+    ${p.vessel ? `<div class="row"><span class="label">Navio</span><span class="value">${p.vessel}</span></div>` : ''}
+    <div class="row"><span class="label">Origem → Destino</span><span class="value">${p.origem||'-'} → ${p.destino||'-'}</span></div>
+    ${p.eta ? `<div class="row"><span class="label">ETA</span><span class="value">${p.eta}</span></div>` : ''}
+    <div class="row"><span class="label">Status</span><span class="value"><span class="status-badge">${p.status||'—'}</span></span></div>
+    ${p.custom_message ? `<div class="msg">${p.custom_message}</div>` : ''}
+  </div>
+  <div class="footer">© Z3US.AI — Esteira de Rastreamento</div>
+</div></body></html>`;
+
+    const subject = isExterno
+      ? `Atualização de Embarque — ${p.mbl||p.container||'BL'}`
+      : `[INTERNO] Status Tracking: ${p.mbl||p.container||'BL'} — ${p.status||''}`;
+
+    await resend.emails.send({
+      from: 'Dachser Tracking <noreply@z3us.ai>',
+      to: Array.isArray(to) ? to : [to],
+      subject,
+      html,
+    });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[POST /api/sea/tracking/send-status-email]', e.message);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // Express error handler — ensures JSON even for unhandled errors
 app.use((err, req, res, _next) => {
   const msg = err?.message || String(err) || 'Internal error';

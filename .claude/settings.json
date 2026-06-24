@@ -15,12 +15,17 @@
       "Bash(xargs -I {} ls -la {})",
       "Bash(grep -n \"app\\\\.\\\\\\(get\\\\|post\\\\|put\\\\|patch\\\\|delete\\\\\\).*\\\\/api\\\\/demurrage\" c:/Users/Larissa/dachser/server/index.js)",
       "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\(Object.keys\\(p.dependencies\\)\\)\\)\")",
-      "Bash(grep -n \"\\\\/api\\\\/fin\\\\/vouchers'\" \"c:/Users/Larissa/dachser/server/index.js\")"
+      "Bash(grep -n \"\\\\/api\\\\/fin\\\\/vouchers'\" \"c:/Users/Larissa/dachser/server/index.js\")",
+      "Bash(git -C \"c:/Users/Larissa/dachser\" show HEAD:src/pages/admin/ApiManagement.tsx)",
+      "Bash(git -C \"c:/Users/Larissa/dachser\" checkout HEAD -- src/pages/admin/ApiManagement.tsx)",
+      "Read(//c/Users/Larissa/.claude/projects/c--Users-Larissa-dachser/memory/**)",
+      "Bash(grep -v \"^\\\\s*//\")"
     ],
     "additionalDirectories": [
       "C:\\draft_track_hapag",
       "C:\\draft_track_msc",
-      "C:\\draft_track_one"
+      "C:\\draft_track_one",
+      "c:\\Users\\Larissa\\.claude\\projects\\c--Users-Larissa-dachser\\memory"
     ]
   }
 }

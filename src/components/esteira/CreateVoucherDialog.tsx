@@ -40,7 +40,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client"; // kept: Supabase Storage (upload de arquivos)
 import { cn } from "@/lib/utils";
 import { CalendarIcon } from "lucide-react";
 import { 
@@ -351,6 +350,14 @@ export const CreateVoucherDialog = ({
     }
   };
 
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve((reader.result as string).split(",")[1]);
+      reader.onerror = reject;
+    });
+
   const handleSubmitVoucher = async (values: FormValues, isDraft: boolean = false, retryAttempt: number = 0) => {
     // Skip validations for draft
     if (!isDraft) {
@@ -543,67 +550,48 @@ export const CreateVoucherDialog = ({
 
       console.log("Voucher saved to MariaDB t_vouchers, ID:", voucherId);
 
-      // Upload fatura files (Supabase Storage) + metadata (MariaDB t_voucher_anexos)
+      // Upload fatura files como BLOB → MariaDB
       for (const file of faturaFiles) {
-        const fileExt = file.name.split(".").pop();
-        const filePath = `${voucherId}/${Date.now()}-fatura.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("voucher-anexos")
-          .upload(filePath, file);
-
-        if (uploadError) {
-          console.error("Erro ao fazer upload:", uploadError);
-          continue;
+        try {
+          const file_base64 = await fileToBase64(file);
+          await fetch('/api/fin/vouchers/anexos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ voucher_id: voucherId, tipo: 'FATURA', file_name: file.name, file_size: file.size, mime_type: file.type || 'application/octet-stream', file_base64 }),
+          });
+        } catch (uploadError) {
+          console.error("Erro ao fazer upload de fatura:", uploadError);
         }
-
-        const { data: publicUrl } = supabase.storage
-          .from("voucher-anexos")
-          .getPublicUrl(filePath);
-
-        // Salvar metadata no MariaDB
-        await fetch(`/api/fin/vouchers/${voucherId}/anexos`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tipo: 'FATURA', file_name: file.name, file_url: publicUrl.publicUrl, file_size: file.size }),
-        });
       }
 
-      // Upload boleto files (Supabase Storage) + metadata (MariaDB t_voucher_anexos)
-      let linhaDigitavelExtraida = false; // Flag para extrair apenas do primeiro boleto
-      
+      // Upload boleto files como BLOB → MariaDB
+      let linhaDigitavelExtraida = false;
+
       for (const file of boletoFiles) {
-        const fileExt = file.name.split(".").pop();
-        const filePath = `${voucherId}/${Date.now()}-boleto.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("voucher-anexos")
-          .upload(filePath, file);
-
-        if (uploadError) {
-          console.error("Erro ao fazer upload:", uploadError);
-          continue;
+        let boletoDownloadUrl: string | null = null;
+        try {
+          const file_base64 = await fileToBase64(file);
+          const bRes = await fetch('/api/fin/vouchers/anexos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ voucher_id: voucherId, tipo: 'BOLETO', file_name: file.name, file_size: file.size, mime_type: file.type || 'application/octet-stream', file_base64 }),
+          });
+          if (bRes.ok) {
+            const bData = await bRes.json();
+            boletoDownloadUrl = bData.file_url || null;
+          }
+        } catch (uploadError) {
+          console.error("Erro ao fazer upload de boleto:", uploadError);
         }
 
-        const { data: publicUrl } = supabase.storage
-          .from("voucher-anexos")
-          .getPublicUrl(filePath);
-
-        // Salvar metadata no MariaDB
-        await fetch(`/api/fin/vouchers/${voucherId}/anexos`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tipo: 'BOLETO', file_name: file.name, file_url: publicUrl.publicUrl, file_size: file.size }),
-        });
-
         // Extrair linha digitável automaticamente do primeiro boleto (apenas para BOLETO)
-        if (!linhaDigitavelExtraida && values.formaPagamento === "BOLETO") {
+        if (!linhaDigitavelExtraida && values.formaPagamento === "BOLETO" && boletoDownloadUrl) {
           try {
             console.log("Extraindo linha digitável do boleto...");
             const extractionResp = await fetch("/api/parsers/boleto-barcode", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ fileUrl: publicUrl.publicUrl }),
+              body: JSON.stringify({ fileUrl: boletoDownloadUrl }),
             });
             const extractionResult = await extractionResp.json();
 

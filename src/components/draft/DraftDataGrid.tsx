@@ -19,7 +19,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { 
   Search, 
@@ -185,9 +184,13 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
       if (carrier.name === 'MSC') fnName = 'draft-track-msc';
       else if (carrier.name === 'ONE') fnName = 'draft-track-one';
 
-      const { data, error } = await supabase.functions.invoke(fnName, {
-        body: { searchType: 'BL', searchValue: cleanMbl }
+      const trackRes = await fetch('/api/sea/draft/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ carrier: carrier.name?.toLowerCase() || 'hapag', searchType: 'BL', searchValue: cleanMbl }),
       });
+      const data = await trackRes.json();
+      const error = trackRes.ok ? null : { message: data?.error || `HTTP ${trackRes.status}` };
 
       // Handle API errors - check if it's a "not found" type error (204)
       if (error) {
@@ -216,8 +219,11 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
       }
 
       if (data?.success && data?.bookingInfo) {
-        const { data: saveData, error: saveError } = await supabase.functions.invoke('draft-save-tracking', {
-          body: { 
+        const saveRes = await fetch('/api/sea/draft/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            carrier: carrier.name?.toLowerCase() || 'hapag',
             trackingData: {
               mbl_id: mblId,
               booking: data.bookingInfo.bookingNumber,
@@ -228,12 +234,12 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
               etd: data.bookingInfo.etd,
               eta: data.bookingInfo.eta,
               status_armador: data.bookingInfo.documentStatus,
-              transaction_id: data.apiMetadata?.transactionId
-            }
-          }
+              transaction_id: data.apiMetadata?.transactionId,
+            },
+          }),
         });
-        if (saveError) {
-          console.error(`Save failed for ${mblId}:`, saveError);
+        if (!saveRes.ok) {
+          console.error(`Save failed for ${mblId}`);
           toast.warning(`${mblId}: consultado com sucesso, mas falhou ao salvar no banco`);
         } else {
           toast.success(`${mblId} atualizado com sucesso!`);
@@ -299,25 +305,23 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
     try {
       const cleanMbl = item.mbl_id.split(' - ')[0].trim().substring(0, 20);
       const carrier = detectCarrier(cleanMbl);
-      let fnName = 'draft-track-hapag-multi';
-      if (carrier.name === 'MSC') fnName = 'draft-track-msc';
-      else if (carrier.name === 'ONE') fnName = 'draft-track-one';
-
-      const { data, error } = await supabase.functions.invoke(fnName, {
-        body: { searchType: 'BL', searchValue: cleanMbl }
+      const detailRes = await fetch('/api/sea/draft/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ carrier: carrier.name?.toLowerCase() || 'hapag', searchType: 'BL', searchValue: cleanMbl }),
       });
+      const data = await detailRes.json();
 
       // Handle case where BL is not found (API returns 204/404)
-      if (error) {
-        // Check if it's a "not found" type error
-        const errorBody = error.message || '';
+      if (!detailRes.ok) {
+        const errorBody = data?.error || '';
         if (errorBody.includes('não encontrado') || errorBody.includes('204')) {
           setDetailsData({ notFound: true, message: 'BL não encontrado na API Hapag-Lloyd' });
           return;
         }
-        throw error;
+        throw new Error(errorBody || `HTTP ${detailRes.status}`);
       }
-      
+
       // Handle success: false response
       if (data && !data.success && data.error) {
         setDetailsData({ notFound: true, message: data.error });

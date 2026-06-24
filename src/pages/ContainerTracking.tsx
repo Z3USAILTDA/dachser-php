@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, Fragment, useRef } from "react";
 import { usePageVisibility } from "@/hooks/usePageVisibility";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { useUsageLog, trackEvent } from "@/hooks/useUsageLog";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Card } from "@/components/ui/card";
@@ -24,7 +23,6 @@ import { exportSeaMblsToExcel } from "@/utils/seaMblExcelExport";
 import { RegisterFreeTimeDialog } from "@/components/tracking/RegisterFreeTimeDialog";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { User, Session } from "@supabase/supabase-js";
 import dachserBg from "@/assets/dachser-background.jpg";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { Filter as FilterIcon } from "lucide-react";
@@ -492,9 +490,6 @@ const ContainerTracking = () => {
     theme,
     toggleTheme
   } = useTheme();
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterLine, setFilterLine] = useState("all");
   const [filterCoordenador, setFilterCoordenador] = useState("all");
@@ -594,11 +589,7 @@ const ContainerTracking = () => {
     searchConsigneeTimeoutRef.current = setTimeout(async () => {
       setIsSearchingConsignee(true);
       try {
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=search_clientes_base&q=${encodeURIComponent(term)}&limit=15`, {
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
-          }
-        });
+        const res = await fetch(`/api/olimpo/search-clientes?q=${encodeURIComponent(term)}&limit=15`);
         const data = await res.json();
         if (data.success && data.clientes) {
           setConsigneeSuggestions(data.clientes);
@@ -878,28 +869,6 @@ const ContainerTracking = () => {
     }
   }, [navigate]);
 
-  // Check authentication
-  useEffect(() => {
-    const {
-      data: {
-        subscription
-      }
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setIsLoading(false);
-    });
-    supabase.auth.getSession().then(({
-      data: {
-        session
-      }
-    }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setIsLoading(false);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
 
   // Port code cache for transshipment resolution
   const [portCodeMap, setPortCodeMap] = useState<Record<string, string>>({});
@@ -915,13 +884,10 @@ const ContainerTracking = () => {
     if (allTransshipmentPorts.size === 0) return;
 
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy`, {
+      const res = await fetch(`/api/sea/tracking/resolve-ports`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ action: 'resolve_port_codes', port_names: Array.from(allTransshipmentPorts) })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ port_names: Array.from(allTransshipmentPorts) })
       });
       const result = await res.json();
       if (result.success && result.data) {
@@ -936,13 +902,7 @@ const ContainerTracking = () => {
   const fetchMblData = React.useCallback(async () => {
     setIsLoadingData(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=get_sea_tracking`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const res = await fetch(`/api/sea/tracking`);
       const result = await res.json();
       if (result.success && result.data) {
         setMblList(result.data);
@@ -967,13 +927,7 @@ const ContainerTracking = () => {
     const initializeData = async () => {
       // First, cleanup orphan PENDENTE containers that shouldn't exist
       try {
-        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=cleanup_orphan_pendentes`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        await fetch(`/api/sea/tracking/cleanup-orphans`);
       } catch (e) {
         console.error('[init] cleanup_orphan_pendentes error:', e);
       }
@@ -989,13 +943,7 @@ const ContainerTracking = () => {
     setVesselImo(null);
     setVesselName(null);
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=get_sea_tracking_containers&mbl_id=${encodeURIComponent(mbl_id)}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const res = await fetch(`/api/sea/tracking/containers?mbl_id=${encodeURIComponent(mbl_id)}`);
       const result = await res.json();
       if (result.success && result.data) {
         setMblContainers(result.data);
@@ -1018,12 +966,9 @@ const ContainerTracking = () => {
   const fetchMblEvents = async (mbl_id: string) => {
     setLoadingEvents(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=get_tracking_history`, {
+      const res = await fetch(`/api/sea/tracking/events`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mbl_id, limit: 200 })
       });
       const result = await res.json();
@@ -1088,13 +1033,7 @@ const ContainerTracking = () => {
       // Step 0a: Cleanup orphan PENDENTE containers from MBLs that already have valid containers
       console.log('[AutoSync] Step 0a: Cleaning up orphan PENDENTE containers...');
       try {
-        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=cleanup_orphan_pendentes`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        await fetch(`/api/sea/tracking/cleanup-orphans`);
       } catch (e) {
         console.warn('[AutoSync] cleanup_orphan_pendentes failed (non-blocking):', e);
       }
@@ -1102,13 +1041,7 @@ const ContainerTracking = () => {
       // Step 0b: Deactivate invalid MBLs (booking refs, no valid containers)
       console.log('[AutoSync] Step 0b: Deactivating invalid MBLs...');
       try {
-        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=deactivate_invalid_mbls`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        await fetch(`/api/sea/tracking/deactivate-invalid`);
       } catch (e) {
         console.warn('[AutoSync] deactivate_invalid_mbls failed (non-blocking):', e);
       }
@@ -1116,13 +1049,7 @@ const ContainerTracking = () => {
       // Step 1: Sync new MBLs from t_master_dados
       setAutoSyncStatus('sync');
       console.log('[AutoSync] Step 1: Syncing new MBLs...');
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=sync_sea_tracking`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      await fetch(`/api/sea/tracking/sync`);
 
       // Step 2: Enrich MBLs with containers (batch)
       setAutoSyncStatus('enrich');
@@ -1131,13 +1058,7 @@ const ContainerTracking = () => {
       let enrichIteration = 0;
       while (enrichRemaining > 0 && enrichIteration < 20) {
         enrichIteration++;
-        const enrichRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=enrich_sea_containers&batch_size=30&max_time_ms=45000`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const enrichRes = await fetch(`/api/sea/tracking/enrich?batch_size=30&max_time_ms=45000`);
         const enrichResult = await enrichRes.json();
         enrichRemaining = enrichResult.remaining || 0;
         if (enrichResult.enriched === 0 && enrichResult.errors === 0) break;
@@ -1150,13 +1071,7 @@ const ContainerTracking = () => {
       let trackIteration = 0;
       while (trackRemaining > 0 && trackIteration < 30) {
         trackIteration++;
-        const trackRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=20&stale_hours=0&refresh_valid_hours=0`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const trackRes = await fetch(`/api/sea/tracking/refresh?batch_size=20&stale_hours=0&refresh_valid_hours=0`);
         const trackResult = await trackRes.json();
         trackRemaining = trackResult.remaining || 0;
         if (trackResult.processed === 0) break;
@@ -1169,13 +1084,7 @@ const ContainerTracking = () => {
       let imoIteration = 0;
       while (imoRemaining > 0 && imoIteration < 15) {
         imoIteration++;
-        const imoRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=populate_missing_imos&batch_size=30`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const imoRes = await fetch(`/api/sea/tracking/populate-imos?batch_size=30`);
         const imoResult = await imoRes.json();
         imoRemaining = imoResult.remaining || 0;
         if (imoResult.vesselsProcessed === 0) break;
@@ -1220,13 +1129,7 @@ const ContainerTracking = () => {
       const statusEl = document.getElementById('sync-status');
       if (progressEl) progressEl.style.width = '30%';
       if (statusEl) statusEl.textContent = 'Conectando ao banco de dados...';
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=sync_sea_tracking`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const res = await fetch(`/api/sea/tracking/sync`);
       if (progressEl) progressEl.style.width = '80%';
       if (statusEl) statusEl.textContent = 'Processando resposta...';
       const result = await res.json();
@@ -1311,13 +1214,7 @@ const ContainerTracking = () => {
         const iterationEl = document.getElementById('enrich-iteration');
         if (progressEl) progressEl.style.width = `${iteration / maxIterations * 100}%`;
         if (iterationEl) iterationEl.textContent = `${iteration}/${maxIterations}`;
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=enrich_sea_containers&batch_size=30&max_time_ms=45000`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const res = await fetch(`/api/sea/tracking/enrich?batch_size=30&max_time_ms=45000`);
         const result = await res.json();
         totalEnriched += result.enriched || 0;
         totalErrors += result.errors || 0;
@@ -1420,13 +1317,7 @@ const ContainerTracking = () => {
         const batchEl = document.getElementById('track-batch');
         if (progressEl) progressEl.style.width = `${iteration / maxIterations * 100}%`;
         if (batchEl) batchEl.textContent = `Batch ${iteration}/${maxIterations}`;
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=20&stale_hours=0&refresh_valid_hours=0`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const res = await fetch(`/api/sea/tracking/refresh?batch_size=20&stale_hours=0&refresh_valid_hours=0`);
         const result = await res.json();
         totalProcessed += result.processed || 0;
         totalSuccess += result.success || 0;
@@ -1559,13 +1450,7 @@ const ContainerTracking = () => {
         const elapsedSeconds = Math.round((Date.now() - startTime) / 1000);
         if (timeEl) timeEl.textContent = `Tempo: ${elapsedSeconds}s`;
         if (batchEl) batchEl.textContent = `Batch ${iteration}/${maxIterations}`;
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=20&stale_hours=0&refresh_valid_hours=0`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const res = await fetch(`/api/sea/tracking/refresh?batch_size=20&stale_hours=0&refresh_valid_hours=0`);
         const result = await res.json();
         totalProcessed += result.processed || 0;
         totalSuccess += result.success || 0;
@@ -1685,13 +1570,7 @@ const ContainerTracking = () => {
         const batchEl = document.getElementById('carrier-batch');
         if (progressEl) progressEl.style.width = `${iteration / maxIterations * 100}%`;
         if (batchEl) batchEl.textContent = `Batch ${iteration}/${maxIterations}`;
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=15&carrier_filter=${carriers}&force=1`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const res = await fetch(`/api/sea/tracking/refresh?batch_size=15&carrier_filter=${carriers}&force=1`);
         const result = await res.json();
         totalProcessed += result.processed || 0;
         totalSuccess += result.success || 0;
@@ -1731,13 +1610,8 @@ const ContainerTracking = () => {
     if (!isAdmin) return;
     setIsRunningRetryNaoEncontrado(true);
     try {
-      const params = mblId 
-        ? `action=reset_nao_encontrado&mbl_id=${encodeURIComponent(mblId)}`
-        : `action=reset_nao_encontrado`;
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?${params}`, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` }
-      });
+      const params = mblId ? `?mbl_id=${encodeURIComponent(mblId)}` : '';
+      const res = await fetch(`/api/sea/tracking/reset-nao-encontrado${params}`);
       const data = await res.json();
       if (data.success) {
         toast({ title: "Retry iniciado", description: `${data.reset} containers resetados para PENDENTE. Execute o Enrich para reprocessar.` });
@@ -1767,12 +1641,9 @@ const ContainerTracking = () => {
       didOpen: () => Swal.showLoading(),
     });
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/hapag-batch-discover`, {
+      const res = await fetch(`/api/sea/tracking/hapag-discover`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
       });
       const data = await res.json();
       Swal.close();
@@ -1833,13 +1704,7 @@ const ContainerTracking = () => {
       }
     });
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_all_vessel_imos`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const res = await fetch(`/api/sea/tracking/refresh-vessel-imos`);
       const result = await res.json();
       await fetchMblData();
       Swal.fire({
@@ -1928,27 +1793,22 @@ const ContainerTracking = () => {
   };
   const isVisibleSync = usePageVisibility();
   useEffect(() => {
-    if (!user || !isVisibleSync || !isAdminUser) return;
+    if (!loggedUsername || !isVisibleSync || !isAdminUser) return;
     const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
     const interval = setInterval(() => {
       console.log('[AutoSync] 12-hour interval triggered');
       runAutoSync();
     }, TWELVE_HOURS_MS);
     return () => clearInterval(interval);
-  }, [user, isVisibleSync, runAutoSync, isAdminUser]);
+  }, [loggedUsername, isVisibleSync, runAutoSync, isAdminUser]);
 
   // Delete MBL from tracking
   const handleDeleteMbl = async (mbl_id: string) => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=delete_sea_tracking`, {
+      const res = await fetch(`/api/sea/tracking/delete`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          mbl_id
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mbl_id })
       });
       const result = await res.json();
       if (result.success) {
@@ -1974,12 +1834,9 @@ const ContainerTracking = () => {
     if (!emailMbl) return;
     setIsSendingEmail(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-container-status-email`, {
+      const res = await fetch(`/api/sea/tracking/send-status-email`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: emailType === "interno" ? emailMbl.email_analista : emailMbl.email_cliente,
           container: emailMbl.mbl_id,
@@ -2155,7 +2012,7 @@ const ContainerTracking = () => {
         return null;
     }
   };
-  if (isLoading) {
+  if (isLoadingData) {
     return <div className="min-h-screen bg-black flex items-center justify-center">
         <p className="text-white">Carregando...</p>
       </div>;
@@ -3647,12 +3504,9 @@ const ContainerTracking = () => {
             }
             setIsSubmittingLcl(true);
             try {
-              const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=add_lcl_container`, {
+              const res = await fetch(`/api/sea/tracking/add-lcl`, {
                 method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-                  'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   mbl_id: lclFormData.mbl,
                   container: containerToSubmit,

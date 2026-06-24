@@ -6,7 +6,6 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { Bot, Upload, CheckCircle2, XCircle, AlertCircle, FileText, Search, Edit2, X } from "lucide-react";
 
 import { UploadZone } from "@/components/maritimo/UploadZone";
@@ -34,6 +33,14 @@ export function RoboTab() {
   const [progress, setProgress] = useState(0);
   const [identifying, setIdentifying] = useState(false);
   const [identifyProgress, setIdentifyProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
+
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve((reader.result as string).split(",")[1]);
+      reader.onerror = reject;
+    });
 
   // ─────────────────────────────────────────────────────────────────────────
   // Extração de candidatos SPO/ND a partir do NOME DO ARQUIVO (client-side).
@@ -448,26 +455,12 @@ export function RoboTab() {
 
         const wasConcluded = fileMatch.etapaAtual === 'CONCLUIDO';
 
-        const fileExt = fileMatch.file.name.split(".").pop();
-        const fileName = `${Math.random()}.${fileExt}`;
-        const filePath = `${fileName}`;
+        const file_base64 = await fileToBase64(fileMatch.file);
 
-        // Upload to Supabase Storage
-        const { error: uploadError } = await supabase.storage
-          .from("voucher-anexos")
-          .upload(filePath, fileMatch.file);
-
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from("voucher-anexos")
-          .getPublicUrl(filePath);
-
-        // Save attachment metadata to MariaDB (must complete before subsequent calls)
-        const anexoRes = await fetch(`/api/fin/vouchers/${encodeURIComponent(fileMatch.voucherId!)}/anexos`, {
+        const anexoRes = await fetch('/api/fin/vouchers/anexos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tipo: 'COMPROVANTE', file_url: publicUrl, file_name: fileMatch.file.name, file_size: fileMatch.file.size }),
+          body: JSON.stringify({ voucher_id: fileMatch.voucherId, tipo: 'COMPROVANTE', file_name: fileMatch.file.name, file_size: fileMatch.file.size, mime_type: fileMatch.file.type || 'application/octet-stream', file_base64 }),
         });
         if (!anexoRes.ok) throw new Error(`Erro ao salvar anexo: ${await anexoRes.text()}`);
 

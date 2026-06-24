@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { Database, RefreshCw, AlertCircle, Plane, Ship, Server, Loader2, HelpCircle, Hash, Clock, Activity, FileText, FileSpreadsheet } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { supabase } from "@/integrations/supabase/client";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -359,16 +358,10 @@ export default function DatabaseMonitor() {
     setError(null);
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke("fetch-database-stats");
-
-      if (fnError) {
-        throw fnError;
-      }
-
-      if (data?.error) {
-        throw new Error(data.error);
-      }
-
+      const res = await fetch('/api/admin/database-stats');
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      if (data?.error) throw new Error(data.error);
       setStats(data);
     } catch (err: any) {
       console.error("Error fetching database stats:", err);

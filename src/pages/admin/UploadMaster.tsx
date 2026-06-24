@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, X, RefreshCw, Download } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import * as XLSX from "xlsx";
 
 import { PageLayout } from "@/components/layout/PageLayout";
@@ -369,15 +368,13 @@ export default function UploadMaster() {
           return;
         }
 
-        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "bulk_insert_master",
-            rows: validRows,
-            modal: tipoProcesso.modal,
-          },
+        const _masterRes = await fetch("/api/admin/bulk-insert-master", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows: validRows, modal: tipoProcesso.modal }),
         });
-
-        if (error) throw error;
+        const data = await _masterRes.json();
+        if (!_masterRes.ok) throw new Error(data?.error || "Erro ao importar master");
 
         // Construir lista de linhas rejeitadas com dados originais
         const rejectedRows: Array<{ originalIndex: number; data: MasterRow; error: string }> = [];
@@ -465,12 +462,13 @@ export default function UploadMaster() {
             await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
           }
 
-          const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-            body: {
-              action: "bulk_insert_clientes",
-              rows: batchRows,
-            },
+          const _cliRes = await fetch("/api/admin/bulk-insert-clientes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ rows: batchRows }),
           });
+          const data = await _cliRes.json();
+          const error = _cliRes.ok ? null : (data?.error || "Erro ao importar clientes");
 
           if (error) {
             console.error(`Erro no batch ${batchIndex + 1}:`, error);

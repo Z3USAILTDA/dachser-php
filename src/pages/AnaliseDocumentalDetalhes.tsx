@@ -5,7 +5,6 @@ import { ComparisonResults } from "@/components/analise-documental/ComparisonRes
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { LLMAnalysisResult } from "./AnaliseDocumentalComparar";
 
 interface AnaliseRecord {
@@ -34,18 +33,14 @@ const AnaliseDocumentalDetalhes = () => {
       }
 
       try {
-        const { data, error } = await supabase
-          .from("analise_documental_historico" as any)
-          .select("*")
-          .eq("id", id)
-          .single() as { data: AnaliseRecord | null; error: any };
-
-        if (error) throw error;
-        if (!data) {
+        const res = await fetch(`/api/fin/analise-documental/${id}`);
+        if (res.status === 404) {
           toast.error("Análise não encontrada");
           navigate("/fin/analise-documental");
           return;
         }
+        if (!res.ok) throw new Error(await res.text());
+        const data: AnaliseRecord = await res.json();
 
         setRecord(data);
       } catch (error) {
