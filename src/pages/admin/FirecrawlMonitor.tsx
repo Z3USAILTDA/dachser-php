@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { RefreshCw, Activity, Database, Clock, Loader2, Bug } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { supabase } from "@/integrations/supabase/client";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -62,8 +61,9 @@ export default function FirecrawlMonitor() {
   const fetchStats = async () => {
     setError(null);
     try {
-      const { data, error: fnError } = await supabase.functions.invoke("firecrawl-monitor-stats");
-      if (fnError) throw fnError;
+      const res = await fetch('/api/admin/firecrawl-stats');
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
       if (data?.error) throw new Error(data.error);
       setStats(data);
     } catch (err: any) {
@@ -82,10 +82,13 @@ export default function FirecrawlMonitor() {
 
   const handleTestAlert = async () => {
     try {
-      const { data, error: fnError } = await supabase.functions.invoke("firecrawl-monitor-alert", {
-        body: { test: true },
+      const res = await fetch('/api/admin/firecrawl-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test: true }),
       });
-      if (fnError) throw fnError;
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
       toast.success(`Alerta de teste enviado (action: ${data?.action})`);
     } catch (err: any) {
       toast.error("Erro ao enviar alerta de teste");

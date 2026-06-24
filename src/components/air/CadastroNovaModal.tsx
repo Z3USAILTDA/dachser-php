@@ -245,10 +245,7 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
     if (term.length < 2) { setConsigneeSuggestions([]); return; }
     setIsSearchingConsignee(true);
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=search_clientes_base&q=${encodeURIComponent(term)}&limit=15`,
-        { headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` } }
-      );
+      const res = await fetch(`/api/olimpo/search-clientes?q=${encodeURIComponent(term)}&limit=15`);
       const data = await res.json();
       setConsigneeSuggestions(data.clientes || []);
       if ((data.clientes || []).length > 0) setConsigneeOpen(true);
@@ -276,10 +273,7 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
     if (term.length < 2) { setClerkSuggestions([]); return; }
     setIsSearchingClerk(true);
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=search_analistas&q=${encodeURIComponent(term)}&modal=AIR&limit=15`,
-        { headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` } }
-      );
+      const res = await fetch(`/api/olimpo/search-analistas?q=${encodeURIComponent(term)}&modal=AIR&limit=15`);
       const data = await res.json();
       setClerkSuggestions(data.analistas || []);
       if ((data.analistas || []).length > 0) setClerkOpen(true);
@@ -447,17 +441,11 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
         created_by: user.username || "unknown",
       };
 
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy`,
-        {
-          method: "POST",
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        }
-      );
+      const res = await fetch(`/api/olimpo/cadastro/aereo`, {
+        method: "POST",
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
       const result = await res.json();
       if (!res.ok || !result.success) throw new Error(result.error || "Erro ao salvar");
       
@@ -527,22 +515,15 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
     setIsSwapping(true);
     try {
       const user = JSON.parse(localStorage.getItem("user") || "{}");
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy`,
-        {
-          method: "POST",
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: "swap_master_cadastro_aereo",
-            new_mawb: swapMawb,
-            hawbs: swapHawbs.map(h => h.hawb_number),
-            user: user.username || "unknown",
-          }),
-        }
-      );
+      const res = await fetch(`/api/olimpo/cadastro/swap-master`, {
+        method: "POST",
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          new_mawb: swapMawb,
+          hawbs: swapHawbs.map(h => h.hawb_number),
+          user: user.username || "unknown",
+        }),
+      });
       const result = await res.json();
       if (!res.ok || !result.success) throw new Error(result.error || "Erro na troca");
 

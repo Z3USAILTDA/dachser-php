@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Ship, ExternalLink, AlertCircle, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
@@ -29,7 +28,7 @@ async function getMapboxToken(): Promise<string | null> {
   if (mapboxTokenPromise) return mapboxTokenPromise;
   mapboxTokenPromise = (async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-mapbox-token`);
+      const res = await fetch('/api/admin/mapbox-token');
       const json = await res.json();
       const token = json?.token || json?.mapboxToken || null;
       if (token) cachedMapboxToken = token;
@@ -213,8 +212,13 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
 
     let cancelled = false;
     setResolving(true);
-    supabase.functions.invoke('resolve-vessel-imo', { body: { shipperName } })
-      .then(({ data }) => {
+    fetch('/api/sea/resolve-vessel-imo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shipperName }),
+    })
+      .then(res => res.json())
+      .then((data) => {
         if (cancelled) return;
         const found = { imo: data?.imo, mmsi: data?.mmsi };
         resolvedImoCache.set(key, found);

@@ -500,17 +500,11 @@ export default function OthelloImport() {
         });
       }
 
-      // ── Send to edge function ──
+      // ── Send to API ──
       setStep("Gravando no banco de dados...");
-      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-      const url = `https://${projectId}.supabase.co/functions/v1/fin-othello-import`;
-
-      const response = await fetch(url, {
+      const response = await fetch('/api/fin/othello/import', {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           arquivo_origem: fileName,
           nacional: nacionalData,

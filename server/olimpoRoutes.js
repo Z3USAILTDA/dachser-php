@@ -719,4 +719,353 @@ export function registerOlimpoRoutes(app) {
       res.json({ success: true, summary: { totalRegistros: rows.length, totalValor: rows.reduce((s, r) => s + Number(r.valor_total_faturado || 0), 0) } });
     } catch (e) { handleError(res, 'faturamento/summary', e); }
   });
+
+  // ── SEARCH CLIENTES ──
+  app.get('/api/olimpo/search-clientes', async (req, res) => {
+    try {
+      const q = String(req.query.q || '').trim();
+      const limit = Math.min(parseInt(String(req.query.limit || '15'), 10) || 15, 50);
+      if (q.length < 2) return res.json({ success: true, clientes: [] });
+      const rows = await query(
+        `SELECT DISTINCT nome_cliente, dchr_customer_number, cnpj FROM ${DB}.t_clientes_base WHERE nome_cliente LIKE ? ORDER BY nome_cliente ASC LIMIT ?`,
+        [`%${q}%`, limit]
+      );
+      res.json({ success: true, clientes: rows || [] });
+    } catch (e) { handleError(res, 'search-clientes', e); }
+  });
+
+  // ── SEARCH ANALISTAS ──
+  app.get('/api/olimpo/search-analistas', async (req, res) => {
+    try {
+      const q = String(req.query.q || '').trim();
+      const limit = Math.min(parseInt(String(req.query.limit || '15'), 10) || 15, 50);
+      const modal = String(req.query.modal || '').toUpperCase();
+      if (q.length < 2) return res.json({ success: true, analistas: [] });
+      const tipoFilter = modal === 'AIR'
+        ? `AND tipo_processo IN ('AI','AE','AIR IMPORT','AIR EXPORT')`
+        : modal === 'SEA'
+          ? `AND tipo_processo IN ('SI','SE','SEA IMPORT','SEA EXPORT')`
+          : '';
+      const rows = await query(
+        `SELECT DISTINCT nome_analista, email_analista FROM ${DB}.t_master_dados WHERE nome_analista LIKE ? ${tipoFilter} AND nome_analista IS NOT NULL AND TRIM(nome_analista) != '' ORDER BY nome_analista ASC LIMIT ?`,
+        [`${q}%`, limit]
+      );
+      res.json({ success: true, analistas: rows || [] });
+    } catch (e) { handleError(res, 'search-analistas', e); }
+  });
+
+  // ── CADASTRO AÉREO ──
+  app.post('/api/olimpo/cadastro/aereo', async (req, res) => {
+    try {
+      const p = req.body || {};
+      if (!p.cadastro_id) return res.status(400).json({ success: false, error: 'cadastro_id é obrigatório' });
+      await query(`CREATE TABLE IF NOT EXISTS ${DB}.t_cadastros_aereo (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        cadastro_id VARCHAR(50) NOT NULL UNIQUE,
+        mode VARCHAR(10), awb_number VARCHAR(50), hawb_number VARCHAR(50),
+        consignee_nome VARCHAR(255), consignee_cnpj VARCHAR(20), consignee_customer_number VARCHAR(50),
+        clerk VARCHAR(100), clerk_email VARCHAR(150),
+        shipper_name VARCHAR(255), shipper_address TEXT,
+        airport_departure VARCHAR(10), airport_destination VARCHAR(10),
+        etd DATE, eta DATE, pieces INT, gross_weight_kg DECIMAL(12,3), chargeable_weight DECIMAL(12,3),
+        rate DECIMAL(12,4), total_charge DECIMAL(12,2), volume_cbm DECIMAL(12,3),
+        nature_of_goods TEXT, service_level VARCHAR(50),
+        green_light_date DATE, pickup_date DATE, wh_treatment VARCHAR(100), pre_alert_date DATE,
+        d_term VARCHAR(50), po_number VARCHAR(100), customer_order VARCHAR(100),
+        routing_destination VARCHAR(200), other_charges_agent DECIMAL(12,2),
+        total_prepaid DECIMAL(12,2), total_collect DECIMAL(12,2),
+        hs_code VARCHAR(50), packaging TEXT, dimensions TEXT,
+        cct_transmitido TINYINT(1) DEFAULT 0, oea_checklist TINYINT(1) DEFAULT 0,
+        pre_alert_sent TINYINT(1) DEFAULT 0, cargo_departed TINYINT(1) DEFAULT 0,
+        pod_dn_available TINYINT(1) DEFAULT 0,
+        created_by VARCHAR(100), created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await query(
+        `INSERT INTO ${DB}.t_cadastros_aereo
+          (cadastro_id,mode,awb_number,hawb_number,consignee_nome,consignee_cnpj,consignee_customer_number,
+           clerk,clerk_email,shipper_name,shipper_address,airport_departure,airport_destination,etd,eta,
+           pieces,gross_weight_kg,chargeable_weight,rate,total_charge,volume_cbm,nature_of_goods,
+           service_level,green_light_date,pickup_date,wh_treatment,pre_alert_date,d_term,po_number,
+           customer_order,routing_destination,other_charges_agent,total_prepaid,total_collect,
+           hs_code,packaging,dimensions,cct_transmitido,oea_checklist,pre_alert_sent,cargo_departed,
+           pod_dn_available,created_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [p.cadastro_id,p.mode||null,p.awb_number||null,p.hawb_number||null,p.consignee_nome||null,
+         p.consignee_cnpj||null,p.consignee_customer_number||null,p.clerk||null,p.clerk_email||null,
+         p.shipper_name||null,p.shipper_address||null,p.airport_departure||null,p.airport_destination||null,
+         p.etd||null,p.eta||null,p.pieces||null,p.gross_weight_kg||null,p.chargeable_weight||null,
+         p.rate||null,p.total_charge||null,p.volume_cbm||null,p.nature_of_goods||null,
+         p.service_level||null,p.green_light_date||null,p.pickup_date||null,p.wh_treatment||null,
+         p.pre_alert_date||null,p.d_term||null,p.po_number||null,p.customer_order||null,
+         p.routing_destination||null,p.other_charges_agent||null,p.total_prepaid||null,p.total_collect||null,
+         p.hs_code||null,p.packaging||null,p.dimensions||null,
+         p.cct_transmitido?1:0,p.oea_checklist?1:0,p.pre_alert_sent?1:0,p.cargo_departed?1:0,
+         p.pod_dn_available?1:0,p.created_by||null]
+      );
+      res.json({ success: true, cadastro_id: p.cadastro_id });
+    } catch (e) { handleError(res, 'cadastro/aereo', e); }
+  });
+
+  // ── CADASTRO MARÍTIMO ──
+  app.post('/api/olimpo/cadastro/maritimo', async (req, res) => {
+    try {
+      const p = req.body || {};
+      if (!p.cadastro_id) return res.status(400).json({ success: false, error: 'cadastro_id é obrigatório' });
+      await query(`CREATE TABLE IF NOT EXISTS ${DB}.t_cadastros_maritimo (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        cadastro_id VARCHAR(50) NOT NULL UNIQUE,
+        mode VARCHAR(10), master_number VARCHAR(50), hbl_number VARCHAR(50), bl_number VARCHAR(50),
+        consignee_nome VARCHAR(255), consignee_cnpj VARCHAR(20), consignee_customer_number VARCHAR(50),
+        consignee_expo VARCHAR(255), clerk VARCHAR(100), clerk_email VARCHAR(150),
+        shipper_name VARCHAR(255), shipper_address TEXT, po_number VARCHAR(100), customer_order VARCHAR(100),
+        green_light_date DATE, etd DATE, eta DATE,
+        port_origin VARCHAR(100), port_destination VARCHAR(100), port_loading VARCHAR(100),
+        port_discharge VARCHAR(100), place_receipt VARCHAR(100), place_delivery VARCHAR(100),
+        vessel_voyage VARCHAR(100), ec_merchant VARCHAR(100), pre_alert_date DATE,
+        pre_alert_comexpert VARCHAR(100), courier VARCHAR(100), free_time VARCHAR(50),
+        d_term VARCHAR(50), deadline_draft_vgm DATE, deadline_load DATE,
+        notify_party TEXT, delivery_agent TEXT, container_numbers TEXT, seal_numbers TEXT,
+        marks_numbers TEXT, nature_of_goods TEXT, hs_code VARCHAR(50),
+        gross_weight_kg DECIMAL(12,3), volume_cbm DECIMAL(12,3), pieces INT,
+        packaging TEXT, freight_charges VARCHAR(100), freight_payment VARCHAR(50),
+        service_type VARCHAR(50), total_prepaid DECIMAL(12,2), total_collect DECIMAL(12,2),
+        num_original_bls INT, shipped_on_board_date DATE, place_date_issue TEXT,
+        issued_by VARCHAR(100), remarks_1 TEXT, remarks_2 TEXT,
+        booking_confirmed TINYINT(1) DEFAULT 0, dep TINYINT(1) DEFAULT 0,
+        eta_ata_confirmed TINYINT(1) DEFAULT 0, dta TINYINT(1) DEFAULT 0,
+        dachser_trucking TINYINT(1) DEFAULT 0, accrual TINYINT(1) DEFAULT 0,
+        oea_checklist TINYINT(1) DEFAULT 0, drafts_available TINYINT(1) DEFAULT 0,
+        drafts_sent TINYINT(1) DEFAULT 0, cargo_departed TINYINT(1) DEFAULT 0,
+        pre_alert_sent TINYINT(1) DEFAULT 0, pod_available TINYINT(1) DEFAULT 0,
+        dn_available TINYINT(1) DEFAULT 0,
+        created_by VARCHAR(100), created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      const cols = ['cadastro_id','mode','master_number','hbl_number','bl_number',
+        'consignee_nome','consignee_cnpj','consignee_customer_number','consignee_expo',
+        'clerk','clerk_email','shipper_name','shipper_address','po_number','customer_order',
+        'green_light_date','etd','eta','port_origin','port_destination','port_loading','port_discharge',
+        'place_receipt','place_delivery','vessel_voyage','ec_merchant','pre_alert_date','pre_alert_comexpert',
+        'courier','free_time','d_term','deadline_draft_vgm','deadline_load',
+        'notify_party','delivery_agent','container_numbers','seal_numbers','marks_numbers',
+        'nature_of_goods','hs_code','gross_weight_kg','volume_cbm','pieces','packaging',
+        'freight_charges','freight_payment','service_type','total_prepaid','total_collect',
+        'num_original_bls','shipped_on_board_date','place_date_issue','issued_by','remarks_1','remarks_2',
+        'booking_confirmed','dep','eta_ata_confirmed','dta','dachser_trucking','accrual',
+        'oea_checklist','drafts_available','drafts_sent','cargo_departed','pre_alert_sent',
+        'pod_available','dn_available','created_by'];
+      const bools = ['booking_confirmed','dep','eta_ata_confirmed','dta','dachser_trucking','accrual',
+        'oea_checklist','drafts_available','drafts_sent','cargo_departed','pre_alert_sent','pod_available','dn_available'];
+      const vals = cols.map(c => bools.includes(c) ? (p[c]?1:0) : (p[c]??null));
+      await query(
+        `INSERT INTO ${DB}.t_cadastros_maritimo (${cols.join(',')}) VALUES (${cols.map(()=>'?').join(',')})`,
+        vals
+      );
+      res.json({ success: true, cadastro_id: p.cadastro_id });
+    } catch (e) { handleError(res, 'cadastro/maritimo', e); }
+  });
+
+  // ── SWAP MASTER CADASTRO AÉREO ──
+  app.post('/api/olimpo/cadastro/swap-master', async (req, res) => {
+    try {
+      const { new_mawb, hawbs } = req.body || {};
+      if (!new_mawb || !Array.isArray(hawbs) || hawbs.length === 0)
+        return res.status(400).json({ success: false, error: 'new_mawb e hawbs são obrigatórios' });
+      const ph = hawbs.map(() => '?').join(',');
+      const existing = await query(`SELECT hawb, mawb FROM ${DB}.t_master_dados WHERE hawb IN (${ph})`, hawbs);
+      const oldMawbs = {};
+      existing.forEach(r => { oldMawbs[r.hawb] = r.mawb; });
+      const found = existing.map(r => r.hawb);
+      const notFound = hawbs.filter(h => !found.includes(h));
+      if (found.length > 0)
+        await query(`UPDATE ${DB}.t_master_dados SET mawb = ? WHERE hawb IN (${found.map(()=>'?').join(',')})`, [new_mawb, ...found]);
+      res.json({ success: true, updated: found, not_found: notFound, updated_count: found.length, not_found_count: notFound.length, old_mawbs: oldMawbs });
+    } catch (e) { handleError(res, 'cadastro/swap-master', e); }
+  });
+
+  // ── SEA TRACKING — LISTAR MBLs ──
+  app.get('/api/sea/tracking', async (_req, res) => {
+    try {
+      const rows = await query(`
+        SELECT mbl_id, container, tipo_processo, consignee, shipping_line, origem, destino,
+               navio, vessel_imo, eta, last_event, last_check, container_status,
+               email_analista, email_cliente, active, updated_at
+        FROM ${DB}.t_sea_tracking_current
+        WHERE active = 1
+          AND NOT (UPPER(container_status) IN ('DELIVERED','DLV','GOD','EMPTY_RETURNED')
+               AND last_check < DATE_SUB(NOW(), INTERVAL 24 HOUR))
+        ORDER BY eta ASC LIMIT 2000
+      `);
+      const mblMap = new Map();
+      for (const row of rows) {
+        if (!mblMap.has(row.mbl_id)) {
+          mblMap.set(row.mbl_id, { ...row, container_count: 0 });
+        }
+        const m = mblMap.get(row.mbl_id);
+        const cnt = String(row.container || '').toUpperCase();
+        if (cnt && cnt !== 'PENDENTE' && cnt !== 'NAO_ENCONTRADO') m.container_count++;
+        if (row.container_status && !['DELIVERED','DLV','GOD','EMPTY_RETURNED'].includes(String(row.container_status).toUpperCase())) {
+          m.container_status = row.container_status;
+          m.last_event = row.last_event;
+        }
+      }
+      const data = Array.from(mblMap.values()).map(m => ({
+        mbl_id: m.mbl_id, tipo_processo: m.tipo_processo, consignee: m.consignee,
+        shipping_line: m.shipping_line, origem: m.origem, destino: m.destino,
+        navio: m.navio, vessel_imo: m.vessel_imo||null, eta: m.eta||null, etd: m.etd||null,
+        email_analista: m.email_analista||'', email_cliente: m.email_cliente||'',
+        container_count: m.container_count, container_status: m.container_status||null,
+        last_event: m.last_event||null, last_check: m.last_check||null, last_check_real: null,
+        updated_at: m.updated_at||null, is_critico: m.is_critico||0, is_eta_delayed: 0,
+        dias_atraso: 0, has_free_time: 0, tipo_carga: m.tipo_carga||'FCL',
+        coloader: m.coloader||null, transshipment_port: m.transshipment_port||null,
+        transshipment_vessel_from: null, transshipment_vessel_to: null, transshipment_date: null,
+        nome_analista: m.nome_analista||null, hbl: m.hbl||null, cliente: m.cliente||null,
+        eta_master: null, eta_api: null, latitude: null, longitude: null,
+        origem_code: null, destino_code: null,
+      }));
+      res.json({ success: true, data });
+    } catch (e) { handleError(res, 'sea/tracking', e); }
+  });
+
+  // ── SEA TRACKING — CONTAINERS DE UM MBL ──
+  app.get('/api/sea/tracking/containers', async (req, res) => {
+    try {
+      const { mbl_id } = req.query;
+      if (!mbl_id) return res.status(400).json({ success: false, error: 'mbl_id é obrigatório' });
+      const rows = await query(`
+        SELECT id, mbl_id, container, shipping_line, container_status, last_event, last_check,
+               eta, navio, vessel_imo, origem, destino, consignee
+        FROM ${DB}.t_sea_tracking_current
+        WHERE mbl_id = ? AND active = 1 ORDER BY id ASC
+      `, [mbl_id]);
+      res.json({ success: true, data: rows || [] });
+    } catch (e) { handleError(res, 'sea/tracking/containers', e); }
+  });
+
+  // ── SEA TRACKING — HISTÓRICO DE EVENTOS ──
+  app.post('/api/sea/tracking/events', async (req, res) => {
+    try {
+      const { mbl_id, limit: lim = 200 } = req.body || {};
+      if (!mbl_id) return res.json({ success: true, data: [] });
+      const rows = await query(`
+        SELECT id, mbl_id, container, event_datetime, event_description, event_location, voyage
+        FROM ${DB}.t_sea_tracking_history
+        WHERE mbl_id = ? ORDER BY event_datetime DESC LIMIT ?
+      `, [mbl_id, Math.min(Number(lim)||200, 500)]);
+      res.json({ success: true, data: rows || [] });
+    } catch (e) { handleError(res, 'sea/tracking/events', e); }
+  });
+
+  // ── SEA TRACKING — RESOLVE PORT CODES (stub) ──
+  app.post('/api/sea/tracking/resolve-ports', async (_req, res) => {
+    res.json({ success: true, data: {} });
+  });
+
+  // ── SEA TRACKING — CLEANUP ORPHAN PENDENTES ──
+  app.get('/api/sea/tracking/cleanup-orphans', async (_req, res) => {
+    try {
+      const [result] = await getPoolFor('olimpo').query(`
+        DELETE ts FROM ${DB}.t_sea_tracking_current ts
+        WHERE UPPER(ts.container) = 'PENDENTE'
+          AND EXISTS (
+            SELECT 1 FROM (SELECT mbl_id FROM ${DB}.t_sea_tracking_current
+              WHERE mbl_id = ts.mbl_id AND active = 1
+                AND container IS NOT NULL AND UPPER(container) NOT IN ('PENDENTE','NAO_ENCONTRADO')
+            ) sub
+          )
+      `);
+      res.json({ success: true, deleted: result.affectedRows || 0 });
+    } catch (e) { handleError(res, 'sea/tracking/cleanup-orphans', e); }
+  });
+
+  // ── SEA TRACKING — DEACTIVATE INVALID MBLs ──
+  app.get('/api/sea/tracking/deactivate-invalid', async (_req, res) => {
+    try {
+      const [result] = await getPoolFor('olimpo').query(
+        `UPDATE ${DB}.t_sea_tracking_current SET active = 0 WHERE active = 1 AND mbl_id REGEXP '^[0-9]+$'`
+      );
+      res.json({ success: true, deactivated: result.affectedRows || 0 });
+    } catch (e) { handleError(res, 'sea/tracking/deactivate-invalid', e); }
+  });
+
+  // ── SEA TRACKING — RESET NAO_ENCONTRADO ──
+  app.get('/api/sea/tracking/reset-nao-encontrado', async (req, res) => {
+    try {
+      const { mbl_id } = req.query;
+      let sql = `UPDATE ${DB}.t_sea_tracking_current SET container_status = 'PENDENTE' WHERE UPPER(container) = 'NAO_ENCONTRADO' AND active = 1`;
+      const params = [];
+      if (mbl_id) { sql += ' AND mbl_id = ?'; params.push(mbl_id); }
+      const [result] = await getPoolFor('olimpo').query(sql, params);
+      res.json({ success: true, reset: result.affectedRows || 0 });
+    } catch (e) { handleError(res, 'sea/tracking/reset-nao-encontrado', e); }
+  });
+
+  // ── SEA TRACKING — SYNC FROM t_master_dados ──
+  app.get('/api/sea/tracking/sync', async (_req, res) => {
+    try {
+      const newMbls = await query(`
+        SELECT DISTINCT TRIM(mawb) AS mbl_id, tipo_processo, cliente, consignee, nome_analista, email_analista
+        FROM ${DB}.t_master_dados
+        WHERE tipo_processo IN ('SI','SE','SEA IMPORT','SEA EXPORT')
+          AND mawb IS NOT NULL AND TRIM(mawb) != ''
+          AND data_insert >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+      `);
+      let inserted = 0;
+      for (const row of newMbls) {
+        try {
+          await query(`
+            INSERT IGNORE INTO ${DB}.t_sea_tracking_current
+              (mbl_id, tipo_processo, consignee, container, email_analista, nome_analista, cliente, active, container_status, last_check)
+            VALUES (?, ?, ?, 'PENDENTE', ?, ?, ?, 1, 'PENDENTE', NOW())
+          `, [row.mbl_id, row.tipo_processo||null, row.consignee||row.cliente||null,
+              row.email_analista||null, row.nome_analista||null, row.cliente||null]);
+          inserted++;
+        } catch (_) {}
+      }
+      res.json({ success: true, inserted, updated: 0 });
+    } catch (e) { handleError(res, 'sea/tracking/sync', e); }
+  });
+
+  // ── SEA TRACKING — BACKGROUND OPS STUBS ──
+  app.get('/api/sea/tracking/enrich', async (_req, res) => {
+    res.json({ success: true, enriched: 0, errors: 0, remaining: 0 });
+  });
+  app.get('/api/sea/tracking/refresh', async (_req, res) => {
+    res.json({ success: true, processed: 0, success: 0, errors: 0, remaining: 0 });
+  });
+  app.get('/api/sea/tracking/populate-imos', async (_req, res) => {
+    res.json({ success: true, remaining: 0, vesselsProcessed: 0 });
+  });
+  app.get('/api/sea/tracking/refresh-vessel-imos', async (_req, res) => {
+    res.json({ success: true, updated: 0, total: 0, unchanged: 0, errors: 0, changes: [] });
+  });
+  app.post('/api/sea/tracking/hapag-discover', async (_req, res) => {
+    res.json({ success: true, discovered: 0, failed: 0, total: 0, rate_limited: false });
+  });
+
+  // ── SEA TRACKING — DELETE MBL ──
+  app.post('/api/sea/tracking/delete', async (req, res) => {
+    try {
+      const { mbl_id } = req.body || {};
+      if (!mbl_id) return res.status(400).json({ success: false, error: 'mbl_id é obrigatório' });
+      await query(`UPDATE ${DB}.t_sea_tracking_current SET active = 0 WHERE mbl_id = ?`, [mbl_id]);
+      res.json({ success: true });
+    } catch (e) { handleError(res, 'sea/tracking/delete', e); }
+  });
+
+  // ── SEA TRACKING — ADD LCL CONTAINER ──
+  app.post('/api/sea/tracking/add-lcl', async (req, res) => {
+    try {
+      const { mbl_id, container, shipping_line, consignee, eta, transbordo } = req.body || {};
+      if (!mbl_id || !container || !shipping_line)
+        return res.status(400).json({ success: false, error: 'mbl_id, container e shipping_line são obrigatórios' });
+      await query(`
+        INSERT INTO ${DB}.t_sea_tracking_current
+          (mbl_id, container, shipping_line, consignee, eta, transshipment_port, tipo_carga, coloader, tipo_processo, container_status, active, last_check)
+        VALUES (?, ?, ?, ?, ?, ?, 'LCL', ?, 'SEA IMPORT', 'PENDENTE', 1, NOW())
+        ON DUPLICATE KEY UPDATE consignee=VALUES(consignee), eta=VALUES(eta), transshipment_port=VALUES(transshipment_port), active=1, last_check=NOW()
+      `, [mbl_id, container, shipping_line, consignee||null, eta||null, transbordo||null, shipping_line]);
+      res.json({ success: true });
+    } catch (e) { handleError(res, 'sea/tracking/add-lcl', e); }
+  });
 }

@@ -14,14 +14,10 @@ const SupervisorConfirmacao = () => {
   const [submitting, setSubmitting] = useState(false);
 
   const callAction = useCallback(async (method: "GET" | "POST", body?: Record<string, any>) => {
-    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/supervisor-email-action?token=${encodeURIComponent(token)}&action=${encodeURIComponent(action)}`;
+    const url = `/api/fin/vouchers/supervisor-action?token=${encodeURIComponent(token)}&action=${encodeURIComponent(action)}`;
     const res = await fetch(url, {
       method,
-      headers: {
-        "Content-Type": "application/json",
-        "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-      },
+      headers: { "Content-Type": "application/json" },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
     return res.json();

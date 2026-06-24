@@ -8,7 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Search, Save, Loader2, Package, AlertCircle, Ship, Fingerprint, FileText, Container, Clock, CheckCircle, AlertTriangle } from "lucide-react";
 import { BookingResultCard } from "./BookingResultCard";
@@ -70,11 +69,14 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
     const fnName = getEdgeFunctionName(resolvedCarrier);
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke(fnName, {
-        body: { searchType, searchValue: searchValue.trim() }
+      const fnRes = await fetch('/api/sea/draft/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ carrier: resolvedCarrier, searchType, searchValue: searchValue.trim() }),
       });
+      const data = await fnRes.json();
 
-      if (fnError) throw fnError;
+      if (!fnRes.ok) throw new Error(data?.error || `HTTP ${fnRes.status}`);
 
       if (data?.success) {
         setResult(data as TrackingApiResponse);
@@ -109,8 +111,11 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
     setIsSaving(true);
 
     try {
-      const { error: saveError } = await supabase.functions.invoke('draft-save-tracking', {
-        body: {
+      const saveRes = await fetch('/api/sea/draft/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          carrier: detectedCarrier || 'hapag',
           trackingData: {
             mbl_id: result.bookingInfo.transportDocumentReference,
             booking: result.bookingInfo.bookingNumber,
@@ -123,11 +128,10 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
             status_armador: result.bookingInfo.documentStatus,
             transaction_id: result.apiMetadata?.transactionId,
             carrier: detectedCarrier?.toUpperCase() || 'HAPAG',
-          }
-        }
+          },
+        }),
       });
-
-      if (saveError) throw saveError;
+      if (!saveRes.ok) throw new Error(await saveRes.text());
 
       toast.success('Dados salvos no MariaDB');
       onSave?.();

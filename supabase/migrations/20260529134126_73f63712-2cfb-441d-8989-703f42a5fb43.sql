@@ -1,1 +1,0 @@
-SELECT cron.unschedule('sea-tracking-cron-mon-wed-02utc');

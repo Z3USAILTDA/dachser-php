@@ -10,7 +10,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertCircle, FileText, Wand2, Search, Info, Trash2, CalendarCheck,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client"; // kept: preview_voucher_batch_import + create_voucher_batch_import (buildPreviewItems helpers)
 import { useToast } from "@/hooks/use-toast";
 import { parseBatchSpreadsheet } from "@/utils/batchVoucherImport";
 import { BatchImportPreviewTable, type StatusFilter } from "./BatchImportPreviewTable";
@@ -172,11 +171,14 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
       const rows = await parseBatchSpreadsheet(file);
       setRawRows(rows);
       setFileName(file.name);
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "preview_voucher_batch_import", userId, rows },
+      const _previewRes = await fetch("/api/fin/vouchers/batch/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, rows }),
       });
-      if (error || !data?.success) {
-        toast({ title: "Falha ao validar planilha", description: data?.error || error?.message, variant: "destructive" });
+      const data = await _previewRes.json();
+      if (!data?.success) {
+        toast({ title: "Falha ao validar planilha", description: data?.error, variant: "destructive" });
         return;
       }
       const it = data.items || [];
@@ -257,18 +259,14 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
 
     setBusy(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "create_voucher_batch_import",
-          userId,
-          rows: rawRows,
-          items,
-          file_name: fileName,
-          pre_lancamento: preLancamento,
-        },
+      const _createRes = await fetch("/api/fin/vouchers/batch/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, rows: rawRows, items, file_name: fileName, pre_lancamento: preLancamento }),
       });
-      if (error || !data?.success) {
-        toast({ title: "Falha ao criar lote", description: data?.error || error?.message, variant: "destructive" });
+      const data = await _createRes.json();
+      if (!data?.success) {
+        toast({ title: "Falha ao criar lote", description: data?.error, variant: "destructive" });
         return;
       }
       const skipped = Number(data.skipped_existing || 0);

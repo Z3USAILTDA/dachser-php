@@ -192,20 +192,12 @@ export const maritimoApi = {
    */
   async uploadBaseFile({ file, analysisType }: UploadBaseFileParams): Promise<{ success: boolean; itemId?: string; item?: MaritimoItem; error?: string }> {
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('analysisType', analysisType);
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sea-upload-base-file`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: formData
-        }
-      );
+      const base64 = await fileToBase64(file);
+      const response = await fetch('/api/sea/upload-base-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_name: file.name, file_base64: base64, mime_type: file.type, analysisType }),
+      });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -356,16 +348,15 @@ export const maritimoApi = {
    */
   async extractAttachments(formData: FormData): Promise<ExtractAttachmentsResponse> {
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sea-extract-attachments`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: formData
-        }
-      );
+      const file = formData.get('file') as File | null;
+      if (!file) return { success: false, extracted: [], source: '' };
+
+      const base64 = await fileToBase64(file);
+      const response = await fetch('/api/sea/extract-attachments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_name: file.name, file_base64: base64 }),
+      });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));

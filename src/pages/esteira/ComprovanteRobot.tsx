@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Bot, Upload, CheckCircle2, XCircle, AlertCircle, FileText, Search, Link2, ShieldAlert } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -65,15 +64,11 @@ export default function ComprovanteRobot() {
 
   const loadAvailableVouchers = async (search?: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "get_vouchers_for_comprovante",
-          search: search || undefined,
-          limit: search ? 100 : 500,
-        },
-      });
-
-      if (error) throw error;
+      const _limit = search ? 100 : 500;
+      const _qs = search ? `search=${encodeURIComponent(search)}&limit=${_limit}` : `limit=${_limit}`;
+      const _vRes = await fetch(`/api/fin/vouchers/comprovante?${_qs}`);
+      const data = await _vRes.json();
+      if (!_vRes.ok) throw new Error(data?.error || "Erro ao carregar vouchers");
       setAvailableVouchers(data?.vouchers || []);
     } catch (err) {
       console.error("Error loading vouchers:", err);
@@ -215,17 +210,18 @@ export default function ComprovanteRobot() {
           .slice(0, MAX_CANDIDATES_PER_KIND);
 
         // Single round-trip: tries all candidates server-side in one MariaDB connection
-        const { data: matchRes, error: matchErr } = await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "find_voucher_multi",
+        const _mRes = await fetch("/api/fin/vouchers/find-multi", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
             spoPrimary: extractedData?.numeroSPO || undefined,
             ndPrimary: extractedData?.numeroND || undefined,
-            // linhaDigitavel propositalmente NÃO enviada — robô não casa por boleto.
             ndCandidates,
             spoCandidates,
-          },
+          }),
         });
-        if (matchErr) throw matchErr;
+        const matchRes = await _mRes.json();
+        if (!_mRes.ok) throw new Error(matchRes?.error || "Erro ao identificar voucher");
 
         const foundVoucher: VoucherMatch | null = matchRes?.voucher || null;
         const matchedCandidate: string | undefined = matchRes?.matchedCandidate;
@@ -329,7 +325,8 @@ export default function ComprovanteRobot() {
     type UploadPayload = {
       voucher_id: string;
       file_name: string;
-      file_url: string;
+      file_base64: string;
+      mime_type: string;
       file_size: number;
       user_id: string;
       user_name: string;
@@ -343,19 +340,7 @@ export default function ComprovanteRobot() {
       );
 
       try {
-        const fileExt = fileMatch.file.name.split(".").pop();
-        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-        const filePath = `comprovantes/${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("voucher-anexos")
-          .upload(filePath, fileMatch.file);
-
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from("voucher-anexos")
-          .getPublicUrl(filePath);
+        const file_base64 = await fileToBase64(fileMatch.file);
 
         setFiles((prev) =>
           prev.map((f) =>
@@ -366,7 +351,8 @@ export default function ComprovanteRobot() {
         return {
           voucher_id: fileMatch.voucherId!,
           file_name: fileMatch.file.name,
-          file_url: publicUrl,
+          file_base64,
+          mime_type: fileMatch.file.type || "application/octet-stream",
           file_size: fileMatch.file.size,
           user_id: user?.id?.toString() || "",
           user_name: (user as any)?.username || (user as any)?.email || "Sistema Robô",
@@ -404,14 +390,13 @@ export default function ComprovanteRobot() {
     // Now attach all comprovantes in batch
     if (comprovantesToUpload.length > 0) {
       try {
-        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "attach_comprovante_batch",
-            comprovantes: comprovantesToUpload,
-          },
+        const _aRes = await fetch("/api/fin/vouchers/comprovantes/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ comprovantes: comprovantesToUpload }),
         });
-
-        if (error) throw error;
+        const data = await _aRes.json();
+        if (!_aRes.ok) throw new Error(data?.error || "Erro ao anexar comprovantes");
 
         const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
         toast({
