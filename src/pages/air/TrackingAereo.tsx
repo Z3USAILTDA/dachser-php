@@ -9,7 +9,7 @@ import {
   resolveMasterDiscrepancy,
   reportTrackingFailures,
 } from "@/services/airTrackingAereoService";
-// import { DatabaseStatsPanel, DbStats } from "@/components/DatabaseStatsPanel";
+// import { DatabaseStatsPanel, DbStats } from "@/components/air/DatabaseStatsPanel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Search,
@@ -37,7 +37,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import DashboardCards, { CardFilterType } from "@/components/DashboardCards";
+import DashboardCards, { CardFilterType } from "@/components/air/DashboardCards";
 import dachserBg from "@/assets/dachser-background.jpg";
 import { TablePagination } from "@/components/layout/TablePagination";
 

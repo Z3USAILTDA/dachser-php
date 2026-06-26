@@ -1,5 +1,5 @@
 import { ChbAnalysisResult } from '@/types/chb';
-import { stepTitles } from '@/data/chbMocks';
+import { stepTitles } from '@/data/chbConstants';
 import { Play, CheckCircle, Loader2, RefreshCw, FileText, Copy, AlertTriangle, XCircle, Ship, Plane, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { ChbComparisonGrid } from './ChbComparisonGrid';

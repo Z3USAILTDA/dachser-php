@@ -10,10 +10,75 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Search, Save, Loader2, Package, AlertCircle, Ship, Fingerprint, FileText, Container, Clock, CheckCircle, AlertTriangle } from "lucide-react";
-import { BookingResultCard } from "./BookingResultCard";
-import { ContainersTable } from "./ContainersTable";
-import { EventsTable } from "./EventsTable";
 import { TrackingApiResponse, ContainerInfo, HapagEvent } from "@/types/draft";
+
+const BookingResultCard = ({ bookingInfo, apiMetadata }: { bookingInfo: any; apiMetadata?: any }) => (
+  <div className="rounded-2xl p-5 bg-white/5 border border-white/10">
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+      {([
+        ['Documento', bookingInfo?.transportDocumentReference],
+        ['Booking',   bookingInfo?.bookingNumber],
+        ['Status',    bookingInfo?.documentStatus],
+        ['Navio',     bookingInfo?.vesselName],
+        ['Viagem',    bookingInfo?.voyageNumber],
+        ['Origem',    bookingInfo?.originLocation],
+        ['Destino',   bookingInfo?.destinationLocation],
+        ['ETD',       bookingInfo?.etd],
+        ['ETA',       bookingInfo?.eta],
+      ] as [string, string | undefined][]).filter(([, v]) => v).map(([label, value]) => (
+        <div key={label}>
+          <div className="text-xs text-[#888]">{label}</div>
+          <div className="text-sm font-medium text-white">{value}</div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const ContainersTable = ({ containers }: { containers: any[] }) => (
+  <div className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
+    <div className="p-3 border-b border-white/10 text-[0.8rem] font-semibold text-white">Containers ({containers.length})</div>
+    <div className="overflow-x-auto">
+      <table className="w-full text-[0.82rem]">
+        <thead><tr className="border-b border-white/10">
+          {['Referência','ISO','Peso','Tipo'].map(h => <th key={h} className="px-3 py-2 text-left text-[#888] font-medium">{h}</th>)}
+        </tr></thead>
+        <tbody>
+          {containers.map((c, i) => (
+            <tr key={i} className="border-b border-white/5 hover:bg-white/5">
+              <td className="px-3 py-2 font-mono text-primary">{c.equipmentReference || '-'}</td>
+              <td className="px-3 py-2 text-[#aaa]">{c.ISOEquipmentCode || '-'}</td>
+              <td className="px-3 py-2 text-white">{c.cargoGrossWeight || '-'}</td>
+              <td className="px-3 py-2 text-[#aaa]">{c.equipmentType || '-'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+);
+
+const EventsTable = ({ events }: { events: any[] }) => (
+  <div className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
+    <div className="p-3 border-b border-white/10 text-[0.8rem] font-semibold text-white">Eventos ({events.length})</div>
+    <div className="overflow-x-auto">
+      <table className="w-full text-[0.82rem]">
+        <thead><tr className="border-b border-white/10">
+          {['Data','Evento','Local'].map(h => <th key={h} className="px-3 py-2 text-left text-[#888] font-medium">{h}</th>)}
+        </tr></thead>
+        <tbody>
+          {events.map((e, i) => (
+            <tr key={i} className="border-b border-white/5 hover:bg-white/5">
+              <td className="px-3 py-2 text-[#aaa] whitespace-nowrap">{e.eventDateTime || e.date || '-'}</td>
+              <td className="px-3 py-2 text-white">{e.eventDescription || e.description || '-'}</td>
+              <td className="px-3 py-2 text-[#aaa]">{e.location || e.eventLocation || '-'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+);
 
 interface HapagTrackerPanelProps {
   onSave?: () => void;

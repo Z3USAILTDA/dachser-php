@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { ChbDocument } from '@/types/chb';
-import { stepTitles } from '@/data/chbMocks';
+import { stepTitles } from '@/data/chbConstants';
 import { Upload, FileText, Download, X, Play, Loader2, Trash2, CheckCircle2 } from 'lucide-react';
 
 interface ChbDocumentsPanelProps {
