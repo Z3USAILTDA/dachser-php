@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import { CombinedMBLData } from "@/types/draft";
-import { TrackingStatusBadge } from "./TrackingStatusBadge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -38,10 +37,53 @@ import {
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { DraftEventTimeline } from "./DraftEventTimeline";
-import { BookingInfoCard } from "./BookingInfoCard";
 import { TablePagination } from "@/components/layout/TablePagination";
 import * as XLSX from 'xlsx';
+
+const TrackingStatusBadge = ({ status }: { status: string; showIcon?: boolean }) => {
+  const map: Record<string, string> = {
+    'Completed': 'text-emerald-400 bg-emerald-400/10',
+    'In Progress': 'text-amber-400 bg-amber-400/10',
+    'Pending': 'text-sky-400 bg-sky-400/10',
+    'Nunca Consultado': 'text-zinc-400 bg-zinc-400/10',
+    'Error': 'text-rose-400 bg-rose-400/10',
+  };
+  return <span className={`px-2 py-0.5 rounded text-[0.75rem] font-medium ${map[status] ?? 'text-zinc-400 bg-zinc-400/10'}`}>{status}</span>;
+};
+
+const DraftEventTimeline = ({ events }: { events: any[] }) => (
+  <div className="space-y-3">
+    {events.map((e, i) => (
+      <div key={i} className="flex gap-3 items-start">
+        <div className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />
+        <div>
+          <p className="text-sm font-medium text-white">{e.eventDescription || e.description || e.type || '-'}</p>
+          <p className="text-xs text-muted-foreground">{e.eventDateTime || e.date || '-'} · {e.location || e.eventLocation || '-'}</p>
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const BookingInfoCard = ({ bookingInfo, trackingData }: { bookingInfo: any; trackingData: any }) => (
+  <div className="grid grid-cols-2 gap-3 p-4 rounded-lg bg-white/5 border border-white/10">
+    {([
+      ['Booking',  bookingInfo?.bookingNumber  || trackingData?.booking],
+      ['Navio',    bookingInfo?.vesselName      || trackingData?.navio],
+      ['Viagem',   bookingInfo?.voyageNumber    || trackingData?.voyage],
+      ['Origem',   bookingInfo?.originLocation  || trackingData?.origem],
+      ['Destino',  bookingInfo?.destinationLocation || trackingData?.destino],
+      ['ETD',      bookingInfo?.etd             || trackingData?.etd],
+      ['ETA',      bookingInfo?.eta             || trackingData?.eta],
+      ['Status',   bookingInfo?.documentStatus],
+    ] as [string, string | undefined][]).filter(([, v]) => v).map(([label, value]) => (
+      <div key={label}>
+        <div className="text-xs text-muted-foreground">{label}</div>
+        <div className="text-sm font-medium text-white">{value}</div>
+      </div>
+    ))}
+  </div>
+);
 
 interface DraftDataGridProps {
   data: CombinedMBLData[];

@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
-import { FORNECEDORES_SEM_FISCAL } from "@/data/fornecedoresSemFiscal";
 
 interface FornecedorRow {
   id: number;
@@ -58,25 +57,15 @@ export const FornecedoresSemFiscalDialog = ({ trigger }: FornecedoresSemFiscalDi
       if (data?.success && Array.isArray(data.data)) {
         setRows(data.data);
       } else {
-        // Fallback: usar lista hardcode caso a tabela ainda não tenha sido provisionada
-        setRows(
-          FORNECEDORES_SEM_FISCAL.map((f, idx) => ({
-            id: -(idx + 1),
-            cnpj: f.cnpj,
-            nome: f.nome,
-          })),
-        );
+        throw new Error(data?.error || 'Resposta inesperada da API');
       }
     } catch (err: any) {
       console.error("Erro ao carregar fornecedores sem fiscal:", err);
-      // Fallback silencioso
-      setRows(
-        FORNECEDORES_SEM_FISCAL.map((f, idx) => ({
-          id: -(idx + 1),
-          cnpj: f.cnpj,
-          nome: f.nome,
-        })),
-      );
+      toast({
+        title: "Erro ao carregar lista",
+        description: err?.message || "Não foi possível buscar os fornecedores.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -135,14 +124,6 @@ export const FornecedoresSemFiscalDialog = ({ trigger }: FornecedoresSemFiscalDi
   };
 
   const handleRemove = async (id: number) => {
-    if (id < 0) {
-      toast({
-        title: "Item somente leitura",
-        description: "Lista de fallback. Não é possível remover.",
-        variant: "destructive",
-      });
-      return;
-    }
     try {
       const resp = await fetch(`/api/fin/fornecedores-sem-fiscal/${id}`, { method: 'DELETE' });
       const data = await resp.json().catch(() => ({}));
@@ -261,7 +242,6 @@ export const FornecedoresSemFiscalDialog = ({ trigger }: FornecedoresSemFiscalDi
                           className="h-7 w-7 text-muted-foreground hover:text-destructive"
                           onClick={() => handleRemove(f.id)}
                           title="Remover"
-                          disabled={f.id < 0}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>

@@ -63,9 +63,9 @@ export default function CCTDashboard() {
     refetch,
     isRefetching,
     error
-  } = useProcessosCCT({ enabled: isAdmin });
-  
-  const { data: profiles = [] } = useProfiles({ enabled: isAdmin });
+  } = useProcessosCCT();
+
+  const { data: profiles = [] } = useProfiles();
   const { data: excecoes = [] } = useExcecoes();
 
   

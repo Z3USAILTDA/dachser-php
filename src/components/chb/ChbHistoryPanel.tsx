@@ -1,5 +1,5 @@
 import { ChbApprovedHistory } from '@/types/chb';
-import { stepTitles } from '@/data/chbMocks';
+import { stepTitles } from '@/data/chbConstants';
 import { Clock, Copy, ClipboardList } from 'lucide-react';
 import { toast } from 'sonner';
 import { copyHtmlAsText } from '@/utils/clipboard';
