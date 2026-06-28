@@ -54,7 +54,16 @@
       "Bash(node --check server/index.js)",
       "WebSearch",
       "WebFetch(domain:ai.google.dev)",
-      "WebFetch(domain:developers.openai.com)"
+      "WebFetch(domain:developers.openai.com)",
+      "Bash(powershell -Command \"Get-ChildItem -Path . -Depth 2 | Select-Object -Property FullName | ConvertTo-Csv -NoTypeInformation | Out-String\")",
+      "Bash(grep -rh \"api\\(Get|Post|Patch|Delete|Url\\)\\\\\\(['\\\\\"]\\\\/api\" src --include=\"*.ts\" --include=\"*.tsx\")",
+      "Bash(grep -oP \"\\\\/api\\\\/[^'\\\\\"]*\")",
+      "Bash(grep \"=\\\\\"\\\\\"$\" .env)",
+      "Bash(cat)",
+      "Read(//tmp/**)",
+      "Bash(node -e \"const pkg = require\\('./package.json'\\); const deps = {...pkg.dependencies, ...pkg.devDependencies}; console.log\\('Total deps:', Object.keys\\(deps\\).length\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"require\\('./server/routes/fin.js'\\)\")"
     ],
     "additionalDirectories": [
       "C:\\draft_track_hapag",
