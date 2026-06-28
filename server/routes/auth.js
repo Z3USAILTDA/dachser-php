@@ -104,7 +104,7 @@ export function registerAuthRoutes(app, { resend }) {
         try {
           const u = username.trim();
           const logoLight = 'https://i.ibb.co/TgXzCqz/logo-preto.png';
-          const logoDark  = 'https://i.ibb.co/sJkY7y5/logo-branco.png';
+          const logoDark  = process.env.EMAIL_LOGO_URL || 'https://i.ibb.co/sJkY7y5/logo-branco.png';
           const accessUrl = 'https://dachser.z3us.app';
 
           const htmlBody = `<!doctype html>

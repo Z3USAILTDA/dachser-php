@@ -1,18 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Ship, Package, AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { Loader2, Ship, Package, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { 
-  getAllShippingLines, 
-  detectCarrierFromMbl, 
-  getTrackableCarriers 
-} from "@/lib/shippingLineMapping";
 
 interface ImportMblDialogProps {
   open: boolean;
@@ -20,295 +11,206 @@ interface ImportMblDialogProps {
   onSuccess?: () => void;
 }
 
-// Usar mapeamento centralizado - apenas armadores com suporte a API
-const CARRIERS = getTrackableCarriers()
-  .filter(carrier => carrier.code !== 'UNKNOWN')
-  .map(carrier => ({
-    value: carrier.code,
-    label: carrier.name.replace(' - ', ' ').split(' ')[0], // Nome curto
-    fullName: carrier.name,
-  }))
-  .sort((a, b) => a.label.localeCompare(b.label));
-
-interface ImportResult {
+interface PreviewItem {
+  container: string;
   mbl: string;
-  success: boolean;
-  containers: number;
-  error?: string;
-  suggestion?: string;
+  shipping_line: string | null;
+  consignee: string | null;
+  eta: string | null;
+  container_status: string | null;
+  last_event: string | null;
 }
 
+type Step = "preview" | "importing" | "done";
+
 export function ImportMblDialog({ open, onOpenChange, onSuccess }: ImportMblDialogProps) {
-  const [mblsText, setMblsText] = useState("");
-  const [carrier, setCarrier] = useState("");
-  const [cliente, setCliente] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [results, setResults] = useState<ImportResult[]>([]);
-  const [step, setStep] = useState<"input" | "results">("input");
+  const [step, setStep] = useState<Step>("preview");
+  const [isFetching, setIsFetching] = useState(false);
+  const [previewItems, setPreviewItems] = useState<PreviewItem[]>([]);
+  const [importResult, setImportResult] = useState<{ created: number; errors: number; error_details: string[] } | null>(null);
+
+  const fetchPreview = async () => {
+    setIsFetching(true);
+    setPreviewItems([]);
+    try {
+      const res = await fetch('/api/demurrage/import-from-tracking', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preview: true }),
+      });
+      if (!res.ok) throw new Error(`Erro ${res.status}: ${await res.text()}`);
+      const data = await res.json();
+      setPreviewItems(data.items || []);
+    } catch (e) {
+      toast.error("Erro ao buscar containers do tracking");
+      console.error(e);
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
+  useEffect(() => {
+    if (open) {
+      setStep("preview");
+      setImportResult(null);
+      fetchPreview();
+    }
+  }, [open]);
+
+  const handleImport = async () => {
+    setStep("importing");
+    try {
+      const res = await fetch('/api/demurrage/import-from-tracking', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preview: false }),
+      });
+      if (!res.ok) throw new Error(`Erro ${res.status}: ${await res.text()}`);
+      const data = await res.json();
+      setImportResult(data.results);
+      setStep("done");
+      if (data.results.created > 0) {
+        toast.success(`${data.results.created} container(s) importados com sucesso`);
+        onSuccess?.();
+      } else {
+        toast.warning("Nenhum container foi importado");
+      }
+    } catch (e) {
+      toast.error("Erro ao importar containers");
+      console.error(e);
+      setStep("preview");
+    }
+  };
 
   const handleClose = () => {
-    setMblsText("");
-    setCarrier("");
-    setCliente("");
-    setResults([]);
-    setStep("input");
     onOpenChange(false);
   };
 
-  const handleImport = async () => {
-    if (!mblsText.trim() || !carrier) {
-      toast.error("Informe pelo menos um MBL e o armador");
-      return;
-    }
-
-    const mbls = mblsText
-      .split(/[\n,;]+/)
-      .map(m => m.trim())
-      .filter(m => m.length > 0);
-
-    if (mbls.length === 0) {
-      toast.error("Nenhum MBL válido encontrado");
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const apiRes = await fetch('/api/demurrage/import-jsoncargo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mbls, shipping_line: carrier, organization_id: 'default', cliente: cliente || undefined }),
-      });
-      if (!apiRes.ok) throw new Error(`Erro ${apiRes.status}: ${await apiRes.text()}`);
-      const data = await apiRes.json();
-
-      const importResults: ImportResult[] = [];
-
-      // Process successful shipments
-      if (data.shipments) {
-        for (const shipment of data.shipments) {
-          importResults.push({
-            mbl: shipment.mbl,
-            success: true,
-            containers: shipment.containers?.length || 0,
-          });
-        }
-      }
-
-      // Process errors
-      if (data.errors) {
-        for (const err of data.errors) {
-          importResults.push({
-            mbl: err.mbl,
-            success: false,
-            containers: 0,
-            error: err.error,
-            suggestion: err.suggestion,
-          });
-        }
-      }
-
-      setResults(importResults);
-      setStep("results");
-
-      const successCount = importResults.filter(r => r.success).length;
-      const totalContainers = importResults.reduce((sum, r) => sum + r.containers, 0);
-
-      if (successCount > 0) {
-        toast.success(`${successCount} MBL(s) importados com ${totalContainers} containers`);
-        onSuccess?.();
-      } else {
-        toast.warning("Nenhum MBL foi importado com sucesso");
-      }
-    } catch (error) {
-      console.error("Import error:", error);
-      toast.error("Erro ao importar MBLs");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Usar mapeamento centralizado para detectar armador
-  const detectedCarrier = (mbl: string): string | null => {
-    const info = detectCarrierFromMbl(mbl);
-    if (info.code === 'UNKNOWN') return null;
-    // Retorna nome curto para exibição no badge
-    return info.name.split(' - ')[0].split(' ')[0];
-  };
-
-  const mblsPreview = mblsText
-    .split(/[\n,;]+/)
-    .map(m => m.trim())
-    .filter(m => m.length > 0);
-
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px] bg-[#0a0a0a] border-[rgba(255,255,255,0.1)]">
+      <DialogContent className="sm:max-w-[640px] bg-[#0a0a0a] border-[rgba(255,255,255,0.1)]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-[#ffc800]">
             <Ship className="h-5 w-5" />
-            Importar Containers por MBL
+            Importar do Tracking
           </DialogTitle>
           <DialogDescription>
-            Busque containers automaticamente através dos MBLs na API JSONCargo
+            Containers presentes na tela de tracking com armador elegível ainda não cadastrados em demurrage.
           </DialogDescription>
         </DialogHeader>
 
-        {step === "input" ? (
+        {/* Preview / importing step */}
+        {(step === "preview" || step === "importing") && (
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="carrier">Armador *</Label>
-              <Select value={carrier} onValueChange={setCarrier}>
-                <SelectTrigger className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
-                  <SelectValue placeholder="Selecione o armador" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CARRIERS.map(c => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="cliente">Cliente (opcional)</Label>
-              <Input
-                id="cliente"
-                value={cliente}
-                onChange={e => setCliente(e.target.value)}
-                placeholder="Nome do cliente para associar"
-                className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="mbls">MBLs (um por linha ou separados por vírgula)</Label>
-              <Textarea
-                id="mbls"
-                value={mblsText}
-                onChange={e => setMblsText(e.target.value)}
-                placeholder="MEDU1234567890&#10;HLCU9876543210&#10;MAEU5555555555"
-                rows={6}
-                className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] font-mono text-sm"
-              />
-            </div>
-
-            {mblsPreview.length > 0 && (
-              <div className="p-3 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.1)]">
-                <div className="flex items-center gap-2 mb-2">
-                  <Info className="h-4 w-4 text-blue-400" />
-                  <span className="text-sm text-muted-foreground">
-                    {mblsPreview.length} MBL(s) detectados
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {mblsPreview.slice(0, 10).map((mbl, i) => {
-                    const detected = detectedCarrier(mbl);
-                    return (
-                      <Badge key={i} variant="outline" className="font-mono text-xs">
-                        {mbl}
-                        {detected && (
-                          <span className="ml-1 text-[10px] text-muted-foreground">
-                            ({detected})
-                          </span>
-                        )}
-                      </Badge>
-                    );
-                  })}
-                  {mblsPreview.length > 10 && (
-                    <Badge variant="secondary">+{mblsPreview.length - 10}</Badge>
-                  )}
-                </div>
+            {isFetching ? (
+              <div className="flex items-center justify-center py-12 text-muted-foreground gap-3">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span>Buscando containers no tracking…</span>
               </div>
+            ) : previewItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
+                <CheckCircle2 className="h-8 w-8 text-green-500" />
+                <p className="text-sm">Nenhum container novo encontrado no tracking.</p>
+                <p className="text-xs">Todos os processos elegíveis já estão em demurrage.</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Package className="h-4 w-4 text-[#ffc800]" />
+                    <span className="text-sm font-medium">
+                      {previewItems.length} container{previewItems.length !== 1 ? 's' : ''} para importar
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={fetchPreview}
+                    disabled={isFetching || step === "importing"}
+                    className="text-muted-foreground hover:text-white"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                    Atualizar
+                  </Button>
+                </div>
+
+                <div className="max-h-[320px] overflow-y-auto space-y-2 pr-1">
+                  {previewItems.map((item, i) => (
+                    <div
+                      key={i}
+                      className="p-3 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] text-sm"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono font-medium">{item.container}</span>
+                        {item.shipping_line && (
+                          <Badge variant="outline" className="text-[10px] font-mono shrink-0">
+                            {item.shipping_line}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1 text-xs text-muted-foreground">
+                        <span>MBL: <span className="font-mono text-white/70">{item.mbl}</span></span>
+                        {item.consignee && <span>Cliente: {item.consignee}</span>}
+                        {item.eta && <span>ETA: {item.eta}</span>}
+                        {item.container_status && <span>Status: {item.container_status}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
-        ) : (
+        )}
+
+        {/* Done step */}
+        {step === "done" && importResult && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20 text-center">
                 <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-400" />
-                <p className="text-2xl font-bold text-green-400">
-                  {results.filter(r => r.success).length}
-                </p>
+                <p className="text-2xl font-bold text-green-400">{importResult.created}</p>
                 <p className="text-xs text-muted-foreground">Importados</p>
               </div>
               <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-center">
                 <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-red-400" />
-                <p className="text-2xl font-bold text-red-400">
-                  {results.filter(r => !r.success).length}
-                </p>
+                <p className="text-2xl font-bold text-red-400">{importResult.errors}</p>
                 <p className="text-xs text-muted-foreground">Com erro</p>
               </div>
             </div>
-
-            <div className="max-h-[300px] overflow-y-auto space-y-2">
-              {results.map((result, i) => (
-                <div
-                  key={i}
-                  className={`p-3 rounded-lg border ${
-                    result.success
-                      ? "bg-green-500/5 border-green-500/20"
-                      : "bg-red-500/5 border-red-500/20"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {result.success ? (
-                        <CheckCircle2 className="h-4 w-4 text-green-400" />
-                      ) : (
-                        <AlertTriangle className="h-4 w-4 text-red-400" />
-                      )}
-                      <span className="font-mono text-sm">{result.mbl}</span>
-                    </div>
-                    {result.success && (
-                      <Badge className="bg-green-500/10 text-green-400 border-green-500/20">
-                        <Package className="h-3 w-3 mr-1" />
-                        {result.containers} containers
-                      </Badge>
-                    )}
-                  </div>
-                  {result.error && (
-                    <p className="text-xs text-red-400 mt-1">{result.error}</p>
-                  )}
-                  {result.suggestion && (
-                    <p className="text-xs text-yellow-400 mt-1">💡 {result.suggestion}</p>
-                  )}
-                </div>
-              ))}
-            </div>
+            {importResult.error_details.length > 0 && (
+              <div className="max-h-[150px] overflow-y-auto space-y-1">
+                {importResult.error_details.map((e, i) => (
+                  <p key={i} className="text-xs text-red-400 font-mono">{e}</p>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         <DialogFooter>
-          {step === "input" ? (
+          {step === "preview" && (
             <>
               <Button variant="outline" onClick={handleClose}>Cancelar</Button>
               <Button
                 onClick={handleImport}
-                disabled={isLoading || !carrier || mblsPreview.length === 0}
+                disabled={isFetching || previewItems.length === 0}
                 className="bg-[#ffc800] text-black hover:bg-[#e6b400]"
               >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Importando...
-                  </>
-                ) : (
-                  <>
-                    <Ship className="h-4 w-4 mr-2" />
-                    Importar {mblsPreview.length} MBL(s)
-                  </>
-                )}
+                <Ship className="h-4 w-4 mr-2" />
+                Importar {previewItems.length > 0 ? `${previewItems.length} container${previewItems.length !== 1 ? 's' : ''}` : ''}
               </Button>
             </>
-          ) : (
-            <>
-              <Button variant="outline" onClick={() => setStep("input")}>
-                Nova Importação
-              </Button>
-              <Button onClick={handleClose} className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
-                Concluir
-              </Button>
-            </>
+          )}
+          {step === "importing" && (
+            <Button disabled className="bg-[#ffc800] text-black">
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Importando…
+            </Button>
+          )}
+          {step === "done" && (
+            <Button onClick={handleClose} className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
+              Concluir
+            </Button>
           )}
         </DialogFooter>
       </DialogContent>

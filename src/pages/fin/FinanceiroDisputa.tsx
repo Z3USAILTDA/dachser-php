@@ -1,0 +1,1456 @@
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { useUsageLog } from "@/hooks/useUsageLog";
+import * as XLSX from "xlsx";
+import { exportDisputasToExcel } from "@/utils/disputaExcelExport";
+import { Flag, Search, Filter, X, Plus, Check, Trash2, Clock, Scale, Upload, FileSpreadsheet, Loader2, Download, HelpCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { TablePagination } from "@/components/layout/TablePagination";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import ErrorBoundary from "@/components/ErrorBoundary";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { PageLayout } from "@/components/layout/PageLayout";
+import { FilterCard, TableCard } from "@/components/layout/PageCard";
+
+interface DisputaRow {
+  doc_key: string;
+  nf: string;
+  nd: string;
+  cliente: string;
+  razao_base: string;
+  emissao: string;
+  vencimento: string;
+  created_at: string;
+  responsavel: string;
+  valor: number | string | null;
+  tipo: string;
+  departamento: string;
+  observacoes: string;
+  escalation: string;
+  origem_disputa?: string | null;
+}
+
+function FinanceiroDisputaContent() {
+  useUsageLog({ endpoint: "/fin/disputas" });
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const [rows, setRows] = useState<DisputaRow[]>([]);
+  const rowsRef = useRef<DisputaRow[]>([]);
+  useEffect(() => { rowsRef.current = rows; }, [rows]);
+  const [loading, setLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [tipoFilter, setTipoFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 15;
+
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [addNf, setAddNf] = useState("");
+  const [addResp, setAddResp] = useState("");
+  const [addObservacoes, setAddObservacoes] = useState("");
+  const [addError, setAddError] = useState("");
+  const [addLoading, setAddLoading] = useState(false);
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteDocKey, setDeleteDocKey] = useState<string | null>(null);
+
+  const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
+  const [resolveDocKey, setResolveDocKey] = useState<string | null>(null);
+
+  // Import from spreadsheet
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Duplicate confirmation modal
+  const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
+  const [duplicateItems, setDuplicateItems] = useState<Array<{ nd: string; cliente: string; responsavel: string }>>([]);
+  const [parsedItemsForImport, setParsedItemsForImport] = useState<Array<{ nd: string; descricao: string; departamento: string; responsavel: string; escalation: string; prazo?: string }>>([]);
+  const [newItemsNds, setNewItemsNds] = useState<string[]>([]);
+
+  // Observações editing state
+  const [savingObservacoes, setSavingObservacoes] = useState<Record<string, boolean>>({});
+  const [editingObservacoes, setEditingObservacoes] = useState<string | null>(null);
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const observacoesInputRef = useRef<HTMLInputElement>(null);
+
+  // Responsável editing state
+  const [savingResponsavel, setSavingResponsavel] = useState<Record<string, boolean>>({});
+  const [editingResponsavel, setEditingResponsavel] = useState<string | null>(null);
+  const responsavelDebounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const responsavelInputRef = useRef<HTMLInputElement>(null);
+
+  // Bulk actions state
+  const [selectedDocKeys, setSelectedDocKeys] = useState<Set<string>>(new Set());
+  const [selectAll, setSelectAll] = useState(false);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [bulkResolveDialogOpen, setBulkResolveDialogOpen] = useState(false);
+
+  useEffect(() => {
+    fetchDisputas();
+  }, [tipoFilter]);
+
+  const fetchDisputas = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (tipoFilter !== "all") params.set('tipo', tipoFilter);
+      const res = await fetch(`/api/fin/disputas?${params}`);
+      const data = await res.json();
+      if (data?.success && data.rows) {
+        setRows(data.rows);
+      } else {
+        setRows([]);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar disputas:", err);
+      toast({ title: "Erro", description: "Falha ao carregar disputas", variant: "destructive" });
+      setHasError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredRows = useMemo(() => {
+    if (!searchQuery.trim()) return rows;
+    const q = searchQuery.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return rows.filter((r) => {
+      const hay = [r.razao_base, r.cliente, r.nf, r.nd, r.tipo, r.responsavel]
+        .join(" ")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+      return hay.includes(q);
+    });
+  }, [rows, searchQuery]);
+
+  // Reset page and selection when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+    setSelectedDocKeys(new Set());
+    setSelectAll(false);
+  }, [searchQuery, tipoFilter]);
+
+  const totalPages = Math.ceil(filteredRows.length / PAGE_SIZE);
+  const paginatedRows = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredRows.slice(start, start + PAGE_SIZE);
+  }, [filteredRows, currentPage]);
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return "-";
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return "-";
+      return d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formatDateTime = (dateStr: string) => {
+    if (!dateStr) return "-";
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return "-";
+      return d.toLocaleString("pt-BR", { 
+        timeZone: "America/Sao_Paulo",
+        day: "2-digit", 
+        month: "2-digit", 
+        year: "numeric", 
+        hour: "2-digit", 
+        minute: "2-digit" 
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formatMoney = (val: number | string | null | undefined) => {
+    const n = Number(val);
+    const safe = Number.isFinite(n) ? n : 0;
+    return "R$ " + safe.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const formatElapsed = (startDate: string) => {
+    if (!startDate) return "—";
+    try {
+      const start = new Date(startDate);
+      if (isNaN(start.getTime())) return "—";
+      
+      const now = new Date();
+      const ms = now.getTime() - start.getTime();
+      
+      if (ms < 0) return "—";
+      
+      const s = Math.floor(ms / 1000);
+      const d = Math.floor(s / 86400);
+      const h = Math.floor((s % 86400) / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      if (d > 0) return `D+${d} • ${String(h).padStart(2, "0")}h${String(m).padStart(2, "0")}`;
+      if (h > 0) return `${h}h ${m}m`;
+      return `${m}m`;
+    } catch {
+      return "—";
+    }
+  };
+
+  const handleAddDispute = async () => {
+    if (!addNf.trim()) {
+      setAddError("Informe o documento/NF.");
+      return;
+    }
+    setAddError("");
+    setAddLoading(true);
+
+    try {
+      // Lookup do documento na nova base (CR) — pega a primeira ocorrência
+      const lookupRes = await fetch(`/api/fin/disputas/lookup?nd=${encodeURIComponent(addNf.trim())}`);
+      const lookupData = await lookupRes.json();
+      const lookupRows = lookupData?.rows || [];
+      if (!lookupData?.success || lookupRows.length === 0) {
+        setAddError("Documento não encontrado.");
+        return;
+      }
+      const docKeys = (lookupRows as Array<{ doc_key?: string }>)
+        .map(r => r.doc_key)
+        .filter((k): k is string => !!k && k.trim().length > 0);
+
+      if (docKeys.length === 0) {
+        setAddError("Documento sem chave válida.");
+        return;
+      }
+
+      const bulkRes = await fetch('/api/fin/disputas/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ doc_keys: docKeys, responsavel: addResp.trim(), observacoes: addObservacoes.trim() }),
+      });
+      const data = await bulkRes.json();
+      if (data?.success) {
+        const inserted = Number(data?.inserted ?? 0);
+        const updated = Number(data?.updated ?? 0);
+        const failed = Array.isArray(data?.failed) ? data.failed.length : 0;
+        const affected = inserted + updated;
+        const descParts: string[] = [];
+        descParts.push(
+          affected <= 1
+            ? "Disputa adicionada!"
+            : `${affected} títulos da ND ${addNf.trim()} colocados em disputa.`
+        );
+        if (failed > 0) {
+          descParts.push(`${failed} falharam — veja o console.`);
+          console.warn("save_disputa_cr_bulk falhas:", data.failed);
+        }
+        toast({ title: "Sucesso", description: descParts.join(" ") });
+        setAddModalOpen(false);
+        setAddNf("");
+        setAddResp("");
+        setAddObservacoes("");
+        fetchDisputas();
+      } else {
+        setAddError(data?.error || "Falha ao salvar.");
+      }
+    } catch (err) {
+      console.error("Erro ao salvar disputa:", err);
+      setAddError("Falha de rede.");
+    } finally {
+      setAddLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteDocKey) return;
+    try {
+      const res = await fetch(`/api/fin/disputas/${encodeURIComponent(deleteDocKey)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data?.success) {
+        toast({ title: "Sucesso", description: "Disputa excluída" });
+        fetchDisputas();
+      } else {
+        toast({ title: "Erro", description: data?.error || data?.message || "Falha ao excluir", variant: "destructive" });
+      }
+    } catch (err) {
+      console.error("Erro ao excluir:", err);
+      toast({ title: "Erro", description: "Falha de rede", variant: "destructive" });
+    } finally {
+      setDeleteDialogOpen(false);
+      setDeleteDocKey(null);
+    }
+  };
+
+  const handleResolve = async () => {
+    if (!resolveDocKey) return;
+    const targetNf = rows.find(r => r.doc_key === resolveDocKey)?.nf;
+    if (!targetNf) {
+      toast({ title: "Erro", description: "Linha não encontrada", variant: "destructive" });
+      setResolveDialogOpen(false);
+      setResolveDocKey(null);
+      return;
+    }
+    try {
+      const res = await fetch('/api/fin/disputas/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nf: targetNf }),
+      });
+      const data = await res.json();
+      if (data?.success) {
+        toast({ title: "Sucesso", description: "Disputa resolvida" });
+        fetchDisputas();
+      } else {
+        toast({ title: "Erro", description: data?.error || "Falha ao resolver", variant: "destructive" });
+      }
+    } catch (err) {
+      console.error("Erro ao resolver:", err);
+      toast({ title: "Erro", description: "Falha de rede", variant: "destructive" });
+    } finally {
+      setResolveDialogOpen(false);
+      setResolveDocKey(null);
+    }
+  };
+
+  // Bulk action handlers
+  const toggleSelectAll = () => {
+    if (selectAll) {
+      setSelectedDocKeys(new Set());
+    } else {
+      setSelectedDocKeys(new Set(paginatedRows.map(r => r.doc_key)));
+    }
+    setSelectAll(!selectAll);
+  };
+
+  const toggleSelectRow = (docKey: string) => {
+    const newSet = new Set(selectedDocKeys);
+    if (newSet.has(docKey)) {
+      newSet.delete(docKey);
+      setSelectAll(false);
+    } else {
+      newSet.add(docKey);
+    }
+    setSelectedDocKeys(newSet);
+  };
+
+  const handleBulkDelete = async () => {
+    const keys = Array.from(selectedDocKeys);
+    if (keys.length === 0) {
+      setBulkDeleteDialogOpen(false);
+      return;
+    }
+    setBulkLoading(true);
+    try {
+      const res = await fetch('/api/fin/disputas/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ doc_keys: keys }),
+      });
+      const data = await res.json();
+      if (!data?.success) throw new Error(data?.error || "Falha no bulk delete");
+      toast({ title: "Excluído", description: `${data.deleted ?? keys.length} disputa(s) removida(s)` });
+      setSelectedDocKeys(new Set());
+      setSelectAll(false);
+      await fetchDisputas();
+    } catch (err: any) {
+      console.error("Erro no bulk delete:", err);
+      toast({ title: "Erro", description: err?.message || "Falha ao excluir disputas", variant: "destructive" });
+    } finally {
+      setBulkLoading(false);
+      setBulkDeleteDialogOpen(false);
+    }
+  };
+
+  const handleBulkResolve = async () => {
+    const keys = Array.from(selectedDocKeys);
+    if (keys.length === 0) {
+      setBulkResolveDialogOpen(false);
+      return;
+    }
+    setBulkLoading(true);
+    try {
+      const res = await fetch('/api/fin/disputas/bulk-resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ doc_keys: keys }),
+      });
+      const data = await res.json();
+      if (!data?.success) throw new Error(data?.error || "Falha no bulk resolve");
+      toast({ title: "Resolvido", description: `${data.resolved ?? keys.length} disputa(s) resolvida(s)` });
+      setSelectedDocKeys(new Set());
+      setSelectAll(false);
+      await fetchDisputas();
+    } catch (err: any) {
+      console.error("Erro no bulk resolve:", err);
+      toast({ title: "Erro", description: err?.message || "Falha ao resolver disputas", variant: "destructive" });
+    } finally {
+      setBulkLoading(false);
+      setBulkResolveDialogOpen(false);
+    }
+  };
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setTipoFilter("all");
+    setSelectedDocKeys(new Set());
+    setSelectAll(false);
+  };
+
+  // Debounced observacoes update
+  const handleObservacoesChange = useCallback((docKey: string, value: string) => {
+    setRows(prev => prev.map(r => r.doc_key === docKey ? { ...r, observacoes: value } : r));
+
+    if (debounceTimers.current[docKey]) {
+      clearTimeout(debounceTimers.current[docKey]);
+    }
+
+    debounceTimers.current[docKey] = setTimeout(async () => {
+      setSavingObservacoes(prev => ({ ...prev, [docKey]: true }));
+      try {
+        const targetNf = rowsRef.current.find(r => r.doc_key === docKey)?.nf;
+        if (!targetNf) throw new Error("Linha não encontrada");
+        const res = await fetch(`/api/fin/disputas/${encodeURIComponent(docKey)}/observacoes`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nf: targetNf, observacoes: value }),
+        });
+        const data = await res.json();
+        if (!data?.success) {
+          toast({ title: "Erro", description: "Falha ao salvar observações", variant: "destructive" });
+        }
+      } catch (err) {
+        console.error("Erro ao salvar observações:", err);
+        toast({ title: "Erro", description: "Falha ao salvar observações", variant: "destructive" });
+      } finally {
+        setSavingObservacoes(prev => ({ ...prev, [docKey]: false }));
+      }
+    }, 500);
+  }, [toast]);
+
+  // Debounced responsavel update
+  const handleResponsavelChange = useCallback((docKey: string, value: string) => {
+    setRows(prev => prev.map(r => r.doc_key === docKey ? { ...r, responsavel: value } : r));
+
+    if (responsavelDebounceTimers.current[docKey]) {
+      clearTimeout(responsavelDebounceTimers.current[docKey]);
+    }
+
+    responsavelDebounceTimers.current[docKey] = setTimeout(async () => {
+      setSavingResponsavel(prev => ({ ...prev, [docKey]: true }));
+      try {
+        const targetNf = rowsRef.current.find(r => r.doc_key === docKey)?.nf;
+        if (!targetNf) throw new Error("Linha não encontrada");
+        const res = await fetch(`/api/fin/disputas/${encodeURIComponent(docKey)}/responsavel`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nf: targetNf, responsavel: value }),
+        });
+        const data = await res.json();
+        if (!data?.success) {
+          toast({ title: "Erro", description: "Falha ao salvar responsável", variant: "destructive" });
+        }
+      } catch (err) {
+        console.error("Erro ao salvar responsável:", err);
+        toast({ title: "Erro", description: "Falha ao salvar responsável", variant: "destructive" });
+      } finally {
+        setSavingResponsavel(prev => ({ ...prev, [docKey]: false }));
+      }
+    }, 500);
+  }, [toast]);
+
+  // Improved column index finder with more variations
+  const findColumnIndex = (headers: string[], ...names: string[]): number => {
+    const normalize = (s: string) => 
+      s?.toString()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, ' ')
+        .trim() || '';
+    
+    for (let i = 0; i < headers.length; i++) {
+      const h = normalize(headers[i]);
+      for (const name of names) {
+        if (h.includes(normalize(name))) return i;
+      }
+    }
+    return -1;
+  };
+
+  // Propagate observations between items of the same process
+  const propagateObservations = (
+    items: Array<{ nd: string; descricao: string; responsavel: string; departamento: string; escalation: string }>
+  ) => {
+    const groups = new Map<string, typeof items>();
+    
+    for (const item of items) {
+      // Extract process base (remove suffixes like -A, -B, /1, /2)
+      const processoBase = item.nd.replace(/[-\/][A-Z0-9]{1,2}$/i, '').substring(0, 12);
+      
+      if (!groups.has(processoBase)) {
+        groups.set(processoBase, []);
+      }
+      groups.get(processoBase)!.push(item);
+    }
+    
+    // Propagate OBS and Responsável within each group
+    for (const [, groupItems] of groups) {
+      if (groupItems.length <= 1) continue;
+      
+      const obsDoGrupo = groupItems.find(i => i.descricao?.trim())?.descricao || '';
+      const respDoGrupo = groupItems.find(i => i.responsavel?.trim())?.responsavel || '';
+      const deptDoGrupo = groupItems.find(i => i.departamento?.trim())?.departamento || '';
+      
+      for (const item of groupItems) {
+        if (!item.descricao?.trim() && obsDoGrupo) {
+          item.descricao = obsDoGrupo;
+        }
+        if (!item.responsavel?.trim() && respDoGrupo) {
+          item.responsavel = respDoGrupo;
+        }
+        if (!item.departamento?.trim() && deptDoGrupo) {
+          item.departamento = deptDoGrupo;
+        }
+      }
+    }
+    
+    return items;
+  };
+
+  const parseSpreadsheet = async (file: File): Promise<Array<{
+    nd: string;
+    descricao: string;
+    departamento: string;
+    responsavel: string;
+    escalation: string;
+    prazo: string;
+  }>> => {
+    const items: Array<{
+      nd: string;
+      descricao: string;
+      departamento: string;
+      responsavel: string;
+      escalation: string;
+      prazo: string;
+    }> = [];
+
+    const ext = file.name.toLowerCase();
+    
+    if (ext.endsWith('.xlsx') || ext.endsWith('.xls')) {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<string[]>(firstSheet, { header: 1 });
+      
+      if (rows.length === 0) return items;
+      
+      const headerRow = rows[0]?.map(c => c?.toString() || '') || [];
+      const hasHeader = headerRow.some(h => 
+        h.toLowerCase().includes('nd') || 
+        h.toLowerCase().includes('cnpj') || 
+        h.toLowerCase().includes('documento') ||
+        h.toLowerCase().includes('nf')
+      );
+      
+      // Find columns with expanded variations
+      const ndIdx = findColumnIndex(headerRow, 'nd', 'documento', 'nf', 'numero', 'doc', 'nota');
+      const descIdx = findColumnIndex(headerRow, 
+        'obs', 'observações', 'observacoes', 'observacao',
+        'descrição', 'descricao', 
+        'pendência', 'pendencia',
+        'motivo', 'comentário', 'comentario'
+      );
+      const deptIdx = findColumnIndex(headerRow, 'departamento', 'depto', 'dept');
+      const respIdx = findColumnIndex(headerRow, 
+        'responsável', 'responsavel', 'resp', 
+        'analista', 'atribuído', 'atribuido'
+      );
+      const escIdx = findColumnIndex(headerRow, 'escalation', 'escalonamento', 'escalacao');
+      const prazoIdx = findColumnIndex(headerRow, 'prazo', 'vencimento', 'data limite', 'deadline', 'data venc');
+      
+      // Validate required column
+      if (ndIdx === -1) {
+        toast({ 
+          title: "Erro de formato", 
+          description: "Coluna 'ND' ou 'Documento' não encontrada na planilha",
+          variant: "destructive" 
+        });
+        return [];
+      }
+      
+      const startIdx = hasHeader ? 1 : 0;
+      
+      for (let i = startIdx; i < rows.length; i++) {
+        const cols = rows[i];
+        const nd = (ndIdx >= 0 ? cols[ndIdx] : cols[0])?.toString().trim();
+        if (nd) {
+          items.push({
+            nd,
+            descricao: (descIdx >= 0 ? cols[descIdx] : cols[8])?.toString().trim() || '',
+            departamento: (deptIdx >= 0 ? cols[deptIdx] : cols[9])?.toString().trim() || '',
+            responsavel: (respIdx >= 0 ? cols[respIdx] : cols[10])?.toString().trim() || '',
+            escalation: (escIdx >= 0 ? cols[escIdx] : cols[13])?.toString().trim() || '',
+            prazo: (prazoIdx >= 0 ? cols[prazoIdx] : '')?.toString().trim() || '',
+          });
+        }
+      }
+    } else {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter(line => line.trim());
+      
+      if (lines.length === 0) return items;
+      
+      const headerCols = lines[0].split(/[,;\t]/);
+      const hasHeader = headerCols.some(h => 
+        h.toLowerCase().includes('nd') || 
+        h.toLowerCase().includes('cnpj') || 
+        h.toLowerCase().includes('documento') ||
+        h.toLowerCase().includes('nf')
+      );
+      
+      const ndIdx = findColumnIndex(headerCols, 'nd', 'documento', 'nf', 'numero', 'doc', 'nota');
+      const descIdx = findColumnIndex(headerCols, 
+        'obs', 'observações', 'observacoes', 'observacao',
+        'descrição', 'descricao', 
+        'pendência', 'pendencia',
+        'motivo', 'comentário', 'comentario'
+      );
+      const deptIdx = findColumnIndex(headerCols, 'departamento', 'depto', 'dept');
+      const respIdx = findColumnIndex(headerCols, 
+        'responsável', 'responsavel', 'resp', 
+        'analista', 'atribuído', 'atribuido'
+      );
+      const escIdx = findColumnIndex(headerCols, 'escalation', 'escalonamento', 'escalacao');
+      const prazoIdx = findColumnIndex(headerCols, 'prazo', 'vencimento', 'data limite', 'deadline', 'data venc');
+      
+      // Validate required column
+      if (ndIdx === -1) {
+        toast({ 
+          title: "Erro de formato", 
+          description: "Coluna 'ND' ou 'Documento' não encontrada na planilha",
+          variant: "destructive" 
+        });
+        return [];
+      }
+      
+      const startIdx = hasHeader ? 1 : 0;
+      
+      for (let i = startIdx; i < lines.length; i++) {
+        const cols = lines[i].split(/[,;\t]/);
+        const nd = (ndIdx >= 0 ? cols[ndIdx] : cols[0])?.trim();
+        if (nd) {
+          items.push({
+            nd,
+            descricao: (descIdx >= 0 ? cols[descIdx] : cols[8])?.trim() || '',
+            departamento: (deptIdx >= 0 ? cols[deptIdx] : cols[9])?.trim() || '',
+            responsavel: (respIdx >= 0 ? cols[respIdx] : cols[10])?.trim() || '',
+            escalation: (escIdx >= 0 ? cols[escIdx] : cols[13])?.trim() || '',
+            prazo: (prazoIdx >= 0 ? cols[prazoIdx] : '')?.trim() || '',
+          });
+        }
+      }
+    }
+    
+    console.log('Parsed items:', items.slice(0, 3));
+    return items;
+  };
+
+  const executeImport = async (items: typeof parsedItemsForImport, forceUpdate: boolean) => {
+    if (!items || items.length === 0) {
+      toast({ title: "Aviso", description: "Nenhum item para importar", variant: "destructive" });
+      return;
+    }
+    setImportLoading(true);
+    try {
+      const res = await fetch('/api/fin/disputas/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, forceUpdate }),
+      });
+      const data = await res.json();
+      if (!data?.success) throw new Error(data?.error || "Falha na importação");
+      const parts: string[] = [];
+      if (data.count) parts.push(`${data.count} criada(s)`);
+      if (data.updatedCount) parts.push(`${data.updatedCount} atualizada(s)`);
+      if (data.skippedCount) parts.push(`${data.skippedCount} ignorada(s)`);
+      if (data.notFoundCount) parts.push(`${data.notFoundCount} não encontrada(s)`);
+      toast({
+        title: "Importação concluída",
+        description: parts.join(" · ") || "Nenhuma alteração",
+      });
+      setImportModalOpen(false);
+      setDuplicateModalOpen(false);
+      setImportFile(null);
+      setParsedItemsForImport([]);
+      setDuplicateItems([]);
+      setNewItemsNds([]);
+      await fetchDisputas();
+    } catch (err: any) {
+      console.error("Erro na importação:", err);
+      toast({ title: "Erro", description: err?.message || "Falha ao importar planilha", variant: "destructive" });
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleImportSpreadsheet = async () => {
+    if (!importFile) {
+      toast({ title: "Aviso", description: "Selecione um arquivo", variant: "destructive" });
+      return;
+    }
+    setImportLoading(true);
+    try {
+      const parsed = await parseSpreadsheet(importFile);
+      if (!parsed || parsed.length === 0) {
+        setImportLoading(false);
+        return;
+      }
+      const items = propagateObservations(parsed);
+      const checkRes = await fetch('/api/fin/disputas/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: items.map(i => ({ nd: i.nd })) }),
+      });
+      const data = await checkRes.json();
+      if (!data?.success) throw new Error(data?.error || "Falha na verificação");
+
+      setParsedItemsForImport(items);
+
+      if ((data.existingItems?.length ?? 0) > 0) {
+        setDuplicateItems(data.existingItems);
+        setNewItemsNds(data.newItems || []);
+        setImportModalOpen(false);
+        setDuplicateModalOpen(true);
+        setImportLoading(false);
+        return;
+      }
+
+      await executeImport(items, false);
+    } catch (err: any) {
+      console.error("Erro ao processar planilha:", err);
+      toast({ title: "Erro", description: err?.message || "Falha ao processar planilha", variant: "destructive" });
+      setImportLoading(false);
+    }
+  };
+
+  const handleImportOnlyNew = async () => {
+    const newSet = new Set(newItemsNds);
+    const onlyNew = parsedItemsForImport.filter(i => newSet.has(i.nd));
+    await executeImport(onlyNew, false);
+  };
+
+  const handleImportReplaceAll = async () => {
+    await executeImport(parsedItemsForImport, true);
+  };
+
+  const handleExport = () => {
+    if (filteredRows.length === 0) {
+      toast({ title: "Aviso", description: "Nenhum dado para exportar", variant: "destructive" });
+      return;
+    }
+
+    const filterLabel = tipoFilter !== "all" ? tipoFilter : undefined;
+
+    exportDisputasToExcel(filteredRows, filterLabel);
+    
+    toast({ title: "Exportado", description: `${filteredRows.length} registro(s) exportado(s)` });
+  };
+
+  // Error fallback
+  if (hasError && !loading && rows.length === 0) {
+    return (
+      <PageLayout 
+        title="DACHSER" 
+        subtitle="NFs em disputa"
+        pageIcon={Scale}
+        backTo="/fin/regua"
+      >
+        <TableCard>
+          <div className="flex flex-col items-center justify-center py-12 gap-4">
+            <p className="text-destructive">Erro ao carregar dados. Tente atualizar a página.</p>
+            <Button onClick={() => window.location.reload()}>
+              Recarregar
+            </Button>
+          </div>
+        </TableCard>
+      </PageLayout>
+    );
+  }
+
+  const rightContent = (
+    <div className="flex gap-2">
+      <button
+        onClick={() => navigate("/fin/manual")}
+        className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
+        title="Manual do usuário"
+      >
+        <HelpCircle className="h-4 w-4" />
+      </button>
+      <Button
+        onClick={handleExport}
+        variant="outline"
+        className="h-8 rounded-full font-bold text-[0.85rem]"
+        disabled={filteredRows.length === 0}
+      >
+        <Download className="w-4 h-4 mr-1" /> Exportar
+      </Button>
+      <Button
+        onClick={() => setImportModalOpen(true)}
+        variant="outline"
+        className="h-8 rounded-full font-bold text-[0.85rem]"
+      >
+        <FileSpreadsheet className="w-4 h-4 mr-1" /> Importar Planilha
+      </Button>
+      <Button
+        onClick={() => setAddModalOpen(true)}
+        className="h-8 rounded-full bg-primary text-primary-foreground font-bold text-[0.85rem] hover:bg-primary/90"
+      >
+        <Plus className="w-4 h-4 mr-1" /> Adicionar Disputa
+      </Button>
+    </div>
+  );
+
+  return (
+    <PageLayout 
+      title="DACHSER" 
+      subtitle="NFs em disputa"
+      rightContent={rightContent}
+      pageIcon={Scale}
+      backTo="/fin/regua"
+    >
+      {/* Filter Card */}
+      <FilterCard>
+        <div className="flex flex-wrap gap-3 items-center">
+          {/* Meta badge */}
+          <span className="px-3 py-2 rounded-full bg-white/6 border border-white/12 text-[#ddd] text-[0.85rem] inline-flex items-center gap-[6px]">
+            <Flag className="w-4 h-4" />
+            <span>Total de NFs em disputa:</span>
+            <b>{loading ? "..." : rows.length}</b>
+          </span>
+
+          <div className="flex-1 min-w-[280px]">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar por cliente, documento ou tipo..."
+                className="pl-9 w-full max-w-[420px] h-9 rounded-full bg-[#13141a] border-white/20 text-[0.85rem]"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="inline-flex items-center gap-2 px-3 py-[6px] rounded-full bg-[#121212] border border-white/12 text-[0.85rem]">
+              <Filter className="w-4 h-4" />
+              <span>Tipo:</span>
+              <Select value={tipoFilter} onValueChange={setTipoFilter}>
+                <SelectTrigger className="w-[100px] h-7 border-0 bg-transparent text-[0.85rem] p-0">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="A prazo">A prazo</SelectItem>
+                  <SelectItem value="À vista">À vista</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={clearFilters}
+              className="rounded-full h-8 text-[0.8rem] uppercase tracking-wider"
+            >
+              <X className="w-3 h-3 mr-1" /> Limpar filtros
+            </Button>
+          </div>
+        </div>
+      </FilterCard>
+
+      {/* Bulk Actions Bar */}
+      {selectedDocKeys.size > 0 && (
+        <div className="mb-3 p-3 bg-primary/10 border border-primary/30 rounded-lg flex items-center gap-4">
+          <span className="text-sm font-medium">
+            {selectedDocKeys.size} item(s) selecionado(s)
+          </span>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={() => setBulkResolveDialogOpen(true)}
+            disabled={bulkLoading}
+            className="h-8 gap-1"
+          >
+            <Check className="w-3 h-3" /> Resolver selecionados
+          </Button>
+          <Button 
+            size="sm" 
+            variant="destructive" 
+            onClick={() => setBulkDeleteDialogOpen(true)}
+            disabled={bulkLoading}
+            className="h-8 gap-1"
+          >
+            <Trash2 className="w-3 h-3" /> Excluir selecionados
+          </Button>
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            onClick={() => { setSelectedDocKeys(new Set()); setSelectAll(false); }}
+            className="h-8"
+          >
+            Limpar seleção
+          </Button>
+        </div>
+      )}
+
+      {/* Table Card with ScrollArea */}
+      <TableCard>
+        <ScrollArea className="w-full whitespace-nowrap rounded-2xl">
+          <table className="w-full min-w-[1500px] border-collapse">
+            <thead>
+              <tr>
+                <th className="bg-[#15151f] sticky top-0 z-[1] px-2 py-[14px] w-10">
+                  <Checkbox 
+                    checked={selectAll && paginatedRows.length > 0}
+                    onCheckedChange={toggleSelectAll}
+                  />
+                </th>
+                <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap max-w-[220px]">
+                  Cliente
+                </th>
+                <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap">
+                  Documento / NF
+                </th>
+                <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap">
+                  Emissão
+                </th>
+                <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap">
+                  Vencimento
+                </th>
+                <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap">
+                  Inclusão
+                </th>
+                <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap">
+                  Em disputa
+                </th>
+                <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap">
+                  Responsável
+                </th>
+                <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap">
+                  Valor
+                </th>
+                <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap">
+                  Tipo
+                </th>
+                <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap min-w-[200px]">
+                  Observações
+                </th>
+                <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap">
+                  ㅤㅤ
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={12} className="px-4 py-[18px] text-muted-foreground">
+                    Carregando...
+                  </td>
+                </tr>
+              ) : filteredRows.length === 0 ? (
+                <tr>
+                  <td colSpan={12} className="px-4 py-[18px] text-muted-foreground">
+                    Nenhuma NF em disputa.
+                  </td>
+                </tr>
+              ) : (
+                paginatedRows.map((r) => (
+                  <tr key={r.doc_key} className="hover:bg-white/4 border-b border-white/14">
+                    <td className="px-2 py-[14px]">
+                      <Checkbox 
+                        checked={selectedDocKeys.has(r.doc_key)}
+                        onCheckedChange={() => toggleSelectRow(r.doc_key)}
+                      />
+                    </td>
+                    <td className="px-4 py-[14px] whitespace-nowrap max-w-[260px] overflow-hidden text-ellipsis" title={r.cliente || "-"}>
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <span className="overflow-hidden text-ellipsis">{r.razao_base || r.cliente || "-"}</span>
+                        {r.origem_disputa === "legado_orfao" && (
+                          <Badge
+                            variant="outline"
+                            className="shrink-0 text-[0.65rem] uppercase tracking-wider border-amber-500/40 text-amber-300/90 bg-amber-500/10"
+                            title="Registro antigo sem título correspondente na carga atual de contas a receber."
+                          >
+                            Histórico
+                          </Badge>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-[14px] whitespace-nowrap">{r.nf || "-"}</td>
+                    <td className="px-4 py-[14px] whitespace-nowrap">{formatDate(r.emissao)}</td>
+                    <td className="px-4 py-[14px] whitespace-nowrap">{formatDate(r.vencimento)}</td>
+                    <td className="px-4 py-[14px] whitespace-nowrap">{formatDateTime(r.created_at)}</td>
+                    <td className="px-4 py-[14px] whitespace-nowrap">
+                      <Badge variant="outline" className="inline-flex items-center gap-1">
+                        <Clock className="w-3 h-3" /> {formatElapsed(r.created_at)}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-[14px] whitespace-nowrap min-w-[140px] max-w-[180px]">
+                      {editingResponsavel === r.doc_key ? (
+                        <div className="relative flex items-center gap-2">
+                          <Input
+                            ref={responsavelInputRef}
+                            value={r.responsavel || ""}
+                            onChange={(e) => handleResponsavelChange(r.doc_key, e.target.value)}
+                            onBlur={() => setEditingResponsavel(null)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === 'Escape') {
+                                setEditingResponsavel(null);
+                              }
+                            }}
+                            placeholder="Responsável..."
+                            className="h-8 text-[0.85rem] bg-[#0a0a0f] border-white/15 rounded-lg pr-8"
+                            autoFocus
+                          />
+                          {savingResponsavel[r.doc_key] && (
+                            <Loader2 className="w-4 h-4 animate-spin absolute right-2 text-muted-foreground" />
+                          )}
+                        </div>
+                      ) : (
+                        <span 
+                          onClick={() => setEditingResponsavel(r.doc_key)}
+                          className="cursor-pointer hover:text-primary transition-colors block overflow-hidden text-ellipsis"
+                          title={r.responsavel || "Clique para editar"}
+                        >
+                          {r.responsavel || <span className="text-muted-foreground italic">—</span>}
+                          {savingResponsavel[r.doc_key] && (
+                            <Loader2 className="w-3 h-3 animate-spin inline ml-2 text-muted-foreground" />
+                          )}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-[14px] whitespace-nowrap">{formatMoney(r.valor)}</td>
+                    <td className="px-4 py-[14px] whitespace-nowrap">{r.tipo || "-"}</td>
+                    <td className="px-4 py-[14px] whitespace-nowrap min-w-[200px] max-w-[300px]">
+                      {editingObservacoes === r.doc_key ? (
+                        <div className="relative flex items-center gap-2">
+                          <Input
+                            ref={observacoesInputRef}
+                            value={r.observacoes || ""}
+                            onChange={(e) => handleObservacoesChange(r.doc_key, e.target.value)}
+                            onBlur={() => setEditingObservacoes(null)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === 'Escape') {
+                                setEditingObservacoes(null);
+                              }
+                            }}
+                            placeholder="Adicionar observação..."
+                            className="h-8 text-[0.85rem] bg-[#0a0a0f] border-white/15 rounded-lg pr-8"
+                            autoFocus
+                          />
+                          {savingObservacoes[r.doc_key] && (
+                            <Loader2 className="w-4 h-4 animate-spin absolute right-2 text-muted-foreground" />
+                          )}
+                        </div>
+                      ) : (
+                        <span 
+                          onClick={() => setEditingObservacoes(r.doc_key)}
+                          className="cursor-pointer hover:text-primary transition-colors block overflow-hidden text-ellipsis"
+                          title={r.observacoes || "Clique para editar"}
+                        >
+                          {r.observacoes || <span className="text-muted-foreground italic">—</span>}
+                          {savingObservacoes[r.doc_key] && (
+                            <Loader2 className="w-3 h-3 animate-spin inline ml-2 text-muted-foreground" />
+                          )}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-[14px] whitespace-nowrap">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setResolveDocKey(r.doc_key);
+                            setResolveDialogOpen(true);
+                          }}
+                          className="w-9 h-9 inline-grid place-items-center rounded-[10px] bg-[#141414] text-[#7df0c0] border border-[#7df0c0] hover:bg-[rgba(0,255,150,0.08)] transition-colors"
+                          title="Resolvido"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDeleteDocKey(r.doc_key);
+                            setDeleteDialogOpen(true);
+                          }}
+                          className="w-9 h-9 inline-grid place-items-center rounded-[10px] bg-[#141414] text-[#ff8a8a] border border-[#ff8a8a] hover:bg-[rgba(255,0,0,0.08)] transition-colors"
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
+        
+        {!loading && filteredRows.length > PAGE_SIZE && (
+          <TablePagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
+        )}
+      </TableCard>
+
+      {/* Add Modal */}
+      <Dialog open={addModalOpen} onOpenChange={(open) => {
+        setAddModalOpen(open);
+        if (!open) {
+          setAddNf("");
+          setAddResp("");
+          setAddObservacoes("");
+          setAddError("");
+        }
+      }}>
+        <DialogContent className="bg-[rgba(4,5,15,0.98)] border-white/12 max-w-md">
+          <DialogHeader>
+            <DialogTitle>Adicionar Disputa</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-3">
+            <div>
+              <Label className="text-sm text-muted-foreground">ND / NF / Documento</Label>
+              <Input
+                value={addNf}
+                onChange={(e) => setAddNf(e.target.value)}
+                placeholder="Ex: 12345"
+                className="mt-1 bg-[#13141a] border-white/20"
+              />
+            </div>
+
+            <div>
+              <Label className="text-sm text-muted-foreground">Responsável</Label>
+              <Input
+                value={addResp}
+                onChange={(e) => setAddResp(e.target.value)}
+                placeholder="Nome do responsável"
+                className="mt-1 bg-[#13141a] border-white/20"
+              />
+            </div>
+            
+            <div>
+              <Label className="text-sm text-muted-foreground">Observações</Label>
+              <Textarea
+                value={addObservacoes}
+                onChange={(e) => setAddObservacoes(e.target.value)}
+                placeholder="Descrição/Pendência..."
+                className="mt-1 bg-[#13141a] border-white/20 min-h-[80px]"
+              />
+            </div>
+
+            {addError && <p className="text-sm text-red-400">{addError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleAddDispute} disabled={addLoading} className="bg-primary text-primary-foreground">
+              {addLoading ? "Salvando..." : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent className="bg-[rgba(4,5,15,0.98)] border-white/12">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir disputa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. A NF será removida da lista de disputas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Resolve Dialog */}
+      <AlertDialog open={resolveDialogOpen} onOpenChange={setResolveDialogOpen}>
+        <AlertDialogContent className="bg-[rgba(4,5,15,0.98)] border-white/12">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Marcar como resolvida?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Confirme que a disputa desta NF foi resolvida. Ela será removida da lista.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleResolve} className="bg-green-600 text-white hover:bg-green-700">
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Delete Dialog */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent className="bg-[rgba(4,5,15,0.98)] border-white/12">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {selectedDocKeys.size} disputa(s)?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. As NFs selecionadas serão removidas da lista de disputas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleBulkDelete} 
+              disabled={bulkLoading}
+              className="bg-destructive text-destructive-foreground"
+            >
+              {bulkLoading ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Resolve Dialog */}
+      <AlertDialog open={bulkResolveDialogOpen} onOpenChange={setBulkResolveDialogOpen}>
+        <AlertDialogContent className="bg-[rgba(4,5,15,0.98)] border-white/12">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Resolver {selectedDocKeys.size} disputa(s)?</AlertDialogTitle>
+            <AlertDialogDescription>
+              As NFs selecionadas serão marcadas como resolvidas e removidas da lista.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleBulkResolve} 
+              disabled={bulkLoading}
+              className="bg-green-600 text-white hover:bg-green-700"
+            >
+              {bulkLoading ? "Resolvendo..." : "Confirmar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Import Spreadsheet Modal */}
+      <Dialog open={importModalOpen} onOpenChange={setImportModalOpen}>
+        <DialogContent className="bg-[rgba(4,5,15,0.98)] border-white/12">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5" />
+              Importar Disputas via Planilha
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-3">
+            <div className="text-sm text-muted-foreground">
+              Faça upload de um arquivo com os documentos/NFs.
+              <br />
+              <strong>Colunas obrigatórias:</strong> ND (ou Documento, NF)
+              <br />
+              <strong>Colunas opcionais:</strong> Responsável, OBS/Observações
+            </div>
+            
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragging(true);
+              }}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragging(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragging(false);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragging(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file) {
+                  const ext = file.name.toLowerCase();
+                  if (ext.endsWith('.csv') || ext.endsWith('.txt') || ext.endsWith('.tsv') || ext.endsWith('.xlsx') || ext.endsWith('.xls')) {
+                    setImportFile(file);
+                  } else {
+                    toast({ title: "Formato inválido", description: "Use arquivos XLSX, CSV, TXT ou TSV", variant: "destructive" });
+                  }
+                }
+              }}
+              className={`
+                border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200
+                ${isDragging ? 'border-primary bg-primary/10 scale-[1.02]' : ''}
+                ${importFile ? 'border-primary/50 bg-primary/5' : 'border-white/20 hover:border-primary/40 hover:bg-white/5'}
+              `}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv,.txt,.tsv"
+                className="hidden"
+                onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+              />
+              {importFile ? (
+                <div className="flex items-center justify-center gap-2 text-primary">
+                  <FileSpreadsheet className="w-5 h-5" />
+                  <span>{importFile.name}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setImportFile(null);
+                    }}
+                    className="ml-2 p-1 rounded-full hover:bg-white/10"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className={`text-muted-foreground ${isDragging ? 'text-primary' : ''}`}>
+                  <Upload className={`w-10 h-10 mx-auto mb-3 ${isDragging ? 'opacity-100 animate-bounce' : 'opacity-50'}`} />
+                  <p className="font-medium">{isDragging ? 'Solte o arquivo aqui' : 'Clique ou arraste um arquivo'}</p>
+                  <p className="text-xs mt-1 opacity-70">XLSX, CSV, TXT ou TSV</p>
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setImportModalOpen(false); setImportFile(null); }}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleImportSpreadsheet} 
+              disabled={importLoading || !importFile} 
+              className="bg-primary text-primary-foreground"
+            >
+              {importLoading ? "Importando..." : "Importar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Duplicate Confirmation Modal */}
+      <Dialog open={duplicateModalOpen} onOpenChange={setDuplicateModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-500">
+              <Flag className="w-5 h-5" />
+              Registros duplicados encontrados
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {duplicateItems.length} registro(s) já existem como disputa. 
+              {newItemsNds.length > 0 && ` ${newItemsNds.length} novo(s) serão importados.`}
+            </p>
+            <div className="rounded-lg border border-border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/40">
+                    <th className="px-3 py-2 text-left text-xs uppercase tracking-wider font-semibold text-muted-foreground">ND</th>
+                    <th className="px-3 py-2 text-left text-xs uppercase tracking-wider font-semibold text-muted-foreground">Cliente</th>
+                    <th className="px-3 py-2 text-left text-xs uppercase tracking-wider font-semibold text-muted-foreground">Responsável</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {duplicateItems.slice(0, 20).map((item, idx) => (
+                    <tr key={idx} className="border-t border-border/30">
+                      <td className="px-3 py-2 font-mono text-xs">{item.nd}</td>
+                      <td className="px-3 py-2">{item.cliente}</td>
+                      <td className="px-3 py-2">{item.responsavel}</td>
+                    </tr>
+                  ))}
+                  {duplicateItems.length > 20 && (
+                    <tr className="border-t border-border/30">
+                      <td colSpan={3} className="px-3 py-2 text-center text-muted-foreground text-xs">
+                        ... e mais {duplicateItems.length - 20} registros
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => { setDuplicateModalOpen(false); setParsedItemsForImport([]); setDuplicateItems([]); }}
+            >
+              Cancelar
+            </Button>
+            {newItemsNds.length > 0 && (
+              <Button 
+                variant="secondary" 
+                onClick={handleImportOnlyNew}
+                disabled={importLoading}
+              >
+                {importLoading ? "Importando..." : `Importar apenas novos (${newItemsNds.length})`}
+              </Button>
+            )}
+            <Button 
+              onClick={handleImportReplaceAll}
+              disabled={importLoading}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              {importLoading ? "Importando..." : "Substituir Todos"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </PageLayout>
+    );
+}
+
+export default function FinanceiroDisputa() {
+  return (
+    <ErrorBoundary>
+      <FinanceiroDisputaContent />
+    </ErrorBoundary>
+  );
+}
