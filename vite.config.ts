@@ -1,8 +1,24 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
+import fs from "fs";
+
+function copyApiPlugin() {
+  return {
+    name: "copy-api",
+    closeBundle() {
+      const src = path.resolve(__dirname, "api");
+      const dest = path.resolve(__dirname, "dist/api");
+      if (fs.existsSync(src)) {
+        fs.cpSync(src, dest, { recursive: true });
+        console.log("API directory copied to dist/api");
+      }
+    },
+  };
+}
 
 export default defineConfig(() => ({
+  base: "/",
   define: {
     __APP_VERSION__: JSON.stringify(Date.now().toString()),
   },
@@ -18,7 +34,7 @@ export default defineConfig(() => ({
       },
     },
   },
-  plugins: [react()],
+  plugins: [react(), copyApiPlugin()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

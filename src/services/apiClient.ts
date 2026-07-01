@@ -4,10 +4,13 @@
 // - NUNCA contém usuário, senha, host ou porta de banco. Apenas a URL base da API.
 // - Por padrão usa caminho relativo ("/api/..."), o que funciona tanto em localhost
 //   quanto em produção (o reverse proxy do domínio encaminha /api para o backend).
-// - Opcionalmente aceita VITE_API_BASE_URL (apenas a URL pública da API) para casos
-//   em que o backend roda em outro host/origem. É a única env pública permitida aqui.
+// - Opcionalmente aceita VITE_API_BASE_URL ou VITE_API_URL (apenas a URL pública da API)
+//   para casos em que o backend roda em outro host/origem. É a única env pública
+//   permitida aqui.
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
+const API_BASE = (
+  import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || ""
+).replace(/\/+$/, "");
 
 export function apiUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`;
