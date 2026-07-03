@@ -28,10 +28,8 @@ function loadEnv($envPath) {
             $value = $matches[1];
         }
 
-        if (!array_key_exists($name, $_SERVER) && !array_key_exists($name, $_ENV)) {
-            putenv("$name=$value");
-            $_ENV[$name] = $value;
-            $_SERVER[$name] = $value;
-        }
+        putenv("$name=$value");
+        $_ENV[$name] = $value;
+        $_SERVER[$name] = $value;
     }
 }

@@ -14,13 +14,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // Oculta warnings em ambiente de produção se desejado, mas mostra erros fatais
-ini_set('display_errors', 0);
-error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
 
 // 2. Carrega dependências de infraestrutura
 require_once __DIR__ . '/env.php';
-// Carrega o arquivo .env da raiz do projeto
-loadEnv(dirname(__DIR__) . '/.env');
+$paths = [
+    dirname(__DIR__, 2) . '/.env',
+    dirname(__DIR__, 2) . '/app.env',
+    dirname(__DIR__) . '/.env',
+    dirname(__DIR__) . '/app.env'
+];
+$envFile = null;
+foreach ($paths as $path) {
+    if (file_exists($path)) {
+        $envFile = $path;
+        break;
+    }
+}
+if ($envFile) {
+    loadEnv($envFile);
+}
 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/router.php';

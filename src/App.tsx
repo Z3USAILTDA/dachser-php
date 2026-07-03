@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { SeaThemeGuard } from "@/components/SeaThemeGuard";
 import { InactivityGuard } from "@/components/InactivityGuard";
+import ErrorBoundary from "@/components/ErrorBoundary";
+import { Loader2 } from "lucide-react";
 import NotFound from "./pages/NotFound";
 
 // ── ADMIN ──────────────────────────────────────────────────────────────────
@@ -135,7 +137,14 @@ const App = () => (
       <BrowserRouter basename={import.meta.env.BASE_URL}>
         <SeaThemeGuard />
         <InactivityGuard />
-        <Suspense fallback={null}>
+        <ErrorBoundary>
+        <Suspense
+          fallback={
+            <div className="min-h-screen flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          }
+        >
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
 
@@ -256,6 +265,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
+        </ErrorBoundary>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
