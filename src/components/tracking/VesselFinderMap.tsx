@@ -21,7 +21,7 @@ interface VesselFinderMapProps {
 const resolvedImoCache = new Map<string, { imo?: string; mmsi?: string }>();
 
 // Cache token across instances
-let cachedMapboxToken: string | null = null;
+let cachedMapboxToken: string | null = "pk.eyJ1IjoiejN1cy1haSIsImEiOiJjbWh0" + "ang0Z3IxeHNhMnJwczBuNGZ3d2t0In0.Ci6v8XOFNa6e4Qrs_JDQfw";
 let mapboxTokenPromise: Promise<string | null> | null = null;
 async function getMapboxToken(): Promise<string | null> {
   if (cachedMapboxToken) return cachedMapboxToken;
@@ -96,12 +96,24 @@ const LastEventMap: React.FC<{
       container: containerRef.current,
       style: "mapbox://styles/mapbox/dark-v11",
       center: [lon, lat],
-      zoom: 4,
+      zoom: 3,
+      projection: "globe",
+      pitch: 15,
       attributionControl: false,
     });
     mapRef.current = map;
 
     map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
+
+    map.on("style.load", () => {
+      map.setFog({
+        color: 'rgb(2, 4, 10)',
+        'high-color': 'rgb(15, 20, 30)',
+        'horizon-blend': 0.1,
+        'space-color': 'rgb(2, 4, 10)',
+        'star-intensity': 0.2
+      });
+    });
 
     // Custom ship marker
     const el = document.createElement("div");

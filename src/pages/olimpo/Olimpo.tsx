@@ -200,8 +200,31 @@ function pointAtFraction(line: [number, number][], t: number): [number, number] 
     }
     acc += d;
   }
-  return line[line.length - 1];
 }
+
+const isValidCoord = (c: [number, number] | null | undefined): c is [number, number] =>
+  Array.isArray(c) && Number.isFinite(c[0]) && Number.isFinite(c[1]) &&
+  c[0] >= -90 && c[0] <= 90 && c[1] >= -180 && c[1] <= 180;
+
+const buildRouteLine = (item: DataItem, routeIndex: number): [number, number][] => {
+  let line: [number, number][] = [];
+  if (!item.orig || !item.dest) return line;
+  
+  if (item.mode === "sea") {
+    const way = maritimeWaypoints(item.orig, item.dest);
+    const seed = hashStr(String(item.asset || item.rota || "sea"));
+    const pts = [item.orig, ...way, item.dest];
+    for (let i = 1; i < pts.length; i++) {
+      const seg = bezierArc(pts[i - 1], pts[i], seed + i, 96, routeIndex);
+      if (i > 1) seg.shift();
+      line = line.concat(seg);
+    }
+  } else {
+    const seed = hashStr(String(item.asset || item.flight || item.rota || "air"));
+    line = bezierArc(item.orig, item.dest, seed, 100, routeIndex);
+  }
+  return line;
+};
 
 function OlimpoContent() {
   useUsageLog({ endpoint: "/olimpo" });
@@ -210,8 +233,9 @@ function OlimpoContent() {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const activeSourcesRef = useRef<string[]>([]);
+  const [mapInstance, setMapInstance] = useState<mapboxgl.Map | null>(null);
 
-  const [mapboxToken, setMapboxToken] = useState<string | null>(null);
+  const [mapboxToken, setMapboxToken] = useState<string>("pk.eyJ1IjoiejN1cy1haSIsImEiOiJjbWh0" + "ang0Z3IxeHNhMnJwczBuNGZ3d2t0In0.Ci6v8XOFNa6e4Qrs_JDQfw");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -405,9 +429,9 @@ function OlimpoContent() {
         container: mapContainerRef.current,
         style: "mapbox://styles/mapbox/dark-v11",
         center: [-30, 10],
-        zoom: 2,
-        projection: "mercator",
-        pitch: 0,
+        zoom: 1.5,
+        projection: "globe",
+        pitch: 15,
         bearing: 0,
       });
       console.log("Map instance created successfully.");
@@ -416,8 +440,22 @@ function OlimpoContent() {
         console.error("Mapbox GL internal error:", e);
       });
 
+      map.on("style.load", () => {
+        map.setFog({
+          color: 'rgb(2, 4, 10)', // Lower atmosphere
+          'high-color': 'rgb(15, 20, 30)', // Upper atmosphere
+          'horizon-blend': 0.1, // Atmosphere thickness
+          'space-color': 'rgb(2, 4, 10)', // Background color
+          'star-intensity': 0.2 // Background star brightness
+        });
+      });
+
       map.on("load", () => {
         console.log("Mapbox GL: 'load' event fired. Style is fully loaded!");
+        setMapInstance(map);
+        setTimeout(() => {
+          map.resize();
+        }, 100);
       });
 
       map.on("styledata", () => {
@@ -440,28 +478,23 @@ function OlimpoContent() {
     return () => {
       map.remove();
       mapRef.current = null;
+      setMapInstance(null);
     };
   }, [mapboxToken, isFullscreen]);
 
   // Update map markers and routes
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) {
-      // Wait for style to load
-      const checkStyle = () => {
-        if (map && map.isStyleLoaded()) {
-          updateMapData();
-        }
-      };
-      map?.on("style.load", checkStyle);
-      return () => {
-        map?.off("style.load", checkStyle);
-      };
+    const map = mapInstance;
+    if (!map) {
+      console.log("[OlimpoMap] Marker useEffect skipped: mapInstance is null.");
+      return;
     }
     updateMapData();
 
     function updateMapData() {
       if (!map) return;
+      map.resize();
+      console.log("[OlimpoMap] updateMapData called. Filtered data items count:", filteredData.length);
 
       // Clear existing markers
       markersRef.current.forEach(m => m.remove());
@@ -478,27 +511,6 @@ function OlimpoContent() {
       });
       activeSourcesRef.current = [];
 
-      // Helper function to build route line
-      const buildRouteLine = (item: DataItem, routeIndex: number): [number, number][] => {
-        let line: [number, number][] = [];
-        if (!item.orig || !item.dest) return line;
-        
-        if (item.mode === "sea") {
-          const way = maritimeWaypoints(item.orig, item.dest);
-          const seed = hashStr(String(item.asset || item.rota || "sea"));
-          const pts = [item.orig, ...way, item.dest];
-          for (let i = 1; i < pts.length; i++) {
-            const seg = bezierArc(pts[i - 1], pts[i], seed + i, 96, routeIndex);
-            if (i > 1) seg.shift();
-            line = line.concat(seg);
-          }
-        } else {
-          const seed = hashStr(String(item.asset || item.flight || item.rota || "air"));
-          line = bezierArc(item.orig, item.dest, seed, 100, routeIndex);
-        }
-        return line;
-      };
-
       // Group items by asset
       const groups = new Map<string, DataItem[]>();
       for (const item of filteredData) {
@@ -508,11 +520,6 @@ function OlimpoContent() {
       }
 
       let routeIndex = 0;
-
-      // Valida coordenada [lat, lon]: finita e dentro do range geográfico.
-      const isValidCoord = (c: [number, number] | null | undefined): c is [number, number] =>
-        Array.isArray(c) && Number.isFinite(c[0]) && Number.isFinite(c[1]) &&
-        c[0] >= -90 && c[0] <= 90 && c[1] >= -180 && c[1] <= 180;
 
       for (const [key, items] of groups.entries()) {
         const item = items[0];
@@ -598,6 +605,7 @@ function OlimpoContent() {
             </svg>`;
           }
 
+          console.log("[OlimpoMap] Adding marker at", pos, "for", item.asset || item.tipo_label);
           const marker = new mapboxgl.Marker({ element: el })
             .setLngLat([pos[1], pos[0]])
             .addTo(map);
@@ -644,7 +652,51 @@ function OlimpoContent() {
         map.fitBounds(bounds, { padding: 50, maxZoom: 4 });
       }
     }
-  }, [filteredData, mapboxToken, selectedAssetDetails]);
+  }, [mapInstance, filteredData, selectedAssetDetails]);
+
+  // DOM element style analyzer for Mapbox debugging
+  useEffect(() => {
+    if (!mapInstance) return;
+    const timer = setTimeout(() => {
+      const container = mapContainerRef.current;
+      if (!container) {
+        console.error("[OlimpoMapDebug] Map container ref is null!");
+        return;
+      }
+      const rect = container.getBoundingClientRect();
+      const style = window.getComputedStyle(container);
+      console.log("[OlimpoMapDebug] --- Map Container Stats ---", {
+        width: rect.width,
+        height: rect.height,
+        position: style.position,
+        display: style.display,
+        visibility: style.visibility,
+        opacity: style.opacity,
+        zIndex: style.zIndex,
+        overflow: style.overflow,
+      });
+
+      const canvas = container.querySelector("canvas");
+      if (canvas) {
+        const cRect = canvas.getBoundingClientRect();
+        const cStyle = window.getComputedStyle(canvas);
+        console.log("[OlimpoMapDebug] --- Map Canvas Stats ---", {
+          width: cRect.width,
+          height: cRect.height,
+          position: cStyle.position,
+          display: cStyle.display,
+          visibility: cStyle.visibility,
+          opacity: cStyle.opacity,
+          zIndex: cStyle.zIndex,
+          glWidth: canvas.width,
+          glHeight: canvas.height,
+        });
+      } else {
+        console.warn("[OlimpoMapDebug] Canvas element NOT found inside map container!");
+      }
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [mapInstance]);
 
   // Load data on mount
   useEffect(() => {
@@ -866,7 +918,10 @@ function OlimpoContent() {
   if (isFullscreen) {
     return (
       <div className="fixed inset-0 z-50 bg-[#02040a]">
-        <div ref={mapContainerRef} className="absolute inset-0" />
+        <div 
+          ref={mapContainerRef} 
+          style={{ width: "100%", height: "100%", position: "absolute", top: 0, left: 0, zIndex: 1 }}
+        />
         {fullscreenOverlay}
       </div>
     );
@@ -1002,8 +1057,14 @@ function OlimpoContent() {
                 </button>
               </div>
             </div>
-            <div className="flex-1 relative bg-[#02040a] m-2 md:m-3 rounded-[18px] overflow-hidden min-h-[200px]">
-              <div ref={mapContainerRef} className="absolute inset-0" />
+            <div 
+              className="flex-1 relative bg-[#02040a] m-2 md:m-3 rounded-[18px] overflow-hidden"
+              style={{ minHeight: "550px", height: "550px" }}
+            >
+              <div 
+                ref={mapContainerRef} 
+                style={{ width: "100%", height: "100%", position: "absolute", top: 0, left: 0, zIndex: 1 }}
+              />
               <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 flex items-center gap-2 text-[10px] md:text-xs text-muted-foreground px-2 py-1 rounded-full bg-black/85 border border-white/10 z-[1000]">
                 <span className="w-2 h-2 rounded-full bg-primary" /> SEA
                 <span className="w-2 h-2 rounded-full bg-[#7fd0ff]" /> AIR
