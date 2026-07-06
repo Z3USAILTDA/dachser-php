@@ -40,6 +40,61 @@ function mapFormaPagamento($v) {
     return 'BOLETO';
 }
 
+// ── GET /api/fin/debug-env ───────────────────────────────────────────────────
+$router->get('fin/debug-env', function($params) {
+    try {
+        $paths = [
+            dirname(__FILE__, 4) . '/.env',
+            dirname(__FILE__, 4) . '/app.env',
+            dirname(__FILE__, 3) . '/.env',
+            dirname(__FILE__, 3) . '/app.env'
+        ];
+        $envPath = null;
+        foreach ($paths as $path) {
+            if (file_exists($path)) {
+                $envPath = $path;
+                break;
+            }
+        }
+        $envExists = ($envPath !== null);
+        $rootFiles = [];
+        if (is_dir(dirname(__FILE__, 3))) {
+            $rootFiles = scandir(dirname(__FILE__, 3));
+        }
+        $parentFiles = [];
+        if (is_dir(dirname(__FILE__, 4))) {
+            $parentFiles = scandir(dirname(__FILE__, 4));
+        }
+        $vars = [];
+        if ($envExists) {
+            $lines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            foreach ($lines as $line) {
+                if (strpos(trim($line), '#') === 0) continue;
+                if (strpos($line, '=') === false) continue;
+                list($name, $value) = explode('=', $line, 2);
+                $name = trim($name);
+                $value = trim($value);
+                if (stripos($name, 'password') !== false || stripos($name, 'pwd') !== false || stripos($name, 'key') !== false || stripos($name, 'secret') !== false) {
+                    $value = '********';
+                }
+                $vars[$name] = $value;
+            }
+        }
+        sendJson([
+            'success' => true,
+            'env_exists' => $envExists,
+            'env_path' => $envPath,
+            'root_files' => $rootFiles,
+            'parent_files' => $parentFiles,
+            'variables' => $vars,
+            'loaded_env_auth_host' => $_ENV['MARIADB_AUTH_HOST'] ?? 'NOT LOADED IN $_ENV',
+            'loaded_server_auth_host' => $_SERVER['MARIADB_AUTH_HOST'] ?? 'NOT LOADED IN $_SERVER'
+        ]);
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
 // ── GET /api/fin/stats ────────────────────────────────────────────────────────
 $router->get('fin/stats', function($params) {
     try {
@@ -843,3 +898,309 @@ $router->delete('fin/cliente-grupos/:id', function($params) {
     try { finQuery("DELETE FROM dados_dachser.t_fin_cliente_grupo WHERE id = ?", [$params['id']]); sendJson(['success' => true]); }
     catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
 });
+
+// ── GET /api/fin/metrics ──────────────────────────────────────────────────────
+$router->get('fin/metrics', function($params) {
+    try {
+        $dateFrom = $_GET['dateFrom'] ?? date('Y-m-d', strtotime('-7 days'));
+        $dateTo = $_GET['dateTo'] ?? date('Y-m-d');
+        $usernameFilter = $_GET['username'] ?? '';
+        $moduleFilter = $_GET['module'] ?? '';
+        $perPage = isset($_GET['perPage']) ? (int)$_GET['perPage'] : 50;
+        $perPage = max(10, min($perPage, 200));
+        $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+        $page = max(1, $page);
+        $offset = ($page - 1) * $perPage;
+
+        $hiddenLogUsers = ['admin', 'herbert.zacatei', 'laricell', 'teste.test3'];
+        $placeholders = implode(', ', array_fill(0, count($hiddenLogUsers), '?'));
+
+        $whereConditions = ["event_time BETWEEN ? AND ?"];
+        $queryParams = ["$dateFrom 00:00:00", "$dateTo 23:59:59"];
+
+        foreach ($hiddenLogUsers as $u) {
+            $whereConditions[] = "username != ?";
+            $queryParams[] = $u;
+        }
+
+        $whereConditions[] = "username IS NOT NULL AND username != '' AND username != 'unknown'";
+
+        if ($usernameFilter) {
+            $whereConditions[] = "username LIKE ?";
+            $queryParams[] = "%$usernameFilter%";
+        }
+
+        if ($moduleFilter) {
+            $mappedModule = strtolower($moduleFilter);
+            if ($mappedModule === 'maritimo') {
+                $mappedModule = 'sea';
+            }
+            $whereConditions[] = "LOWER(endpoint) LIKE ?";
+            $queryParams[] = "%/" . $mappedModule . "/%";
+        }
+
+        $whereClause = "WHERE " . implode(' AND ', $whereConditions);
+
+        // 1. Get total count
+        $countSql = "SELECT COUNT(*) as total FROM dados_dachser.t_usage_logs $whereClause";
+        $countResult = finQuery($countSql, $queryParams);
+        $total = (int)($countResult[0]['total'] ?? 0);
+        $totalPages = max(1, ceil($total / $perPage));
+
+        // 2. Get stats
+        $statsSql = "SELECT
+            COUNT(DISTINCT username) AS users,
+            COUNT(DISTINCT endpoint) AS endpoints,
+            SUM(CASE WHEN method='GET' THEN 1 ELSE 0 END) AS get_calls,
+            SUM(CASE WHEN method='POST' THEN 1 ELSE 0 END) AS post_calls
+          FROM dados_dachser.t_usage_logs
+          $whereClause";
+        $statsResult = finQuery($statsSql, $queryParams);
+        $statsRow = $statsResult[0] ?? [];
+
+        // Calculate days diff for average
+        $fromDate = new DateTime($dateFrom);
+        $toDate = new DateTime($dateTo);
+        $daysDiff = max(1, $toDate->diff($fromDate)->days + 1);
+        $avgPerDay = $daysDiff > 0 ? $total / $daysDiff : $total;
+
+        // 3. Get daily data for chart
+        $dailySql = "SELECT DATE(event_time) AS d, COUNT(*) AS total
+          FROM dados_dachser.t_usage_logs
+          $whereClause
+          GROUP BY DATE(event_time)
+          ORDER BY d ASC";
+        $dailyResult = finQuery($dailySql, $queryParams);
+        $dailyData = [];
+        foreach (($dailyResult ?: []) as $row) {
+            $dailyData[] = [
+                'date' => date('d/m', strtotime($row['d'])),
+                'total' => (int)$row['total']
+            ];
+        }
+
+        // 4. Get top endpoints
+        $endpointSql = "SELECT endpoint, COUNT(*) AS total
+          FROM dados_dachser.t_usage_logs
+          $whereClause
+          GROUP BY endpoint
+          ORDER BY total DESC
+          LIMIT 5";
+        $endpointResult = finQuery($endpointSql, $queryParams);
+        $endpointData = [];
+        foreach (($endpointResult ?: []) as $row) {
+            $endpointData[] = [
+                'endpoint' => $row['endpoint'],
+                'total' => (int)$row['total']
+            ];
+        }
+
+        // 5. Get paginated logs
+        $logsSql = "SELECT id, username, endpoint, method, event_time
+          FROM dados_dachser.t_usage_logs
+          $whereClause
+          ORDER BY event_time DESC, id DESC
+          LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
+        $logsResult = finQuery($logsSql, $queryParams) ?: [];
+
+        sendJson([
+            'success' => true,
+            'logs' => $logsResult,
+            'stats' => [
+                'total' => $total,
+                'distinctUsers' => (int)($statsRow['users'] ?? 0),
+                'distinctEndpoints' => (int)($statsRow['endpoints'] ?? 0),
+                'getCalls' => (int)($statsRow['get_calls'] ?? 0),
+                'postCalls' => (int)($statsRow['post_calls'] ?? 0),
+                'avgPerDay' => round($avgPerDay, 1)
+            ],
+            'dailyData' => $dailyData,
+            'endpointData' => $endpointData,
+            'totalPages' => $totalPages,
+            'currentPage' => $page
+        ]);
+    } catch (Exception $e) {
+        error_log('[GET /api/fin/metrics] ' . $e->getMessage());
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
+// ── GET /api/fin/metrics/by-module ────────────────────────────────────────────
+$router->get('fin/metrics/by-module', function($params) {
+    try {
+        $dateFrom = $_GET['dateFrom'] ?? date('Y-m-d', strtotime('-30 days'));
+        $dateTo = $_GET['dateTo'] ?? date('Y-m-d');
+        $usernameFilter = $_GET['username'] ?? '';
+
+        $hiddenLogUsers = ['admin', 'herbert.zacatei', 'laricell', 'teste.test3'];
+        $placeholders = implode(', ', array_fill(0, count($hiddenLogUsers), '?'));
+
+        $whereConditions = ["DATE(event_time) BETWEEN ? AND ?"];
+        $queryParams = [$dateFrom, $dateTo];
+
+        foreach ($hiddenLogUsers as $u) {
+            $whereConditions[] = "username != ?";
+            $queryParams[] = $u;
+        }
+
+        $whereConditions[] = "username IS NOT NULL AND username != '' AND username != 'unknown'";
+
+        if ($usernameFilter) {
+            $whereConditions[] = "username = ?";
+            $queryParams[] = $usernameFilter;
+        }
+
+        $whereClause = "WHERE " . implode(' AND ', $whereConditions);
+
+        $sql = "SELECT
+            SUBSTRING_INDEX(SUBSTRING_INDEX(endpoint, '/', 2), '/', -1) AS module,
+            COUNT(*)                AS totalAccesses,
+            COUNT(DISTINCT username) AS uniqueUsers,
+            SUBSTRING_INDEX(
+              GROUP_CONCAT(endpoint ORDER BY endpoint SEPARATOR '||'),
+              '||', 1
+            ) AS topEndpoint
+          FROM dados_dachser.t_usage_logs
+          $whereClause
+          GROUP BY module
+          ORDER BY totalAccesses DESC";
+
+        $rows = finQuery($sql, $queryParams);
+
+        $labels = [
+            'air' => 'AIR Import',
+            'sea' => 'Marítimo',
+            'fin' => 'Financeiro',
+            'admin' => 'Admin',
+            'olimpo' => 'Olimpo',
+            'chb' => 'CHB',
+            'cct' => 'CCT'
+        ];
+
+        $modules = [];
+        foreach (($rows ?: []) as $r) {
+            $modName = $r['module'] ?: 'outros';
+            $modules[] = [
+                'module' => $modName,
+                'label' => $labels[$modName] ?? strtoupper($modName),
+                'totalAccesses' => (int)$r['totalAccesses'],
+                'uniqueUsers' => (int)$r['uniqueUsers'],
+                'avgTimeOnScreenSec' => 0,
+                'topEndpoint' => $r['topEndpoint'] ?: null,
+            ];
+        }
+
+        sendJson([
+            'success' => true,
+            'modules' => $modules
+        ]);
+    } catch (Exception $e) {
+        error_log('[GET /api/fin/metrics/by-module] ' . $e->getMessage());
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
+// ── GET /api/fin/metrics/sessions ─────────────────────────────────────────────
+$router->get('fin/metrics/sessions', function($params) {
+    try {
+        $dateFrom = $_GET['dateFrom'] ?? date('Y-m-d', strtotime('-7 days'));
+        $dateTo = $_GET['dateTo'] ?? date('Y-m-d');
+        $usernameFilter = $_GET['username'] ?? '';
+        $perPage = isset($_GET['perPage']) ? (int)$_GET['perPage'] : 25;
+        $perPage = max(10, min($perPage, 200));
+        $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+        $page = max(1, $page);
+        $offset = ($page - 1) * $perPage;
+
+        $hiddenLogUsers = ['admin', 'herbert.zacatei', 'laricell', 'teste.test3'];
+        $placeholders = implode(', ', array_fill(0, count($hiddenLogUsers), '?'));
+
+        $whereConditions = ["event_time BETWEEN ? AND ?"];
+        $queryParams = ["$dateFrom 00:00:00", "$dateTo 23:59:59"];
+
+        foreach ($hiddenLogUsers as $u) {
+            $whereConditions[] = "username != ?";
+            $queryParams[] = $u;
+        }
+
+        $whereConditions[] = "username IS NOT NULL AND username != '' AND username != 'unknown'";
+
+        if ($usernameFilter) {
+            $whereConditions[] = "username LIKE ?";
+            $queryParams[] = "%$usernameFilter%";
+        }
+
+        $whereClause = "WHERE " . implode(' AND ', $whereConditions);
+
+        // 1. Count unique sessions
+        $countSql = "SELECT COUNT(DISTINCT session_id) as total FROM dados_dachser.t_usage_logs $whereClause AND session_id IS NOT NULL AND session_id != ''";
+        $countRes = finQuery($countSql, $queryParams);
+        $totalSessions = (int)($countRes[0]['total'] ?? 0);
+        $totalPages = max(1, ceil($totalSessions / $perPage));
+
+        // 2. Get sessions
+        $sessionsSql = "SELECT
+            session_id AS sessionId,
+            MIN(username) AS username,
+            MIN(event_time) AS startedAt,
+            MAX(event_time) AS endedAt,
+            COUNT(*) AS eventCount,
+            COUNT(DISTINCT endpoint) AS uniqueEndpoints,
+            TIMESTAMPDIFF(SECOND, MIN(event_time), MAX(event_time)) AS durationSec
+        FROM dados_dachser.t_usage_logs
+        $whereClause
+        AND session_id IS NOT NULL AND session_id != ''
+        GROUP BY session_id
+        ORDER BY startedAt DESC
+        LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
+
+        $sessionsRows = finQuery($sessionsSql, $queryParams);
+
+        $sessions = [];
+        if (!empty($sessionsRows)) {
+            $sessionIds = array_column($sessionsRows, 'sessionId');
+            $sessionPlaceholders = implode(', ', array_fill(0, count($sessionIds), '?'));
+
+            $eventsSql = "SELECT session_id AS sessionId, endpoint, method, event_time
+                FROM dados_dachser.t_usage_logs
+                WHERE session_id IN ($sessionPlaceholders)
+                ORDER BY event_time ASC";
+
+            $eventsRows = finQuery($eventsSql, $sessionIds) ?: [];
+
+            $eventsBySession = [];
+            foreach ($eventsRows as $ev) {
+                $eventsBySession[$ev['sessionId']][] = [
+                    'endpoint' => $ev['endpoint'],
+                    'method' => $ev['method'],
+                    'event_time' => $ev['event_time']
+                ];
+            }
+
+            foreach ($sessionsRows as $sRow) {
+                $sId = $sRow['sessionId'];
+                $sessions[] = [
+                    'sessionId' => $sId,
+                    'username' => $sRow['username'],
+                    'startedAt' => $sRow['startedAt'],
+                    'endedAt' => $sRow['endedAt'],
+                    'eventCount' => (int)$sRow['eventCount'],
+                    'uniqueEndpoints' => (int)$sRow['uniqueEndpoints'],
+                    'durationSec' => (int)$sRow['durationSec'],
+                    'events' => $eventsBySession[$sId] ?? []
+                ];
+            }
+        }
+
+        sendJson([
+            'success' => true,
+            'sessions' => $sessions,
+            'totalPages' => $totalPages,
+            'currentPage' => $page
+        ]);
+    } catch (Exception $e) {
+        error_log('[GET /api/fin/metrics/sessions] ' . $e->getMessage());
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+

@@ -338,9 +338,13 @@ function OlimpoContent() {
   // Load Mapbox token
   const loadMapboxToken = useCallback(async () => {
     try {
+      console.log("Fetching Mapbox token...");
       const json = await getMapboxToken();
+      console.log("Mapbox token response received:", json);
       if (json?.token) {
         setMapboxToken(json.token);
+      } else {
+        console.warn("Mapbox token response did not contain token key.");
       }
     } catch (err) {
       console.error("Error loading Mapbox token:", err);
@@ -379,10 +383,15 @@ function OlimpoContent() {
 
   // Initialize map
   useEffect(() => {
-    if (!mapboxToken || !mapContainerRef.current) return;
+    console.log("Mapbox initialization useEffect triggered.", { mapboxToken, container: mapContainerRef.current });
+    if (!mapboxToken || !mapContainerRef.current) {
+      console.log("Mapbox init aborted: token or container missing.");
+      return;
+    }
 
     // Cleanup previous map if exists
     if (mapRef.current) {
+      console.log("Cleaning up previous map instance.");
       mapRef.current.remove();
       mapRef.current = null;
     }
@@ -391,6 +400,7 @@ function OlimpoContent() {
 
     let map: mapboxgl.Map;
     try {
+      console.log("Creating new mapboxgl.Map instance...");
       map = new mapboxgl.Map({
         container: mapContainerRef.current,
         style: "mapbox://styles/mapbox/dark-v11",
@@ -399,6 +409,19 @@ function OlimpoContent() {
         projection: "mercator",
         pitch: 0,
         bearing: 0,
+      });
+      console.log("Map instance created successfully.");
+
+      map.on("error", (e) => {
+        console.error("Mapbox GL internal error:", e);
+      });
+
+      map.on("load", () => {
+        console.log("Mapbox GL: 'load' event fired. Style is fully loaded!");
+      });
+
+      map.on("styledata", () => {
+        console.log("Mapbox GL: 'styledata' event fired. Style metadata updated.");
       });
     } catch (err) {
       console.error("Failed to initialize Mapbox:", err);

@@ -190,7 +190,8 @@ function getFaturamentoRows($DB) {
 
 // GET /api/olimpo/mapbox-token
 $router->get('olimpo/mapbox-token', function($params) {
-    sendJson(['success' => true, 'token' => $_ENV['MAPBOX_PUBLIC_TOKEN'] ?? '']);
+    $token = !empty($_ENV['MAPBOX_PUBLIC_TOKEN']) ? $_ENV['MAPBOX_PUBLIC_TOKEN'] : (!empty($_ENV['MAPBOX_TOKEN']) ? $_ENV['MAPBOX_TOKEN'] : '');
+    sendJson(['success' => true, 'token' => $token]);
 });
 
 // GET /api/olimpo/movimentacao-global

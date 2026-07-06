@@ -66,13 +66,13 @@ const Login = () => {
       });
 
       if (data.user.must_change_password === 1) {
-        navigate("/change-password");
+        window.location.href = "/change-password";
       } else if (data.user.olimpo_only === 1) {
-        navigate("/olimpo");
+        window.location.href = "/olimpo";
       } else if (data.user.metrics_only === 1) {
-        navigate("/admin/metrics");
+        window.location.href = "/admin/metrics";
       } else {
-        navigate("/dashboard");
+        window.location.href = "/dashboard";
       }
     } catch (error) {
       console.error('Login error:', error);

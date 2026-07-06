@@ -211,7 +211,7 @@ const Dashboard = () => {
   const isAdmin = user?.is_admin === 1;
   const handleLogout = () => {
     localStorage.removeItem("user");
-    navigate("/");
+    window.location.href = "/";
   };
   const toggleMenu = (menuId: string) => {
     if (activeMenu !== menuId) {

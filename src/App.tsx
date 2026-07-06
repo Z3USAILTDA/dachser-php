@@ -217,7 +217,7 @@ const App = () => (
             <Route path="/maritimo/invoices-draft-hbl" element={<InvoicesDraftHbl />} />
 
             {/* DEMURRAGE */}
-            <Route path="/sea/demurrage" element={<DemurrageIndex />} />
+            <Route path="/sea/demurrage" element={<DemurrageMonitor />} />
             <Route path="/sea/demurrage/monitor" element={<DemurrageMonitor />} />
             <Route path="/sea/demurrage/free-times" element={<DemurrageFreeTimes />} />
             <Route path="/sea/demurrage/rates" element={<DemurrageRates />} />

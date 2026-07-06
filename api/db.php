@@ -63,8 +63,8 @@ function queryWithRetry($pdo, $sql, $params = [], $maxRetries = 1) {
             $stmt = $pdo->prepare($sql);
             $stmt->execute($params);
             
-            // Se for SELECT, retorna o resultado completo
-            if (preg_match('/^\s*(SELECT|SHOW|DESCRIBE|EXPLAIN)/i', $sql)) {
+            // Se for SELECT ou CTE (WITH), retorna o resultado completo
+            if (preg_match('/^\s*(SELECT|SHOW|DESCRIBE|EXPLAIN|WITH)/i', $sql)) {
                 return $stmt->fetchAll();
             }
             

@@ -5,6 +5,15 @@ const VERSION_KEY = "app_version";
 
 export async function checkAndClearCache(): Promise<void> {
   try {
+    // Desregistrar todos os Service Workers ativos no domínio
+    if ("serviceWorker" in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (const registration of registrations) {
+        await registration.unregister();
+        console.log("[CacheControl] Service Worker desregistrado com sucesso.");
+      }
+    }
+
     const savedVersion = localStorage.getItem(VERSION_KEY);
 
     if (savedVersion && savedVersion !== APP_VERSION) {
