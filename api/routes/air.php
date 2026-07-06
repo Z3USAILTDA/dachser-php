@@ -20,50 +20,103 @@ define('RULE_TABLE', 'dados_dachser.t_awb_rule_row');
 
 // IATA Map
 $iataCityMap = [
-  "GUARULHOS"=>"GRU","SAO PAULO"=>"GRU","CAMPINAS"=>"VCP","VIRACOPOS"=>"VCP",
-  "CURITIBA"=>"CWB","PORTO ALEGRE"=>"POA","RIO DE JANEIRO"=>"GIG",
-  "BELO HORIZONTE"=>"CNF","SALVADOR"=>"SSA","RECIFE"=>"REC",
-  "FORTALEZA"=>"FOR","BRASILIA"=>"BSB","MANAUS"=>"MAO","BELEM"=>"BEL",
-  "GOIANIA"=>"GYN","VITORIA"=>"VIX","FLORIANOPOLIS"=>"FLN","NATAL"=>"NAT",
-  "FRANKFURT"=>"FRA","PARIS"=>"CDG","AMSTERDAM"=>"AMS","LONDON"=>"LHR",
-  "MADRID"=>"MAD","MILAN"=>"MXP","ROME"=>"FCO","LISBON"=>"LIS",
-  "MUNICH"=>"MUC","ZURICH"=>"ZRH","VIENNA"=>"VIE","BRUSSELS"=>"BRU",
-  "BARCELONA"=>"BCN","VALENCIA"=>"VLC","OSLO"=>"OSL","STOCKHOLM"=>"ARN",
-  "NEW YORK"=>"JFK","MIAMI"=>"MIA","CHICAGO"=>"ORD","LOS ANGELES"=>"LAX",
-  "ATLANTA"=>"ATL","DALLAS"=>"DFW","HOUSTON"=>"IAH","BOSTON"=>"BOS",
-  "TORONTO"=>"YYZ","MONTREAL"=>"YUL","MEXICO CITY"=>"MEX",
-  "BOGOTA"=>"BOG","SANTIAGO"=>"SCL","BUENOS AIRES"=>"EZE","LIMA"=>"LIM",
-  "DUBAI"=>"DXB","HONG KONG"=>"HKG","SHANGHAI"=>"PVG","BEIJING"=>"PEK",
-  "TOKYO"=>"NRT","SINGAPORE"=>"SIN","SYDNEY"=>"SYD","AUCKLAND"=>"AKL",
-  "JOHANNESBURG"=>"JNB","NAIROBI"=>"NBO","ADDIS ABABA"=>"ADD"
+    "GUARULHOS" => "GRU",
+    "SAO PAULO" => "GRU",
+    "CAMPINAS" => "VCP",
+    "VIRACOPOS" => "VCP",
+    "CURITIBA" => "CWB",
+    "PORTO ALEGRE" => "POA",
+    "RIO DE JANEIRO" => "GIG",
+    "BELO HORIZONTE" => "CNF",
+    "SALVADOR" => "SSA",
+    "RECIFE" => "REC",
+    "FORTALEZA" => "FOR",
+    "BRASILIA" => "BSB",
+    "MANAUS" => "MAO",
+    "BELEM" => "BEL",
+    "GOIANIA" => "GYN",
+    "VITORIA" => "VIX",
+    "FLORIANOPOLIS" => "FLN",
+    "NATAL" => "NAT",
+    "FRANKFURT" => "FRA",
+    "PARIS" => "CDG",
+    "AMSTERDAM" => "AMS",
+    "LONDON" => "LHR",
+    "MADRID" => "MAD",
+    "MILAN" => "MXP",
+    "ROME" => "FCO",
+    "LISBON" => "LIS",
+    "MUNICH" => "MUC",
+    "ZURICH" => "ZRH",
+    "VIENNA" => "VIE",
+    "BRUSSELS" => "BRU",
+    "BARCELONA" => "BCN",
+    "VALENCIA" => "VLC",
+    "OSLO" => "OSL",
+    "STOCKHOLM" => "ARN",
+    "NEW YORK" => "JFK",
+    "MIAMI" => "MIA",
+    "CHICAGO" => "ORD",
+    "LOS ANGELES" => "LAX",
+    "ATLANTA" => "ATL",
+    "DALLAS" => "DFW",
+    "HOUSTON" => "IAH",
+    "BOSTON" => "BOS",
+    "TORONTO" => "YYZ",
+    "MONTREAL" => "YUL",
+    "MEXICO CITY" => "MEX",
+    "BOGOTA" => "BOG",
+    "SANTIAGO" => "SCL",
+    "BUENOS AIRES" => "EZE",
+    "LIMA" => "LIM",
+    "DUBAI" => "DXB",
+    "HONG KONG" => "HKG",
+    "SHANGHAI" => "PVG",
+    "BEIJING" => "PEK",
+    "TOKYO" => "NRT",
+    "SINGAPORE" => "SIN",
+    "SYDNEY" => "SYD",
+    "AUCKLAND" => "AKL",
+    "JOHANNESBURG" => "JNB",
+    "NAIROBI" => "NBO",
+    "ADDIS ABABA" => "ADD"
 ];
 
-function extractIATA($loc) {
+function extractIATA($loc)
+{
     global $iataCityMap;
-    if (!$loc) return "";
+    if (!$loc)
+        return "";
     $t = trim($loc);
-    if (preg_match('/\(([A-Z]{3})\)/i', $t, $matches)) return strtoupper($matches[1]);
-    if (preg_match('/^[A-Z]{3}$/i', $t)) return strtoupper($t);
-    
+    if (preg_match('/\(([A-Z]{3})\)/i', $t, $matches))
+        return strtoupper($matches[1]);
+    if (preg_match('/^[A-Z]{3}$/i', $t))
+        return strtoupper($t);
+
     $upper = preg_replace('/\s+/', ' ', preg_replace('/[^A-Z\s]/i', ' ', strtoupper($t)));
     $upper = trim($upper);
-    if (isset($iataCityMap[$upper])) return $iataCityMap[$upper];
-    
+    if (isset($iataCityMap[$upper]))
+        return $iataCityMap[$upper];
+
     $parts = explode(" ", $upper);
     $firstWord = isset($parts[0]) ? $parts[0] : '';
-    if ($firstWord && strlen($firstWord) > 3 && isset($iataCityMap[$firstWord])) return $iataCityMap[$firstWord];
-    
-    if (preg_match('/[\s-]([A-Z]{3})$/i', $t, $endMatch)) return strtoupper($endMatch[1]);
+    if ($firstWord && strlen($firstWord) > 3 && isset($iataCityMap[$firstWord]))
+        return $iataCityMap[$firstWord];
+
+    if (preg_match('/[\s-]([A-Z]{3})$/i', $t, $endMatch))
+        return strtoupper($endMatch[1]);
     return strtoupper(substr(preg_replace('/[^A-Za-z]/', '', $t), 0, 3));
 }
 
 // Core compute tracking
-function computeTrackingData() {
+function computeTrackingData()
+{
     $cached = getCache('trackingResultCache', 25);
-    if ($cached) return $cached;
+    if ($cached)
+        return $cached;
 
     $pdo = getPDO();
-    $normalizeDesc = function($s) {
+    $normalizeDesc = function ($s) {
         return trim(preg_replace('/\s+/', ' ', preg_replace('/[^\w\s]/u', ' ', strtoupper(trim($s)))));
     };
 
@@ -74,8 +127,9 @@ function computeTrackingData() {
     $keywordIndex = [];
     foreach (($eventsRows ?: []) as $e) {
         $code = strtoupper(trim($e['code']));
-        if (!$code) continue;
-        $eventMap[$code] = ['id' => (int)$e['id'], 'descricao_en' => $e['descricao_en'] ?: ''];
+        if (!$code)
+            continue;
+        $eventMap[$code] = ['id' => (int) $e['id'], 'descricao_en' => $e['descricao_en'] ?: ''];
         $desc = $normalizeDesc($e['descricao_en']);
         if ($desc) {
             $exactMap[$desc] = $code;
@@ -89,15 +143,17 @@ function computeTrackingData() {
         $code = strtoupper(trim($d['code']));
         $descText = strtoupper($d['description']);
         $descLookup[] = ['code' => $code, 'description' => $descText];
-        
+
         $desc = $normalizeDesc($d['description']);
-        if (!$code || !$desc) continue;
-        if (!isset($exactMap[$desc])) $exactMap[$desc] = $code;
+        if (!$code || !$desc)
+            continue;
+        if (!isset($exactMap[$desc]))
+            $exactMap[$desc] = $code;
         $keywordIndex[] = ['needle' => $desc, 'code' => $code];
     }
-    
+
     // Ordena palavra-chave por tamanho desc
-    usort($keywordIndex, function($a, $b) {
+    usort($keywordIndex, function ($a, $b) {
         return strlen($b['needle']) - strlen($a['needle']);
     });
 
@@ -180,7 +236,8 @@ function computeTrackingData() {
     $missingClienteHawbs = [];
     foreach (($rows ?: []) as $r) {
         if (!isset($r['CLIENTE']) || trim($r['CLIENTE']) === '') {
-            if ($r['HAWB'] && $r['HAWB'] !== 'NI') $missingClienteHawbs[] = $r['HAWB'];
+            if ($r['HAWB'] && $r['HAWB'] !== 'NI')
+                $missingClienteHawbs[] = $r['HAWB'];
         }
     }
 
@@ -192,7 +249,8 @@ function computeTrackingData() {
             $ph = implode(',', array_fill(0, count($chunk), '?'));
             $masterRows = queryWithRetry($pdo, "SELECT hawb, cliente FROM dados_dachser.t_master_dados WHERE hawb IN ($ph) AND cliente IS NOT NULL AND cliente != ''", $chunk);
             foreach (($masterRows ?: []) as $mr) {
-                if ($mr['hawb'] && $mr['cliente']) $clienteMap[$mr['hawb']] = $mr['cliente'];
+                if ($mr['hawb'] && $mr['cliente'])
+                    $clienteMap[$mr['hawb']] = $mr['cliente'];
             }
         }
     }
@@ -203,18 +261,23 @@ function computeTrackingData() {
         foreach (($visRows ?: []) as $v) {
             $visibilityMap["{$v['awb']}|{$v['hawb']}"] = $v['hide_reason'] ?: '';
         }
-    } catch (Exception $e) {}
+    } catch (Exception $e) {
+    }
 
     // Discrepancias
     $discrepancyMap = [];
     try {
-        $activeAwbs = array_unique(array_filter(array_map(function($r) { return trim($r['AWB']); }, $rows ?: [])));
+        $activeAwbs = array_unique(array_filter(array_map(function ($r) {
+            return trim($r['AWB']);
+        }, $rows ?: [])));
         if (count($activeAwbs) > 0) {
-            $awbInClause = "AND tda.awb_number IN (" . implode(',', array_map(function($a) use ($pdo) { return $pdo->quote($a); }, $activeAwbs)) . ")";
+            $awbInClause = "AND tda.awb_number IN (" . implode(',', array_map(function ($a) use ($pdo) {
+                return $pdo->quote($a);
+            }, $activeAwbs)) . ")";
         } else {
             $awbInClause = "AND 1=0";
         }
-        
+
         $discSql = "
             WITH base_disc AS (
               SELECT tda.awb_number AS awb, tda.hawb_number AS hawb, tdaf.timeline_json
@@ -260,9 +323,9 @@ function computeTrackingData() {
         $discRows = queryWithRetry($pdo, $discSql);
         foreach (($discRows ?: []) as $dr) {
             $discrepancyMap["{$dr['AWB']}|{$dr['HAWB']}"] = [
-                'pieces_discrepancy' => (int)$dr['PIECES_DISCREPANCY'] === 1,
-                'baseline_pieces' => $dr['BASELINE_PECAS'] !== null ? (int)$dr['BASELINE_PECAS'] : null,
-                'has_dis_event' => (int)$dr['HAS_DIS_EVENT'] === 1
+                'pieces_discrepancy' => (int) $dr['PIECES_DISCREPANCY'] === 1,
+                'baseline_pieces' => $dr['BASELINE_PECAS'] !== null ? (int) $dr['BASELINE_PECAS'] : null,
+                'has_dis_event' => (int) $dr['HAS_DIS_EVENT'] === 1
             ];
         }
     } catch (Exception $e) {
@@ -272,13 +335,17 @@ function computeTrackingData() {
     // Rotas
     $routeMap = [];
     try {
-        $activeAwbsRoute = array_unique(array_filter(array_map(function($r) { return trim($r['AWB']); }, $rows ?: [])));
+        $activeAwbsRoute = array_unique(array_filter(array_map(function ($r) {
+            return trim($r['AWB']);
+        }, $rows ?: [])));
         if (count($activeAwbsRoute) > 0) {
-            $awbInClauseRoute = "AND tda.awb_number IN (" . implode(',', array_map(function($a) use ($pdo) { return $pdo->quote($a); }, $activeAwbsRoute)) . ")";
+            $awbInClauseRoute = "AND tda.awb_number IN (" . implode(',', array_map(function ($a) use ($pdo) {
+                return $pdo->quote($a);
+            }, $activeAwbsRoute)) . ")";
         } else {
             $awbInClauseRoute = "AND 1=0";
         }
-        
+
         $routeSql = "
           WITH base_rota AS (
             SELECT tda.awb_number AS awb,tda.hawb_number AS hawb,tdaf.timeline_json,TRIM(COALESCE(tdaf.origin,'')) AS origin_raw,TRIM(COALESCE(tdaf.destination,'')) AS destination_raw
@@ -368,95 +435,137 @@ function computeTrackingData() {
     }
 
     $iataWeight = [
-        'POD'=>44,'DLV'=>43,'NFD'=>42,'RCF'=>41,'AWD'=>40,'ARR'=>39,'TRM'=>38,'TFD'=>37,'DEP'=>36,
-        'MAN'=>35,'RCS'=>34,'RCT'=>34,'FOH'=>33,'BKD'=>32,'AWR'=>40,'CCD'=>40,'FWB'=>4,'DOC'=>12,
-        'PRE'=>20,'TRA'=>32,'DIS'=>30,'OFLD'=>28
+        'POD' => 44,
+        'DLV' => 43,
+        'NFD' => 42,
+        'RCF' => 41,
+        'AWD' => 40,
+        'ARR' => 39,
+        'TRM' => 38,
+        'TFD' => 37,
+        'DEP' => 36,
+        'MAN' => 35,
+        'RCS' => 34,
+        'RCT' => 34,
+        'FOH' => 33,
+        'BKD' => 32,
+        'AWR' => 40,
+        'CCD' => 40,
+        'FWB' => 4,
+        'DOC' => 12,
+        'PRE' => 20,
+        'TRA' => 32,
+        'DIS' => 30,
+        'OFLD' => 28
     ];
-    $validIata = array_merge(array_keys($iataWeight), ['OFLD','NIL','NIF','DIS','TFD','RCT','TRM','POD','UNK']);
+    $validIata = array_merge(array_keys($iataWeight), ['OFLD', 'NIL', 'NIF', 'DIS', 'TFD', 'RCT', 'TRM', 'POD', 'UNK']);
     $validIataSet = array_flip($validIata);
 
-    $validate = function($c) use ($validIataSet) {
-        if (!$c) return null;
+    $validate = function ($c) use ($validIataSet) {
+        if (!$c)
+            return null;
         $u = strtoupper(trim($c));
         return isset($validIataSet[$u]) ? $u : null;
     };
 
-    $resolveCode = function($desc) use ($descLookup) {
-        if (!$desc || $desc === 'null') return null;
+    $resolveCode = function ($desc) use ($descLookup) {
+        if (!$desc || $desc === 'null')
+            return null;
         $upper = strtoupper($desc);
-        if (strpos($upper, 'OFFLOADED') !== false) return 'OFLD';
-        if (strpos($upper, 'READY FOR PICK-UP') !== false || strpos($upper, 'AGENT NOTIFIED') !== false || strpos($upper, 'NOTIFIED FOR DELIVERY') !== false) return 'NFD';
-        if (strpos($upper, 'DOCUMENTS DELIVERED') !== false) return 'AWD';
-        if (strpos($upper, 'RECEIVED FROM FLIGHT') !== false) return 'RCF';
-        if (strpos($upper, 'RECEIVED FROM CARRIER') !== false) return 'RCT';
-        if (strpos($upper, 'RECEIVED FROM SHIPPER') !== false || strpos($upper, 'READY FOR CARRIAGE') !== false) return 'RCS';
-        if (strpos($upper, 'FREIGHT ON HAND') !== false) return 'FOH';
-        if (strpos($upper, 'MANIFESTED') !== false) return 'MAN';
-        if (strpos($upper, 'DEPARTED') !== false) return 'DEP';
-        if (strpos($upper, 'ARRIVED') !== false) return 'ARR';
-        if (strpos($upper, 'DELIVERED') !== false) return 'DLV';
+        if (strpos($upper, 'OFFLOADED') !== false)
+            return 'OFLD';
+        if (strpos($upper, 'READY FOR PICK-UP') !== false || strpos($upper, 'AGENT NOTIFIED') !== false || strpos($upper, 'NOTIFIED FOR DELIVERY') !== false)
+            return 'NFD';
+        if (strpos($upper, 'DOCUMENTS DELIVERED') !== false)
+            return 'AWD';
+        if (strpos($upper, 'RECEIVED FROM FLIGHT') !== false)
+            return 'RCF';
+        if (strpos($upper, 'RECEIVED FROM CARRIER') !== false)
+            return 'RCT';
+        if (strpos($upper, 'RECEIVED FROM SHIPPER') !== false || strpos($upper, 'READY FOR CARRIAGE') !== false)
+            return 'RCS';
+        if (strpos($upper, 'FREIGHT ON HAND') !== false)
+            return 'FOH';
+        if (strpos($upper, 'MANIFESTED') !== false)
+            return 'MAN';
+        if (strpos($upper, 'DEPARTED') !== false)
+            return 'DEP';
+        if (strpos($upper, 'ARRIVED') !== false)
+            return 'ARR';
+        if (strpos($upper, 'DELIVERED') !== false)
+            return 'DLV';
         foreach ($descLookup as $d) {
-            if (strpos($upper, $d['description']) === 0) return $d['code'];
+            if (strpos($upper, $d['description']) === 0)
+                return $d['code'];
         }
         return null;
     };
 
-    $resolveCodeFromSlot = function($nativeCode, $desc) use ($validate, $exactMap, $keywordIndex, $resolveCode) {
+    $resolveCodeFromSlot = function ($nativeCode, $desc) use ($validate, $exactMap, $keywordIndex, $resolveCode) {
         $native = strtoupper(trim($nativeCode));
         if ($native && preg_match('/^[A-Z]{2,5}$/', $native)) {
             $v = $validate($native);
-            if ($v) return $v;
+            if ($v)
+                return $v;
         }
-        if (!$desc || $desc === 'null') return null;
-        
+        if (!$desc || $desc === 'null')
+            return null;
+
         // normaliza desc
         $normDesc = trim(preg_replace('/\s+/', ' ', preg_replace('/[^\w\s]/u', ' ', strtoupper(trim($desc)))));
         if ($normDesc) {
             if (isset($exactMap[$normDesc])) {
                 $v = $validate($exactMap[$normDesc]);
-                if ($v) return $v;
+                if ($v)
+                    return $v;
             }
             foreach ($keywordIndex as $kw) {
                 if ($kw['needle'] && strpos($normDesc, $kw['needle']) !== false) {
                     $v = $validate($kw['code']);
-                    if ($v) return $v;
+                    if ($v)
+                        return $v;
                 }
             }
         }
 
         if (preg_match('/\|\s*Code\s+([A-Z]{2,5})\s*\|/i', $desc, $m)) {
             $v = $validate($m[1]);
-            if ($v) return $v;
+            if ($v)
+                return $v;
         }
         if (preg_match('/^([A-Z]{2,5})\b/i', trim($desc), $m)) {
             $v = $validate($m[1]);
-            if ($v) return $v;
+            if ($v)
+                return $v;
         }
         if (preg_match('/\(([A-Z]{2,5})\)/i', $desc, $m)) {
             $v = $validate($m[1]);
-            if ($v) return $v;
+            if ($v)
+                return $v;
         }
         return $validate($resolveCode($desc));
     };
 
-    $parseSlotDateMs = function($s) {
-        if (!$s) return 0;
+    $parseSlotDateMs = function ($s) {
+        if (!$s)
+            return 0;
         $direct = strtotime($s);
-        if ($direct !== false && $direct > 0) return $direct * 1000;
-        
+        if ($direct !== false && $direct > 0)
+            return $direct * 1000;
+
         if (preg_match('/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})(?:[,\s]+(\d{2}):(\d{2}))?/i', $s, $m)) {
-            $months = ['jan'=>0,'feb'=>1,'mar'=>2,'apr'=>3,'may'=>4,'jun'=>5,'jul'=>6,'aug'=>7,'sep'=>8,'oct'=>9,'nov'=>10,'dec'=>11];
+            $months = ['jan' => 0, 'feb' => 1, 'mar' => 2, 'apr' => 3, 'may' => 4, 'jun' => 5, 'jul' => 6, 'aug' => 7, 'sep' => 8, 'oct' => 9, 'nov' => 10, 'dec' => 11];
             $mo = isset($months[strtolower($m[2])]) ? $months[strtolower($m[2])] : null;
             if ($mo !== null) {
-                $hr = isset($m[4]) ? (int)$m[4] : 0;
-                $mn = isset($m[5]) ? (int)$m[5] : 0;
-                return gmmktime($hr, $mn, 0, $mo + 1, (int)$m[1], (int)$m[3]) * 1000;
+                $hr = isset($m[4]) ? (int) $m[4] : 0;
+                $mn = isset($m[5]) ? (int) $m[5] : 0;
+                return gmmktime($hr, $mn, 0, $mo + 1, (int) $m[1], (int) $m[3]) * 1000;
             }
         }
         return 0;
     };
 
-    $pickTopByIATA = function($row) use ($resolveCodeFromSlot, $parseSlotDateMs, $iataWeight) {
+    $pickTopByIATA = function ($row) use ($resolveCodeFromSlot, $parseSlotDateMs, $iataWeight) {
         $slots = [
             ['code' => $resolveCodeFromSlot($row['code0_native'], $row['desc0']), 'desc' => $row['desc0'], 'loc' => $row['loc0'], 'date' => $row['date0'], 'idx' => 0],
             ['code' => $resolveCodeFromSlot($row['code1_native'], $row['desc1']), 'desc' => $row['desc1'], 'loc' => $row['loc1'], 'date' => $row['date1'], 'idx' => 1],
@@ -466,17 +575,22 @@ function computeTrackingData() {
             ['code' => $resolveCodeFromSlot($row['code5_native'], $row['desc5']), 'desc' => $row['desc5'], 'loc' => $row['loc5'], 'date' => $row['date5'], 'idx' => 5],
         ];
 
-        $slots = array_filter($slots, function($s) { return $s['desc'] || $s['code']; });
-        if (count($slots) === 0) return ['code' => null, 'desc' => null, 'loc' => null, 'date' => null, 'idx' => -1];
-        
-        $isBkd = function($c) {
+        $slots = array_filter($slots, function ($s) {
+            return $s['desc'] || $s['code'];
+        });
+        if (count($slots) === 0)
+            return ['code' => null, 'desc' => null, 'loc' => null, 'date' => null, 'idx' => -1];
+
+        $isBkd = function ($c) {
             $u = strtoupper(trim($c));
-            return $u==='BKD'||$u==='BKG'||$u==='BOOKED';
+            return $u === 'BKD' || $u === 'BKG' || $u === 'BOOKED';
         };
 
-        $nonBkd = array_filter($slots, function($s) use ($isBkd) { return !$isBkd($s['code']); });
+        $nonBkd = array_filter($slots, function ($s) use ($isBkd) {
+            return !$isBkd($s['code']);
+        });
         $activeSlots = count($nonBkd) > 0 ? $nonBkd : $slots;
-        
+
         $slotsWithDate = [];
         foreach ($activeSlots as $s) {
             $s['dateMs'] = $parseSlotDateMs($s['date']);
@@ -486,12 +600,16 @@ function computeTrackingData() {
         $latestDateMs = count($slotsWithDate) > 0 ? max(array_column($slotsWithDate, 'dateMs')) : 0;
         if ($latestDateMs <= 0) {
             // retorna o de menor index
-            usort($activeSlots, function($a, $b) { return $a['idx'] - $b['idx']; });
+            usort($activeSlots, function ($a, $b) {
+                return $a['idx'] - $b['idx'];
+            });
             return reset($activeSlots);
         }
 
-        $bestGroup = array_filter($slotsWithDate, function($s) use ($latestDateMs) { return $s['dateMs'] === $latestDateMs; });
-        
+        $bestGroup = array_filter($slotsWithDate, function ($s) use ($latestDateMs) {
+            return $s['dateMs'] === $latestDateMs;
+        });
+
         $winner = reset($bestGroup);
         $winnerW = isset($iataWeight[strtoupper($winner['code'])]) ? $iataWeight[strtoupper($winner['code'])] : 0;
 
@@ -506,15 +624,100 @@ function computeTrackingData() {
     };
 
     $stopWordsConn = array_flip([
-        'NIL','NIF','DIS','OFD','OFL','BUP','RDP','LAT','TKG','SCR','ECC',
-        'TFD','TRM','RFC','DMG','RET','AWB','PRE','DEP','ARR','RCF','RCS',
-        'MAN','NFD','DLV','POD','BKD','BKG','BKF','FOH','AWD','CCD','ASN',
-        'MOV','OFLD','FWB','DOC','AWR','TDE','LOF','TFS','MIS','BCBP','UNK',
-        'TRA','PRD','RCP','CAN','LRC','FSH','FSU',
-        'AND','THE','FOR','BUT','NOT','ALL','ANY','ARE','OUR','ONE','TWO',
-        'NEW','OLD','WAY','OUT','OFF','END','NOW','WHO','HOW','ITS','HIM',
-        'HER','HIS','OWN','GET','PUT','SET','LET','HAS','HAD','USE','ACT',
-        'AGE','AIR','FAR','YET','TOP','DAY','MAY','FLT','AGT','SHT'
+        'NIL',
+        'NIF',
+        'DIS',
+        'OFD',
+        'OFL',
+        'BUP',
+        'RDP',
+        'LAT',
+        'TKG',
+        'SCR',
+        'ECC',
+        'TFD',
+        'TRM',
+        'RFC',
+        'DMG',
+        'RET',
+        'AWB',
+        'PRE',
+        'DEP',
+        'ARR',
+        'RCF',
+        'RCS',
+        'MAN',
+        'NFD',
+        'DLV',
+        'POD',
+        'BKD',
+        'BKG',
+        'BKF',
+        'FOH',
+        'AWD',
+        'CCD',
+        'ASN',
+        'MOV',
+        'OFLD',
+        'FWB',
+        'DOC',
+        'AWR',
+        'TDE',
+        'LOF',
+        'TFS',
+        'MIS',
+        'BCBP',
+        'UNK',
+        'TRA',
+        'PRD',
+        'RCP',
+        'CAN',
+        'LRC',
+        'FSH',
+        'FSU',
+        'AND',
+        'THE',
+        'FOR',
+        'BUT',
+        'NOT',
+        'ALL',
+        'ANY',
+        'ARE',
+        'OUR',
+        'ONE',
+        'TWO',
+        'NEW',
+        'OLD',
+        'WAY',
+        'OUT',
+        'OFF',
+        'END',
+        'NOW',
+        'WHO',
+        'HOW',
+        'ITS',
+        'HIM',
+        'HER',
+        'HIS',
+        'OWN',
+        'GET',
+        'PUT',
+        'SET',
+        'LET',
+        'HAS',
+        'HAD',
+        'USE',
+        'ACT',
+        'AGE',
+        'AIR',
+        'FAR',
+        'YET',
+        'TOP',
+        'DAY',
+        'MAY',
+        'FLT',
+        'AGT',
+        'SHT'
     ]);
 
     $suppressedDiscrepancyAwbs = array_flip(['047-32916380']);
@@ -542,14 +745,17 @@ function computeTrackingData() {
             $resolveCodeFromSlot($row['code4_native'], $row['desc4']),
             $resolveCodeFromSlot($row['code5_native'], $row['desc5'])
         ];
-        
+
         $sanitizedLastStatus = strtoupper(trim($lastStatusCode));
         $safeLastStatus = isset($validIataSet[$sanitizedLastStatus]) ? $sanitizedLastStatus : null;
-        
+
         $finalCode = null;
         $hasDlvOrPod = false;
         foreach ($allCodes as $c) {
-            if ($c === 'DLV' || $c === 'POD') { $hasDlvOrPod = true; break; }
+            if ($c === 'DLV' || $c === 'POD') {
+                $hasDlvOrPod = true;
+                break;
+            }
         }
         if ($sanitizedLastStatus === 'DLV' || $sanitizedLastStatus === 'POD') {
             $hasDlvOrPod = true;
@@ -557,9 +763,15 @@ function computeTrackingData() {
 
         if ($hasDlvOrPod) {
             $hasPod = false;
-            foreach ($allCodes as $c) { if ($c === 'POD') { $hasPod = true; break; } }
-            if ($sanitizedLastStatus === 'POD') $hasPod = true;
-            
+            foreach ($allCodes as $c) {
+                if ($c === 'POD') {
+                    $hasPod = true;
+                    break;
+                }
+            }
+            if ($sanitizedLastStatus === 'POD')
+                $hasPod = true;
+
             $finalCode = $hasPod ? 'POD' : 'DLV';
         } else {
             $finalCode = $codeFromTimeline ?: ($safeLastStatus ?: null);
@@ -572,8 +784,10 @@ function computeTrackingData() {
             $loc = extractIATA($electedLoc);
             $authDest = $routeEntry ? $routeEntry['destination'] : null;
             $dest = $authDest ?: extractIATA($row['DESTINO'] ?: '');
-            if ($dest && $loc && $loc === $dest) $finalCode = 'ARR - DESTINO';
-            elseif ($authDest && $loc && $loc !== $authDest) $finalCode = 'ARR - CONEXÃO';
+            if ($dest && $loc && $loc === $dest)
+                $finalCode = 'ARR - DESTINO';
+            elseif ($authDest && $loc && $loc !== $authDest)
+                $finalCode = 'ARR - CONEXÃO';
         }
 
         $dateStr = $electedDate ?: null;
@@ -583,7 +797,10 @@ function computeTrackingData() {
         if (!$dateStr && is_array($timeline) && count($timeline) > 0) {
             foreach ($timeline as $evt) {
                 $d = trim(isset($evt['date']) ? $evt['date'] : (isset($evt['Date']) ? $evt['Date'] : ''));
-                if ($d) { $dateStr = $d; break; }
+                if ($d) {
+                    $dateStr = $d;
+                    break;
+                }
             }
         }
 
@@ -595,7 +812,10 @@ function computeTrackingData() {
                 $evtLoc = extractIATA(isset($evt['location']) ? $evt['location'] : (isset($evt['Location']) ? $evt['Location'] : ''));
                 if (strpos($desc, 'ARRIVED') !== false && $evtLoc === $destIATA) {
                     $d = trim(isset($evt['date']) ? $evt['date'] : (isset($evt['Date']) ? $evt['Date'] : ''));
-                    if ($d) { $arrDestinoDate = $d; break; }
+                    if ($d) {
+                        $arrDestinoDate = $d;
+                        break;
+                    }
                 }
             }
         }
@@ -607,8 +827,8 @@ function computeTrackingData() {
         }
 
         $workingOrigin = ($routeEntry && $routeEntry['origin']) ? $routeEntry['origin'] : extractIATA($row['ORIGEM'] ?: '');
-        $workingDest   = ($routeEntry && $routeEntry['destination']) ? $routeEntry['destination'] : extractIATA($row['DESTINO'] ?: '');
-        
+        $workingDest = ($routeEntry && $routeEntry['destination']) ? $routeEntry['destination'] : extractIATA($row['DESTINO'] ?: '');
+
         if ($workingOrigin && $workingDest && $workingOrigin === $workingDest && is_array($timeline) && count($timeline) > 0) {
             $chronoScan = array_reverse($timeline);
             $foundAny = false;
@@ -619,14 +839,20 @@ function computeTrackingData() {
                 if (!$apt) {
                     $d = strtoupper(isset($evt['description']) ? $evt['description'] : (isset($evt['Description']) ? $evt['Description'] : ''));
                     if (preg_match('/\b(?:FROM|IN|AT|DEPARTED|ARRIVED|TO)\s+([A-Z]{3})\b/', $d, $m)) {
-                        if (!isset($stopWordsConn[$m[1]])) $apt = $m[1];
+                        if (!isset($stopWordsConn[$m[1]]))
+                            $apt = $m[1];
                     }
                 }
-                if (!$apt) continue;
-                if (!$foundAny) { $workingOrigin = $apt; $foundAny = true; }
+                if (!$apt)
+                    continue;
+                if (!$foundAny) {
+                    $workingOrigin = $apt;
+                    $foundAny = true;
+                }
                 $derivedDest = $apt;
             }
-            if ($foundAny) $workingDest = $derivedDest;
+            if ($foundAny)
+                $workingDest = $derivedDest;
         }
 
         $originIATAforConn = $workingOrigin;
@@ -638,12 +864,14 @@ function computeTrackingData() {
             $chronological = array_reverse($timeline);
             $destReached = false;
             foreach ($chronological as $evt) {
-                if ($destReached) break;
+                if ($destReached)
+                    break;
                 $candidates = [];
-                
+
                 $loc = extractIATA(isset($evt['location']) ? $evt['location'] : (isset($evt['Location']) ? $evt['Location'] : ''));
-                if ($loc) $candidates[] = $loc;
-                
+                if ($loc)
+                    $candidates[] = $loc;
+
                 $desc = strtoupper(isset($evt['description']) ? $evt['description'] : (isset($evt['Description']) ? $evt['Description'] : ''));
                 if (preg_match('/^\s*(?:DEP|ARR|RCF|RCS|MAN|NFD|DLV|TRM|TFD|FOH|AWD)\s+([A-Z]{3})\b/', $desc, $evtPrefix)) {
                     $candidates[] = $evtPrefix[1];
@@ -652,34 +880,43 @@ function computeTrackingData() {
                     $candidates[] = $prepMatch[1];
                 }
                 if (preg_match_all('/\b([A-Z]{3})\s*(?:->|-|→|\/)\s*([A-Z]{3})\b/', $desc, $routeMatches, PREG_SET_ORDER)) {
-                    foreach ($routeMatches as $m) { $candidates[] = $m[1]; $candidates[] = $m[2]; }
+                    foreach ($routeMatches as $m) {
+                        $candidates[] = $m[1];
+                        $candidates[] = $m[2];
+                    }
                 }
                 if (preg_match('/\(([A-Z]{3})\)/', $desc, $parenMatch)) {
                     $candidates[] = $parenMatch[1];
                 }
-                
+
                 foreach ($candidates as $apt) {
-                    if (!$apt || strlen($apt) !== 3) continue;
-                    if (isset($stopWordsConn[$apt])) continue;
-                    if ($apt === $originIATAforConn || $apt === $destinIATAforConn) continue;
-                    if (isset($seenSet[$apt])) continue;
+                    if (!$apt || strlen($apt) !== 3)
+                        continue;
+                    if (isset($stopWordsConn[$apt]))
+                        continue;
+                    if ($apt === $originIATAforConn || $apt === $destinIATAforConn)
+                        continue;
+                    if (isset($seenSet[$apt]))
+                        continue;
                     $seenSet[$apt] = true;
                     $seenAirports[] = $apt;
                 }
-                if ($loc && !isset($stopWordsConn[$loc]) && $loc === $destinIATAforConn) $destReached = true;
+                if ($loc && !isset($stopWordsConn[$loc]) && $loc === $destinIATAforConn)
+                    $destReached = true;
             }
         }
 
         $conexao = count($seenAirports) > 0 ? implode(',', $seenAirports) : null;
         $rawConexao = $routeEntry ? $routeEntry['conexoes'] : $conexao;
-        
+
         $finalConexao = null;
         if ($rawConexao) {
             $parts = explode(',', $rawConexao);
             $cleanParts = [];
             foreach ($parts as $c) {
                 $c = strtoupper(trim($c));
-                if (strlen($c) === 3 && !isset($stopWordsConn[$c])) $cleanParts[] = $c;
+                if (strlen($c) === 3 && !isset($stopWordsConn[$c]))
+                    $cleanParts[] = $c;
             }
             $finalConexao = count($cleanParts) > 0 ? implode(',', $cleanParts) : null;
         }
@@ -687,50 +924,51 @@ function computeTrackingData() {
         $finalOrigin = $workingOrigin ?: ($row['ORIGEM'] ?: '');
         $finalDestination = $workingDest ?: ($row['DESTINO'] ?: '');
 
-        $hasGroundFlightPattern = function($val) {
+        $hasGroundFlightPattern = function ($val) {
             $clean = strtoupper(trim(preg_replace('/\s+/', ' ', str_replace('\/', '/', $val))));
             $clean = preg_replace('/[,;]\s*$/', '', $clean);
             return preg_match('/\b[A-Z]{2,3}\s?\d{2,5}-T\b/', $clean) || preg_match('/\b[A-Z]{2,3}\s?\d{2,5}\s*X\s*\/\s*D\b/', $clean);
         };
-        
-        $electedDesc = (string)($top['desc'] ?: ($row["desc{$top['idx']}"] ?: ''));
+
+        $electedDesc = (string) ($top['desc'] ?: ($row["desc{$top['idx']}"] ?: ''));
         $isGroundTransport = false;
-        if ($electedDesc && $hasGroundFlightPattern($electedDesc)) $isGroundTransport = true;
+        if ($electedDesc && $hasGroundFlightPattern($electedDesc))
+            $isGroundTransport = true;
 
         if (!$finalCode) {
             $failed[] = ['awb' => $row['AWB'] ?: '', 'hawb' => $row['HAWB'] ?: '', 'cliente' => $row['CLIENTE'] ?: ''];
         }
 
         $data[] = [
-          'awb_number' => $row['AWB'] ?: '', 
-          'hawb_number' => $row['HAWB'] ?: '', 
-          'consignee_nome' => $row['CLIENTE'] ?: (isset($clienteMap[$row['HAWB']]) ? $clienteMap[$row['HAWB']] : ''),
-          'tipo_servico' => $row['TIPO_SERVICO'] ?: '', 
-          'etd' => $row['ETD'] ?: null,
-          'clerk' => $row['ANALISTA'] ?: '', 
-          'origin' => $finalOrigin, 
-          'destination' => $finalDestination, 
-          'conexao' => $finalConexao,
-          'route_status' => $routeEntry ? $routeEntry['status'] : null, 
-          'timeline_json' => $timeline,
-          'last_event' => $finalCode ?: '', 
-          'last_event_description' => isset($eventMap[$finalCode]) ? $eventMap[$finalCode]['descricao_en'] : '',
-          'last_status_code' => $finalCode ?: '', 
-          'last_event_date' => $dateStr, 
-          'last_event_location' => $electedLoc,
-          'penultimate_location' => $row['loc1'] ?: '', 
-          'arr_destino_date' => $arrDestinoDate, 
-          'hide_reason' => $hideReason,
-          'pieces_discrepancy' => $disc['pieces_discrepancy'], 
-          'baseline_pieces' => $disc['baseline_pieces'], 
-          'has_dis_event' => $disc['has_dis_event'],
-          'hours_in_status' => $row['hours_in_status_rounded'] !== null ? (float)$row['hours_in_status_rounded'] : null,
-          'sla_limite_horas' => $row['sla_limite_horas'] !== null ? (float)$row['sla_limite_horas'] : null,
-          'sla_ratio' => $row['sla_ratio'] !== null ? (float)$row['sla_ratio'] : null,
-          'sla_cor' => $row['sla_cor'] ?: null, 
-          'sla_tempo_formatado' => $row['sla_tempo_formatado'] ?: null,
-          'sla_tooltip' => $row['sla_tooltip'] ?: null, 
-          'is_ground_transport' => $isGroundTransport,
+            'awb_number' => $row['AWB'] ?: '',
+            'hawb_number' => $row['HAWB'] ?: '',
+            'consignee_nome' => $row['CLIENTE'] ?: (isset($clienteMap[$row['HAWB']]) ? $clienteMap[$row['HAWB']] : ''),
+            'tipo_servico' => $row['TIPO_SERVICO'] ?: '',
+            'etd' => $row['ETD'] ?: null,
+            'clerk' => $row['ANALISTA'] ?: '',
+            'origin' => $finalOrigin,
+            'destination' => $finalDestination,
+            'conexao' => $finalConexao,
+            'route_status' => $routeEntry ? $routeEntry['status'] : null,
+            'timeline_json' => $timeline,
+            'last_event' => $finalCode ?: '',
+            'last_event_description' => isset($eventMap[$finalCode]) ? $eventMap[$finalCode]['descricao_en'] : '',
+            'last_status_code' => $finalCode ?: '',
+            'last_event_date' => $dateStr,
+            'last_event_location' => $electedLoc,
+            'penultimate_location' => $row['loc1'] ?: '',
+            'arr_destino_date' => $arrDestinoDate,
+            'hide_reason' => $hideReason,
+            'pieces_discrepancy' => $disc['pieces_discrepancy'],
+            'baseline_pieces' => $disc['baseline_pieces'],
+            'has_dis_event' => $disc['has_dis_event'],
+            'hours_in_status' => $row['hours_in_status_rounded'] !== null ? (float) $row['hours_in_status_rounded'] : null,
+            'sla_limite_horas' => $row['sla_limite_horas'] !== null ? (float) $row['sla_limite_horas'] : null,
+            'sla_ratio' => $row['sla_ratio'] !== null ? (float) $row['sla_ratio'] : null,
+            'sla_cor' => $row['sla_cor'] ?: null,
+            'sla_tempo_formatado' => $row['sla_tempo_formatado'] ?: null,
+            'sla_tooltip' => $row['sla_tooltip'] ?: null,
+            'is_ground_transport' => $isGroundTransport,
         ];
     }
 
@@ -742,7 +980,7 @@ function computeTrackingData() {
 // ── ROTAS / HANDLERS ─────────────────────────────────────────────────────────
 
 // GET /api/air/tracking-aereo
-$router->get('air/tracking-aereo', function($params) {
+$router->get('air/tracking-aereo', function ($params) {
     try {
         $result = computeTrackingData();
         sendJson($result);
@@ -753,7 +991,7 @@ $router->get('air/tracking-aereo', function($params) {
 });
 
 // GET /api/air/test-query
-$router->get('air/test-query', function($params) {
+$router->get('air/test-query', function ($params) {
     try {
         $pdo = getPDO();
         $stmt = $pdo->query("SELECT VERSION() AS ver");
@@ -931,11 +1169,11 @@ $router->get('air/test-query', function($params) {
 });
 
 // GET /api/air/test-tracking-execution
-$router->get('air/test-tracking-execution', function($params) {
+$router->get('air/test-tracking-execution', function ($params) {
     try {
         $mem_start = memory_get_usage();
         $time_start = microtime(true);
-        
+
         $pdo = getPDO();
         $etdCutoff = isset($_ENV['AIR_ETD_CUTOFF']) ? $_ENV['AIR_ETD_CUTOFF'] : '2026-06-01';
         $countStmt = $pdo->prepare("SELECT COUNT(*) AS total FROM dados_dachser.t_dados_aereo tda WHERE tda.etd >= ?");
@@ -943,10 +1181,10 @@ $router->get('air/test-tracking-execution', function($params) {
         $total_rows = $countStmt->fetch()['total'];
 
         $result = computeTrackingData();
-        
+
         $mem_end = memory_get_usage();
         $time_end = microtime(true);
-        
+
         sendJson([
             "success" => true,
             "total_rows_db" => $total_rows,
@@ -968,30 +1206,30 @@ $router->get('air/test-tracking-execution', function($params) {
 });
 
 // GET /api/air/test-db-data
-$router->get('air/test-db-data', function($params) {
+$router->get('air/test-db-data', function ($params) {
     try {
         $pdo = getPDO();
-        
+
         // 1. Verificar tabelas no banco
         $tables = $pdo->query("SHOW TABLES FROM dados_dachser")->fetchAll(PDO::FETCH_COLUMN);
-        
+
         // 2. Contar linhas em t_dados_aereo
         $count_all = 0;
         $min_etd = null;
         $max_etd = null;
-        
+
         if (in_array('t_dados_aereo', $tables)) {
             $count_all = $pdo->query("SELECT COUNT(*) FROM dados_dachser.t_dados_aereo")->fetchColumn();
             $min_etd = $pdo->query("SELECT MIN(etd) FROM dados_dachser.t_dados_aereo")->fetchColumn();
             $max_etd = $pdo->query("SELECT MAX(etd) FROM dados_dachser.t_dados_aereo")->fetchColumn();
         }
-        
+
         // 3. Contar linhas em t_fato_aereo
         $count_fato = 0;
         if (in_array('t_fato_aereo', $tables)) {
             $count_fato = $pdo->query("SELECT COUNT(*) FROM dados_dachser.t_fato_aereo")->fetchColumn();
         }
-        
+
         sendJson([
             "success" => true,
             "tables" => $tables,
@@ -1010,12 +1248,12 @@ $router->get('air/test-db-data', function($params) {
 });
 
 // GET /api/air/db-columns-collation
-$router->get('air/db-columns-collation', function($params) {
+$router->get('air/db-columns-collation', function ($params) {
     try {
         $pdo = getPDO();
         $cols1 = $pdo->query("SHOW FULL COLUMNS FROM dados_dachser.t_dados_aereo LIKE 'awb_number'")->fetch();
         $cols2 = $pdo->query("SHOW FULL COLUMNS FROM dados_dachser.t_fato_aereo LIKE 'awb'")->fetch();
-        
+
         sendJson([
             "success" => true,
             "t_dados_aereo_awb_number" => [
@@ -1033,7 +1271,7 @@ $router->get('air/db-columns-collation', function($params) {
 });
 
 // GET /tracking-aereo (legado compat)
-$router->get('tracking-aereo', function($params) {
+$router->get('tracking-aereo', function ($params) {
     try {
         $result = computeTrackingData();
         sendJson($result);
@@ -1043,34 +1281,37 @@ $router->get('tracking-aereo', function($params) {
 });
 
 // GET /api/air/tracking-aereo/filters
-$router->get('air/tracking-aereo/filters', function($params) {
+$router->get('air/tracking-aereo/filters', function ($params) {
     try {
         $res = computeTrackingData();
         $data = $res['data'];
-        
+
         $airlines = [];
         $analysts = [];
         $services = [];
-        
+
         foreach ($data as $d) {
             $prefix = substr($d['awb_number'], 0, 3);
-            if ($prefix) $airlines[] = $prefix;
-            
+            if ($prefix)
+                $airlines[] = $prefix;
+
             $clerk = trim($d['clerk']);
-            if ($clerk) $analysts[] = $clerk;
-            
+            if ($clerk)
+                $analysts[] = $clerk;
+
             $srv = trim($d['tipo_servico']);
-            if ($srv) $services[] = $srv;
+            if ($srv)
+                $services[] = $srv;
         }
-        
+
         $airlines = array_values(array_unique($airlines));
         $analysts = array_values(array_unique($analysts));
         $services = array_values(array_unique($services));
-        
+
         sort($airlines);
         sort($analysts);
         sort($services);
-        
+
         sendJson(['success' => true, 'filters' => ['airlines' => $airlines, 'analysts' => $analysts, 'services' => $services]]);
     } catch (Exception $e) {
         sendJson(['success' => false, 'error' => $e->getMessage()], 500);
@@ -1078,30 +1319,35 @@ $router->get('air/tracking-aereo/filters', function($params) {
 });
 
 // GET /api/air/tracking-aereo/summary
-$router->get('air/tracking-aereo/summary', function($params) {
+$router->get('air/tracking-aereo/summary', function ($params) {
     try {
         $res = computeTrackingData();
         $data = $res['data'];
-        
+
         $inTransit = array_flip(['DEP', 'MAN', 'RCF', 'ARR']);
         $criticalCodes = array_flip(['NIL', 'NIF', 'OFLD']);
-        
+
         $total = 0;
         $transit = 0;
         $alert = 0;
         $critical = 0;
-        
+
         foreach ($data as $a) {
             $code = strtoupper(trim($a['last_status_code'] ?: ($a['last_event'] ?: '')));
-            if ($code === 'DLV' || $code === 'POD') continue;
-            if ($a['hide_reason']) continue;
-            
+            if ($code === 'DLV' || $code === 'POD')
+                continue;
+            if ($a['hide_reason'])
+                continue;
+
             $total++;
-            if (isset($inTransit[$code])) $transit++;
-            if ($code === 'DIS' || ($a['has_dis_event'] && !$a['pieces_discrepancy'])) $alert++;
-            if (isset($criticalCodes[$code]) || $a['pieces_discrepancy']) $critical++;
+            if (isset($inTransit[$code]))
+                $transit++;
+            if ($code === 'DIS' || ($a['has_dis_event'] && !$a['pieces_discrepancy']))
+                $alert++;
+            if (isset($criticalCodes[$code]) || $a['pieces_discrepancy'])
+                $critical++;
         }
-        
+
         sendJson(['success' => true, 'summary' => ['total' => $total, 'transit' => $transit, 'alert' => $alert, 'critical' => $critical]]);
     } catch (Exception $e) {
         sendJson(['success' => false, 'error' => $e->getMessage()], 500);
@@ -1109,31 +1355,31 @@ $router->get('air/tracking-aereo/summary', function($params) {
 });
 
 // POST /api/air/tracking-aereo/failed-alert
-$router->post('air/tracking-aereo/failed-alert', function($params) {
+$router->post('air/tracking-aereo/failed-alert', function ($params) {
     $body = getRequestBody();
     $awbs = isset($body['awbs']) && is_array($body['awbs']) ? $body['awbs'] : [];
     sendJson(['success' => true, 'count' => count($awbs), 'emailed' => false]);
 });
 
 // POST /api/air/master-swaps
-$router->post('air/master-swaps', function($params) {
+$router->post('air/master-swaps', function ($params) {
     try {
         $body = getRequestBody();
         $awbs = isset($body['awbs']) && is_array($body['awbs']) ? array_filter($body['awbs'], 'is_string') : [];
         if (count($awbs) === 0) {
             sendJson(['success' => true, 'data' => []]);
         }
-        
+
         $pdo = getPDO();
         $ph = implode(',', array_fill(0, count($awbs), '?'));
-        
+
         $sql = "SELECT id, hawb, awb_antigo, awb_novo, fonte, id_olss,
                       flight_number, departure_airport, destination_airport,
                       data_atualizacao, flag_troca_master, resolvido_manual
                  FROM " . AIR_DB . ".t_aereo_master_swap
                 WHERE TRIM(awb_novo) COLLATE utf8mb4_unicode_ci IN ($ph)
                 ORDER BY data_atualizacao DESC";
-                
+
         $rows = queryWithRetry($pdo, $sql, array_map('trim', $awbs));
         sendJson(['success' => true, 'data' => $rows ?: []]);
     } catch (Exception $e) {
@@ -1143,7 +1389,7 @@ $router->post('air/master-swaps', function($params) {
 });
 
 // GET /api/air/master-discrepancies
-$router->get('air/master-discrepancies', function($params) {
+$router->get('air/master-discrepancies', function ($params) {
     try {
         $pdo = getPDO();
         $rows = queryWithRetry($pdo, "
@@ -1161,10 +1407,10 @@ $router->get('air/master-discrepancies', function($params) {
 });
 
 // POST /api/air/master-discrepancies/resolve
-$router->post('air/master-discrepancies/resolve', function($params) {
+$router->post('air/master-discrepancies/resolve', function ($params) {
     try {
         $body = getRequestBody();
-        $id = isset($body['id']) ? (int)$body['id'] : null;
+        $id = isset($body['id']) ? (int) $body['id'] : null;
         $awbEscolhido = isset($body['awb_escolhido']) ? trim($body['awb_escolhido']) : null;
         $user = isset($body['user']) ? trim($body['user']) : 'system';
 
@@ -1187,9 +1433,10 @@ $router->post('air/master-discrepancies/resolve', function($params) {
         $candidatos = [];
         try {
             $candidatos = is_string($disc['awbs_candidatos']) ? json_decode($disc['awbs_candidatos'], true) : ($disc['awbs_candidatos'] ?: []);
-        } catch (Exception $ex) {}
+        } catch (Exception $ex) {
+        }
 
-        $descartados = array_values(array_filter($candidatos, function($c) use ($awbEscolhido) {
+        $descartados = array_values(array_filter($candidatos, function ($c) use ($awbEscolhido) {
             return trim($c) !== $awbEscolhido;
         }));
 
@@ -1200,7 +1447,9 @@ $router->post('air/master-discrepancies/resolve', function($params) {
                 if (count($res) > 0) {
                     $fatoId = $res[0]['id'];
                     $hJson = is_string($res[0]['hawbs_json']) ? json_decode($res[0]['hawbs_json'], true) : ($res[0]['hawbs_json'] ?: []);
-                    $filtered = array_values(array_filter($hJson, function($h) use ($disc) { return trim($h) !== trim($disc['hawb']); }));
+                    $filtered = array_values(array_filter($hJson, function ($h) use ($disc) {
+                        return trim($h) !== trim($disc['hawb']);
+                    }));
                     queryWithRetry($pdo, "UPDATE " . AIR_DB . ".t_fato_aereo SET hawbs_json = ? WHERE id = ?", [json_encode($filtered), $fatoId]);
                 }
             } catch (Exception $e) {
@@ -1213,7 +1462,8 @@ $router->post('air/master-discrepancies/resolve', function($params) {
                       (hawb, awb_antigo, awb_novo, fonte, id_olss, data_atualizacao, flag_troca_master, resolvido_manual)
                     VALUES (?, ?, ?, 'DADOS_AEREO', ?, NOW(), 1, 1)
                 ", [$disc['hawb'], $awbAntigo, $awbEscolhido, $disc['id_olss']]);
-            } catch (Exception $e) {}
+            } catch (Exception $e) {
+            }
 
             try {
                 queryWithRetry($pdo, "
@@ -1222,7 +1472,8 @@ $router->post('air/master-discrepancies/resolve', function($params) {
                      WHERE TRIM(awb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
                        AND TRIM(COALESCE(hawb,'')) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
                 ", [$awbAntigo, $disc['hawb']]);
-            } catch (Exception $e) {}
+            } catch (Exception $e) {
+            }
         }
 
         queryWithRetry($pdo, "
@@ -1242,7 +1493,8 @@ $router->post('air/master-discrepancies/resolve', function($params) {
 $router->post('air/usage-log', 'handleUsageLogRoute');
 $router->post('usage-log', 'handleUsageLogRoute');
 
-function handleUsageLogRoute($params) {
+function handleUsageLogRoute($params)
+{
     try {
         $body = getRequestBody();
         $username = isset($body['username']) ? $body['username'] : null;
@@ -1263,7 +1515,7 @@ function handleUsageLogRoute($params) {
             $storedMethod = 'VI';
         } elseif ($eventType === 'view_end') {
             $storedMethod = 'VO';
-            if ($durationMs !== null && (float)$durationMs >= 0) {
+            if ($durationMs !== null && (float) $durationMs >= 0) {
                 $storedEndpoint = "{$endpoint}#dur=" . round($durationMs);
             }
         }
@@ -1282,7 +1534,7 @@ function handleUsageLogRoute($params) {
 }
 
 // POST /api/air/olimpo/force-swap-log
-$router->post('air/olimpo/force-swap-log', function($params) {
+$router->post('air/olimpo/force-swap-log', function ($params) {
     try {
         $body = getRequestBody();
         $awb = isset($body['awb']) ? $body['awb'] : null;
@@ -1306,7 +1558,7 @@ $router->post('air/olimpo/force-swap-log', function($params) {
 });
 
 // GET /api/air/check-awb
-$router->get('air/check-awb', function($params) {
+$router->get('air/check-awb', function ($params) {
     try {
         $pdo = getPDO();
         $rows = queryWithRetry($pdo, "
@@ -1335,9 +1587,9 @@ $router->get('air/check-awb', function($params) {
 });
 
 // DELETE /api/air/check-awb/:id
-$router->delete('air/check-awb/:id', function($params) {
+$router->delete('air/check-awb/:id', function ($params) {
     try {
-        $id = (int)$params['id'];
+        $id = (int) $params['id'];
         $body = getRequestBody();
         $performedBy = isset($body['performed_by']) ? $body['performed_by'] : 'system';
 
@@ -1350,10 +1602,11 @@ $router->delete('air/check-awb/:id', function($params) {
             queryWithRetry($pdo, "DELETE FROM " . DOCUMENT_TABLE . " WHERE id = ?", [$documentId]);
         }
         queryWithRetry($pdo, "DELETE FROM " . CHECK_TABLE . " WHERE id = ?", [$id]);
-        
+
         try {
             queryWithRetry($pdo, "INSERT INTO " . LOG_TABLE . " (action, entity_type, entity_id, performed_by) VALUES ('delete', 'awb_check', ?, ?)", [$id, $performedBy]);
-        } catch (Exception $ex) {}
+        } catch (Exception $ex) {
+        }
 
         sendJson(['success' => true]);
     } catch (Exception $e) {
@@ -1362,7 +1615,7 @@ $router->delete('air/check-awb/:id', function($params) {
 });
 
 // POST /api/air/check-awb/upload
-$router->post('air/check-awb/upload', function($params) {
+$router->post('air/check-awb/upload', function ($params) {
     try {
         $body = getRequestBody();
         $fileName = isset($body['fileName']) ? $body['fileName'] : null;
@@ -1376,21 +1629,21 @@ $router->post('air/check-awb/upload', function($params) {
 
         $buffer = base64_decode($fileBase64);
         $pdo = getPDO();
-        
+
         $stmt = $pdo->prepare("INSERT INTO " . DOCUMENT_TABLE . " (filename, file_type, file_size, file_content, uploaded_by) VALUES (?, ?, ?, ?, ?)");
         $stmt->execute([$fileName, $mimeType, strlen($buffer), $buffer, $uploadedBy]);
         $documentId = $pdo->lastInsertId();
 
-        sendJson(['success' => true, 'documentId' => (int)$documentId]);
+        sendJson(['success' => true, 'documentId' => (int) $documentId]);
     } catch (Exception $e) {
         sendJson(['success' => false, 'error' => $e->getMessage()], 500);
     }
 });
 
 // GET /api/air/check-awb/document/:id
-$router->get('air/check-awb/document/:id', function($params) {
+$router->get('air/check-awb/document/:id', function ($params) {
     try {
-        $id = (int)$params['id'];
+        $id = (int) $params['id'];
         $pdo = getPDO();
         $stmt = $pdo->prepare("SELECT filename, file_type, file_content FROM " . DOCUMENT_TABLE . " WHERE id = ? LIMIT 1");
         $stmt->execute([$id]);
@@ -1410,17 +1663,19 @@ $router->get('air/check-awb/document/:id', function($params) {
 });
 
 // POST /api/air/check-awb/parse
-$router->post('air/check-awb/parse', function($params) {
+$router->post('air/check-awb/parse', function ($params) {
     try {
         $body = getRequestBody();
         $fileBase64 = isset($body['fileBase64']) ? $body['fileBase64'] : null;
         $mimeType = isset($body['mimeType']) ? $body['mimeType'] : 'application/pdf';
         $documentType = isset($body['documentType']) ? $body['documentType'] : 'house_awb';
 
-        if (!$fileBase64) sendJson(['success' => false, 'error' => 'fileBase64 é obrigatório.'], 400);
+        if (!$fileBase64)
+            sendJson(['success' => false, 'error' => 'fileBase64 é obrigatório.'], 400);
 
         $apiKey = isset($_ENV['ANTHROPIC_API_KEY']) ? $_ENV['ANTHROPIC_API_KEY'] : null;
-        if (!$apiKey) sendJson(['success' => false, 'error' => 'ANTHROPIC_API_KEY não configurada.'], 500);
+        if (!$apiKey)
+            sendJson(['success' => false, 'error' => 'ANTHROPIC_API_KEY não configurada.'], 500);
 
         if ($documentType === 'house_awb') {
             $systemPrompt = "Você é um especialista em extração de dados de documentos AWB (Air Waybill) e House AWB para operações logísticas.
@@ -1466,8 +1721,8 @@ Retorne APENAS JSON válido.";
 
         $isImage = strpos($mimeType, 'image/') === 0;
         $contentBlock = $isImage
-          ? ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $mimeType, 'data' => $fileBase64]]
-          : ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => 'application/pdf', 'data' => $fileBase64]];
+            ? ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $mimeType, 'data' => $fileBase64]]
+            : ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => 'application/pdf', 'data' => $fileBase64]];
 
         $res = fetch('https://api.anthropic.com/v1/messages', [
             'method' => 'POST',
@@ -1502,7 +1757,7 @@ Retorne APENAS JSON válido.";
 });
 
 // POST /api/air/check-awb
-$router->post('air/check-awb', function($params) {
+$router->post('air/check-awb', function ($params) {
     try {
         $body = getRequestBody();
         $awbNumber = isset($body['awbNumber']) ? $body['awbNumber'] : 'N/A';
@@ -1533,14 +1788,15 @@ $router->post('air/check-awb', function($params) {
                 hs_codes, dims, incoterms, `references`)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
-        
+
         $routingLegs = isset($body['routingLegs']) ? json_encode($body['routingLegs']) : null;
         $flightNumbers = isset($body['flightNumbers']) ? json_encode($body['flightNumbers']) : null;
         $hsCodes = isset($body['hsCodes']) ? json_encode($body['hsCodes']) : null;
         $references = isset($body['references']) ? json_encode($body['references']) : null;
 
         $stmtParsed->execute([
-            $checkId, $documentId,
+            $checkId,
+            $documentId,
             isset($body['extractedAwb']) ? $body['extractedAwb'] : null,
             isset($body['extractedCnpj']) ? $body['extractedCnpj'] : null,
             isset($body['extractedOrigin']) ? $body['extractedOrigin'] : null,
@@ -1553,24 +1809,26 @@ $router->post('air/check-awb', function($params) {
             isset($body['grossWeight']) ? $body['grossWeight'] : null,
             isset($body['chargeableWeight']) ? $body['chargeableWeight'] : null,
             isset($body['mrn']) ? $body['mrn'] : null,
-            $routingLegs, $flightNumbers, $hsCodes,
+            $routingLegs,
+            $flightNumbers,
+            $hsCodes,
             isset($body['dimensions']) ? $body['dimensions'] : null,
             isset($body['incoterms']) ? $body['incoterms'] : null,
             $references
         ]);
 
-        sendJson(['success' => true, 'checkId' => (int)$checkId]);
+        sendJson(['success' => true, 'checkId' => (int) $checkId]);
     } catch (Exception $e) {
         sendJson(['success' => false, 'error' => $e->getMessage()], 500);
     }
 });
 
 // PATCH /api/air/check-awb/:id/parsed
-$router->patch('air/check-awb/:id/parsed', function($params) {
+$router->patch('air/check-awb/:id/parsed', function ($params) {
     try {
-        $checkId = (int)$params['id'];
+        $checkId = (int) $params['id'];
         $body = getRequestBody();
-        
+
         $pdo = getPDO();
         $stmt = $pdo->prepare("
             UPDATE " . PARSED_TABLE . "
@@ -1593,7 +1851,9 @@ $router->patch('air/check-awb/:id/parsed', function($params) {
             isset($body['grossWeight']) ? $body['grossWeight'] : null,
             isset($body['chargeableWeight']) ? $body['chargeableWeight'] : null,
             isset($body['mrn']) ? $body['mrn'] : null,
-            $routingLegs, $flightNumbers, $hsCodes,
+            $routingLegs,
+            $flightNumbers,
+            $hsCodes,
             isset($body['dimensions']) ? $body['dimensions'] : null,
             isset($body['incoterms']) ? $body['incoterms'] : null,
             $references,
@@ -1612,13 +1872,13 @@ $router->patch('air/check-awb/:id/parsed', function($params) {
 });
 
 // GET /api/air/check-awb/matrices
-$router->get('air/check-awb/matrices', function($params) {
+$router->get('air/check-awb/matrices', function ($params) {
     try {
         $pdo = getPDO();
         $rows = queryWithRetry($pdo, "SELECT * FROM " . MATRIX_TABLE . " ORDER BY customer, version DESC");
         $matrices = [];
         foreach (($rows ?: []) as $m) {
-            $m['is_active'] = (bool)$m['is_active'];
+            $m['is_active'] = (bool) $m['is_active'];
             $m['effective_from'] = $m['effective_date'];
             $matrices[] = $m;
         }
@@ -1629,12 +1889,13 @@ $router->get('air/check-awb/matrices', function($params) {
 });
 
 // GET /api/air/check-awb/rules
-$router->get('air/check-awb/rules', function($params) {
+$router->get('air/check-awb/rules', function ($params) {
     try {
         $matrixId = isset($_GET['matrixId']) ? $_GET['matrixId'] : null;
         $cnpj = isset($_GET['cnpj']) ? $_GET['cnpj'] : null;
 
-        if (!$matrixId) sendJson(['success' => false, 'error' => 'matrixId é obrigatório.'], 400);
+        if (!$matrixId)
+            sendJson(['success' => false, 'error' => 'matrixId é obrigatório.'], 400);
 
         $pdo = getPDO();
         $sql = "SELECT * FROM " . RULE_TABLE . " WHERE matrix_id = ? AND is_active = 1";
@@ -1654,7 +1915,7 @@ $router->get('air/check-awb/rules', function($params) {
 });
 
 // GET /api/air/check-awb/matrices/active
-$router->get('air/check-awb/matrices/active', function($params) {
+$router->get('air/check-awb/matrices/active', function ($params) {
     try {
         $pdo = getPDO();
         $rows = queryWithRetry($pdo, "SELECT * FROM " . MATRIX_TABLE . " WHERE is_active = 1 ORDER BY customer");
@@ -1670,7 +1931,7 @@ $router->get('air/check-awb/matrices/active', function($params) {
 });
 
 // POST /api/air/check-awb/rules
-$router->post('air/check-awb/rules', function($params) {
+$router->post('air/check-awb/rules', function ($params) {
     try {
         $body = getRequestBody();
         $matrixId = isset($body['matrixId']) ? $body['matrixId'] : null;
@@ -1697,23 +1958,32 @@ $router->post('air/check-awb/rules', function($params) {
                 ref_othello, empresa, endereco, cidade, estado, cep, pais)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
-        
+
         $stmt->execute([
-            $matrixId, preg_replace('/\D/', '', $cnpj), $airportCode, $addressPattern,
-            $emailDespachante, $refOthello, $empresa, $endereco,
-            $cidade, $estado, $cep, $pais
+            $matrixId,
+            preg_replace('/\D/', '', $cnpj),
+            $airportCode,
+            $addressPattern,
+            $emailDespachante,
+            $refOthello,
+            $empresa,
+            $endereco,
+            $cidade,
+            $estado,
+            $cep,
+            $pais
         ]);
 
-        sendJson(['success' => true, 'ruleId' => (int)$pdo->lastInsertId()]);
+        sendJson(['success' => true, 'ruleId' => (int) $pdo->lastInsertId()]);
     } catch (Exception $e) {
         sendJson(['success' => false, 'error' => $e->getMessage()], 500);
     }
 });
 
 // DELETE /api/air/check-awb/rules/:id
-$router->delete('air/check-awb/rules/:id', function($params) {
+$router->delete('air/check-awb/rules/:id', function ($params) {
     try {
-        $id = (int)$params['id'];
+        $id = (int) $params['id'];
         queryWithRetry(getPDO(), "UPDATE " . RULE_TABLE . " SET is_active = 0 WHERE id = ?", [$id]);
         sendJson(['success' => true]);
     } catch (Exception $e) {
@@ -1722,12 +1992,13 @@ $router->delete('air/check-awb/rules/:id', function($params) {
 });
 
 // POST /api/air/check-awb/matrices/import
-$router->post('air/check-awb/matrices/import', function($params) {
+$router->post('air/check-awb/matrices/import', function ($params) {
     try {
         $body = getRequestBody();
         $fileBase64 = isset($body['fileBase64']) ? $body['fileBase64'] : null;
 
-        if (!$fileBase64) sendJson(['success' => false, 'error' => 'fileBase64 é obrigatório.'], 400);
+        if (!$fileBase64)
+            sendJson(['success' => false, 'error' => 'fileBase64 é obrigatório.'], 400);
 
         // Processa planilha excel usando o helper nativo do ZipArchive
         $rows = parseXlsxSimple($fileBase64);
@@ -1735,48 +2006,61 @@ $router->post('air/check-awb/matrices/import', function($params) {
         $pdo = getPDO();
         $version = time();
         $effectiveDate = date('Y-m-d');
-        
+
         // Separa regras de Klabin e ZF
         $klabinRules = [];
         $zfRules = [];
-        
+
         foreach ($rows as $row) {
             // Acha o cliente com base nas chaves do array associativo
             $cnpjVal = '';
             foreach ($row as $k => $v) {
-                if (stripos($k, 'cnpj') !== false) { $cnpjVal = preg_replace('/\D/', '', $v); break; }
+                if (stripos($k, 'cnpj') !== false) {
+                    $cnpjVal = preg_replace('/\D/', '', $v);
+                    break;
+                }
             }
-            if (strlen($cnpjVal) !== 14) continue;
-            
+            if (strlen($cnpjVal) !== 14)
+                continue;
+
             // Detecta qual planilha ou marcação
             // No excel exportado do lovable, geralmente tem coluna ou padrão de cliente
             $isZf = false;
             $isKlabin = false;
-            
+
             // Detecta pelo nome da empresa ou padrão
             $empresaVal = '';
             foreach ($row as $k => $v) {
-                if (stripos($k, 'empresa') !== false || stripos($k, 'company') !== false || stripos($k, 'nome') !== false) { $empresaVal = strtoupper($v); break; }
+                if (stripos($k, 'empresa') !== false || stripos($k, 'company') !== false || stripos($k, 'nome') !== false) {
+                    $empresaVal = strtoupper($v);
+                    break;
+                }
             }
-            
-            if (strpos($empresaVal, 'ZF') !== false) $isZf = true;
-            else $isKlabin = true; // Default
-            
-            if ($isZf) $zfRules[] = $row;
-            else $klabinRules[] = $row;
+
+            if (strpos($empresaVal, 'ZF') !== false)
+                $isZf = true;
+            else
+                $isKlabin = true; // Default
+
+            if ($isZf)
+                $zfRules[] = $row;
+            else
+                $klabinRules[] = $row;
         }
 
-        $processGroup = function($groupRules, $customer) use ($pdo, $version, $effectiveDate) {
-            if (count($groupRules) === 0) return 0;
-            
+        $processGroup = function ($groupRules, $customer) use ($pdo, $version, $effectiveDate) {
+            if (count($groupRules) === 0)
+                return 0;
+
             queryWithRetry($pdo, "UPDATE " . MATRIX_TABLE . " SET is_active = 0 WHERE customer = ?", [$customer]);
             $res = queryWithRetry($pdo, "INSERT INTO " . MATRIX_TABLE . " (customer, version, effective_date, is_active) VALUES (?, ?, ?, 1)", [$customer, $version, $effectiveDate]);
             $matrixId = $res['insertId'];
 
-            $getVal = function($row, $keys) {
+            $getVal = function ($row, $keys) {
                 foreach ($row as $rk => $rv) {
                     foreach ($keys as $k) {
-                        if (stripos($rk, $k) !== false && $rv !== '') return (string)$rv;
+                        if (stripos($rk, $k) !== false && $rv !== '')
+                            return (string) $rv;
                     }
                 }
                 return null;
@@ -1785,8 +2069,9 @@ $router->post('air/check-awb/matrices/import', function($params) {
             $count = 0;
             foreach ($groupRules as $row) {
                 $cnpj = $getVal($row, ['cnpj']) ? preg_replace('/\D/', '', $getVal($row, ['cnpj'])) : '';
-                if (strlen($cnpj) !== 14) continue;
-                
+                if (strlen($cnpj) !== 14)
+                    continue;
+
                 $stmt = $pdo->prepare("
                     INSERT INTO " . RULE_TABLE . "
                        (matrix_id, cnpj, airport_code, address_pattern, email_despachante,
@@ -1794,7 +2079,8 @@ $router->post('air/check-awb/matrices/import', function($params) {
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $stmt->execute([
-                    $matrixId, $cnpj,
+                    $matrixId,
+                    $cnpj,
                     $getVal($row, ['aeroporto', 'airport']),
                     $getVal($row, ['endereço', 'endereco', 'address']),
                     $getVal($row, ['email', 'despachante']),
@@ -1824,7 +2110,7 @@ $router->post('air/check-awb/matrices/import', function($params) {
 });
 
 // GET /api/air/stats
-$router->get('air/stats', function($params) {
+$router->get('air/stats', function ($params) {
     try {
         $pdo = getPDO();
         $lastRows = queryWithRetry($pdo, "
@@ -1849,11 +2135,19 @@ $router->get('air/stats', function($params) {
         ", [$lastUpdate]);
 
         $airlineNames = [
-            "001"=>"American Airlines","020"=>"Lufthansa Cargo","045"=>"LATAM Cargo",
-            "057"=>"Air France Cargo","074"=>"AF/KL Cargo","075"=>"IAG Cargo",
-            "125"=>"British Airways","157"=>"Qatar Airways","176"=>"Emirates SkyCargo",
-            "235"=>"Turkish Airlines","577"=>"Azul Cargo","724"=>"Swiss WorldCargo",
-            "729"=>"Avianca Cargo"
+            "001" => "American Airlines",
+            "020" => "Lufthansa Cargo",
+            "045" => "LATAM Cargo",
+            "057" => "Air France Cargo",
+            "074" => "AF/KL Cargo",
+            "075" => "IAG Cargo",
+            "125" => "British Airways",
+            "157" => "Qatar Airways",
+            "176" => "Emirates SkyCargo",
+            "235" => "Turkish Airlines",
+            "577" => "Azul Cargo",
+            "724" => "Swiss WorldCargo",
+            "729" => "Avianca Cargo"
         ];
 
         $airlineBreakdown = [];
@@ -1862,7 +2156,7 @@ $router->get('air/stats', function($params) {
             $airlineBreakdown[] = [
                 'code' => $code,
                 'name' => isset($airlineNames[$code]) ? $airlineNames[$code] : $code,
-                'count' => (int)$r['count']
+                'count' => (int) $r['count']
             ];
         }
 
@@ -1870,7 +2164,7 @@ $router->get('air/stats', function($params) {
             'success' => true,
             'stats' => [
                 'lastUpdate' => $lastUpdate,
-                'totalRecords' => isset($statsRows[0]['total_records']) ? (int)$statsRows[0]['total_records'] : 0,
+                'totalRecords' => isset($statsRows[0]['total_records']) ? (int) $statsRows[0]['total_records'] : 0,
                 'airlineBreakdown' => $airlineBreakdown
             ]
         ]);
@@ -1880,13 +2174,13 @@ $router->get('air/stats', function($params) {
 });
 
 // GET /api/air/status-aereo
-$router->get('air/status-aereo', function($params) {
+$router->get('air/status-aereo', function ($params) {
     try {
         $res = computeTrackingData();
         $data = $res['data'];
-        
-        $inTransitCodes = array_flip(['DEP','MAN','RCF','ARR','ARR - DESTINO','ARR - CONEXAO','ARR - CONEXÃO','TRA','FOH']);
-        
+
+        $inTransitCodes = array_flip(['DEP', 'MAN', 'RCF', 'ARR', 'ARR - DESTINO', 'ARR - CONEXAO', 'ARR - CONEXÃO', 'TRA', 'FOH']);
+
         $mapped = [];
         foreach ($data as $index => $item) {
             $mapped[] = [
@@ -1924,11 +2218,11 @@ $router->get('air/status-aereo', function($params) {
 });
 
 // GET /api/air/awb-list
-$router->get('air/awb-list', function($params) {
+$router->get('air/awb-list', function ($params) {
     try {
         $search = isset($_GET['search']) ? $_GET['search'] : '';
         $status = isset($_GET['status']) ? $_GET['status'] : '';
-        
+
         $pdo = getPDO();
         $sql = "
             SELECT awb, LEFT(awb,3) AS airline_code, destinatário AS consignee_name,
@@ -1936,7 +2230,7 @@ $router->get('air/awb-list', function($params) {
             FROM dados_dachser.t_aereo_ws
             WHERE 1=1";
         $sqlParams = [];
-        
+
         if ($search) {
             $sql .= " AND (awb LIKE ? OR destinatário LIKE ?)";
             $sqlParams[] = "%{$search}%";
@@ -1956,92 +2250,134 @@ $router->get('air/awb-list', function($params) {
 });
 
 // GET /api/air/timeline/:awb
-$router->get('air/timeline/:awb', function($params) {
+$router->get('air/timeline/:awb', function ($params) {
     $queryAwb = trim($params['awb']);
-    if (!$queryAwb) sendJson(['success' => false, 'error' => 'AWB é obrigatório'], 400);
+    if (!$queryAwb)
+        sendJson(['success' => false, 'error' => 'AWB é obrigatório'], 400);
 
     $errorPhrases = [
-      'não foi possível detectar', 'nao foi possivel detectar', 'could not detect',
-      'carrier not supported', 'operadora não suportada', 'erro ao rastrear',
-      'error tracking', 'timeout', 'failed to fetch',
-      'unable to detect', 'envie-me o número', 'send me the tracking number',
-      'adicionarei suporte', 'add support for'
+        'não foi possível detectar',
+        'nao foi possivel detectar',
+        'could not detect',
+        'carrier not supported',
+        'operadora não suportada',
+        'erro ao rastrear',
+        'error tracking',
+        'timeout',
+        'failed to fetch',
+        'unable to detect',
+        'envie-me o número',
+        'send me the tracking number',
+        'adicionarei suporte',
+        'add support for'
     ];
-    
-    $isErrorEvent = function($text) use ($errorPhrases) {
-        if (!$text) return false;
+
+    $isErrorEvent = function ($text) use ($errorPhrases) {
+        if (!$text)
+            return false;
         $lower = strtolower($text);
         foreach ($errorPhrases as $p) {
-            if (strpos($lower, $p) !== false) return true;
+            if (strpos($lower, $p) !== false)
+                return true;
         }
         return false;
     };
 
-    $extractStatusCode = function($description) {
-      if (!$description) return 'UNK';
-      $upper = strtoupper($description);
-      $knownCodes = ['DEP','ARR','RCF','DLV','NFD','MAN','BKD','RCS','DIS','NIL','OFLD','FOH','TRM','PRE','AWD','CCD','TGC','DDL','AWR','POD','TFD','RCT','RCP','LOF','TDE','ASN','MIS','TFS','BKF','FWB','CAN','NIF'];
-      if (preg_match('/\(([A-Z]{2,5})\)/', $description, $m)) {
-          if (in_array($m[1], $knownCodes)) return $m[1];
-      }
-      foreach ($knownCodes as $code) {
-          if (strpos($upper, $code . ' ') === 0 || strpos($upper, $code . '-') === 0 || $upper === $code) return $code;
-      }
-      foreach ($knownCodes as $code) {
-          if (strpos($upper, $code) !== false) return $code;
-      }
-      $descPatterns = [
-        ['/\bbooked\b/i', 'BKD'], ['/\bdelivered\b/i', 'DLV'], ['/\barrived?\b/i', 'ARR'],
-        ['/\bdeparted?\b/i', 'DEP'], ['/\breceived?\s+from\s+flight\b/i', 'RCF'],
-        ['/\breceived?\s+from\s+shipper\b/i', 'RCS'], ['/\bmanifested?\b/i', 'MAN'],
-        ['/\bnotified?\s+(for\s+)?delivery\b/i', 'NFD'], ['/\bawaitin[g]?\s+delivery\b/i', 'AWD'],
-        ['/\bavailable\s+for\s+delivery\b/i', 'AWD'], ['/\bdocuments?\s+available\b/i', 'AWD'],
-        ['/\bdiscrepancy\b/i', 'DIS'], ['/\boffloaded?\b/i', 'OFLD'], ['/\bfreight\s+on\s+hand\b/i', 'FOH'],
-        ['/\btransferred?\b/i', 'TFD'], ['/\bproof\s+of\s+delivery\b/i', 'POD'],
-        ['/\bnot\s+found\b/i', 'NIF'], ['/\bcancell?ed\b/i', 'CAN'], ['/\breceived\b/i', 'RCF']
-      ];
-      foreach ($descPatterns as $item) {
-          if (preg_match($item[0], $description)) return $item[1];
-      }
-      return 'UNK';
+    $extractStatusCode = function ($description) {
+        if (!$description)
+            return 'UNK';
+        $upper = strtoupper($description);
+        $knownCodes = ['DEP', 'ARR', 'RCF', 'DLV', 'NFD', 'MAN', 'BKD', 'RCS', 'DIS', 'NIL', 'OFLD', 'FOH', 'TRM', 'PRE', 'AWD', 'CCD', 'TGC', 'DDL', 'AWR', 'POD', 'TFD', 'RCT', 'RCP', 'LOF', 'TDE', 'ASN', 'MIS', 'TFS', 'BKF', 'FWB', 'CAN', 'NIF'];
+        if (preg_match('/\(([A-Z]{2,5})\)/', $description, $m)) {
+            if (in_array($m[1], $knownCodes))
+                return $m[1];
+        }
+        foreach ($knownCodes as $code) {
+            if (strpos($upper, $code . ' ') === 0 || strpos($upper, $code . '-') === 0 || $upper === $code)
+                return $code;
+        }
+        foreach ($knownCodes as $code) {
+            if (strpos($upper, $code) !== false)
+                return $code;
+        }
+        $descPatterns = [
+            ['/\bbooked\b/i', 'BKD'],
+            ['/\bdelivered\b/i', 'DLV'],
+            ['/\barrived?\b/i', 'ARR'],
+            ['/\bdeparted?\b/i', 'DEP'],
+            ['/\breceived?\s+from\s+flight\b/i', 'RCF'],
+            ['/\breceived?\s+from\s+shipper\b/i', 'RCS'],
+            ['/\bmanifested?\b/i', 'MAN'],
+            ['/\bnotified?\s+(for\s+)?delivery\b/i', 'NFD'],
+            ['/\bawaitin[g]?\s+delivery\b/i', 'AWD'],
+            ['/\bavailable\s+for\s+delivery\b/i', 'AWD'],
+            ['/\bdocuments?\s+available\b/i', 'AWD'],
+            ['/\bdiscrepancy\b/i', 'DIS'],
+            ['/\boffloaded?\b/i', 'OFLD'],
+            ['/\bfreight\s+on\s+hand\b/i', 'FOH'],
+            ['/\btransferred?\b/i', 'TFD'],
+            ['/\bproof\s+of\s+delivery\b/i', 'POD'],
+            ['/\bnot\s+found\b/i', 'NIF'],
+            ['/\bcancell?ed\b/i', 'CAN'],
+            ['/\breceived\b/i', 'RCF']
+        ];
+        foreach ($descPatterns as $item) {
+            if (preg_match($item[0], $description))
+                return $item[1];
+        }
+        return 'UNK';
     };
 
-    $extractPiecesFromDesc = function($text) {
-      if (!$text) return null;
-      if (preg_match('/(OFLD|OFFLOAD|OFFLOADED)/i', $text) && preg_match('/(^|[^0-9])0\s+PIECES?([^A-Z]|$)/i', $text)) return null;
-      if (preg_match('/(^|[^A-Z])(BOOKED|BOOKING)([^A-Z]|$)/i', $text)) return null;
-      if (preg_match('/Pcs\s*\/\s*Wt\s*[:=]?\s*(\d+)\s*\/\s*[\d.,]+/i', $text, $m)) return (int)$m[1];
-      if (preg_match('/Pieces:\s*(\d+)/i', $text, $m)) return (int)$m[1];
-      if (preg_match('/(\d+)\s*\/\s*[\d.,]+\s*(KGS?|LBS?|K)\b/i', $text, $m)) return (int)$m[1];
-      if (preg_match('/qty:\s*(\d+)/i', $text, $m)) return (int)$m[1];
-      if (preg_match('/(\d+)\s*piece(?:s|\(s\))?/i', $text, $m)) return (int)$m[1];
-      return null;
+    $extractPiecesFromDesc = function ($text) {
+        if (!$text)
+            return null;
+        if (preg_match('/(OFLD|OFFLOAD|OFFLOADED)/i', $text) && preg_match('/(^|[^0-9])0\s+PIECES?([^A-Z]|$)/i', $text))
+            return null;
+        if (preg_match('/(^|[^A-Z])(BOOKED|BOOKING)([^A-Z]|$)/i', $text))
+            return null;
+        if (preg_match('/Pcs\s*\/\s*Wt\s*[:=]?\s*(\d+)\s*\/\s*[\d.,]+/i', $text, $m))
+            return (int) $m[1];
+        if (preg_match('/Pieces:\s*(\d+)/i', $text, $m))
+            return (int) $m[1];
+        if (preg_match('/(\d+)\s*\/\s*[\d.,]+\s*(KGS?|LBS?|K)\b/i', $text, $m))
+            return (int) $m[1];
+        if (preg_match('/qty:\s*(\d+)/i', $text, $m))
+            return (int) $m[1];
+        if (preg_match('/(\d+)\s*piece(?:s|\(s\))?/i', $text, $m))
+            return (int) $m[1];
+        return null;
     };
 
-    $extractWeightFromDesc = function($text) {
-      if (!$text) return null;
-      if (preg_match('/Weight:\s*([\d.,]+\s*(?:K|KGS?|kg))/i', $text, $m)) return $m[1];
-      if (preg_match('/([\d.,]+)\s*KGS/i', $text, $m)) return $m[1] . ' KGS';
-      return null;
+    $extractWeightFromDesc = function ($text) {
+        if (!$text)
+            return null;
+        if (preg_match('/Weight:\s*([\d.,]+\s*(?:K|KGS?|kg))/i', $text, $m))
+            return $m[1];
+        if (preg_match('/([\d.,]+)\s*KGS/i', $text, $m))
+            return $m[1] . ' KGS';
+        return null;
     };
 
-    $parseFlexibleDate = function($dateStr) {
-      if (!$dateStr) return null;
-      $direct = strtotime($dateStr);
-      if ($direct !== false && $direct > 0) return new DateTime("@$direct");
-      
-      $ptMonths = ['jan'=>'01','fev'=>'02','mar'=>'03','abr'=>'04','mai'=>'05','jun'=>'06','jul'=>'07','ago'=>'08','set'=>'09','out'=>'10','nov'=>'11','dez'=>'12'];
-      $enMonths = ['jan'=>'01','feb'=>'02','mar'=>'03','apr'=>'04','may'=>'05','jun'=>'06','jul'=>'07','aug'=>'08','sep'=>'09','oct'=>'10','nov'=>'11','dec'=>'12'];
-      
-      if (preg_match('/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})(?:\s+(\d{2}:\d{2}))?/i', $dateStr, $m)) {
-        $day = str_pad($m[1], 2, '0', STR_PAD_LEFT);
-        $monthStr = strtolower($m[2]);
-        $year = $m[3];
-        $time = isset($m[4]) ? $m[4] : '00:00';
-        $month = isset($ptMonths[$monthStr]) ? $ptMonths[$monthStr] : (isset($enMonths[$monthStr]) ? $enMonths[$monthStr] : null);
-        if ($month) return new DateTime("{$year}-{$month}-{$day}T{$time}:00");
-      }
-      return null;
+    $parseFlexibleDate = function ($dateStr) {
+        if (!$dateStr)
+            return null;
+        $direct = strtotime($dateStr);
+        if ($direct !== false && $direct > 0)
+            return new DateTime("@$direct");
+
+        $ptMonths = ['jan' => '01', 'fev' => '02', 'mar' => '03', 'abr' => '04', 'mai' => '05', 'jun' => '06', 'jul' => '07', 'ago' => '08', 'set' => '09', 'out' => '10', 'nov' => '11', 'dez' => '12'];
+        $enMonths = ['jan' => '01', 'feb' => '02', 'mar' => '03', 'apr' => '04', 'may' => '05', 'jun' => '06', 'jul' => '07', 'aug' => '08', 'sep' => '09', 'oct' => '10', 'nov' => '11', 'dec' => '12'];
+
+        if (preg_match('/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})(?:\s+(\d{2}:\d{2}))?/i', $dateStr, $m)) {
+            $day = str_pad($m[1], 2, '0', STR_PAD_LEFT);
+            $monthStr = strtolower($m[2]);
+            $year = $m[3];
+            $time = isset($m[4]) ? $m[4] : '00:00';
+            $month = isset($ptMonths[$monthStr]) ? $ptMonths[$monthStr] : (isset($enMonths[$monthStr]) ? $enMonths[$monthStr] : null);
+            if ($month)
+                return new DateTime("{$year}-{$month}-{$day}T{$time}:00");
+        }
+        return null;
     };
 
     try {
@@ -2061,16 +2397,17 @@ $router->get('air/timeline/:awb', function($params) {
         $timelineData = [];
         if ($wsRecord['timeline_json']) {
             $raw = is_string($wsRecord['timeline_json']) ? json_decode($wsRecord['timeline_json'], true) : $wsRecord['timeline_json'];
-            if (is_array($raw)) $timelineData = $raw;
+            if (is_array($raw))
+                $timelineData = $raw;
         }
 
         $invalidStatuses = array_flip(['', 'N/A', 'NOT_FOUND', 'ERRO', 'UNK']);
         $wsStatus = strtoupper(trim($wsRecord['last_status_code'] ?: ''));
-        
+
         $needsFallback = count($timelineData) === 0
-          || $isErrorEvent($wsRecord['timeline_json'] ? (string)$wsRecord['timeline_json'] : null)
-          || isset($invalidStatuses[$wsStatus])
-          || !$wsRecord['last_status_code'];
+            || $isErrorEvent($wsRecord['timeline_json'] ? (string) $wsRecord['timeline_json'] : null)
+            || isset($invalidStatuses[$wsStatus])
+            || !$wsRecord['last_status_code'];
 
         $apiTimelineRaw = [];
         try {
@@ -2082,9 +2419,11 @@ $router->get('air/timeline/:awb', function($params) {
             ", [$queryAwb]);
             if (count($apiRows) > 0 && $apiRows[0]['historico_status']) {
                 $parsed = is_string($apiRows[0]['historico_status']) ? json_decode($apiRows[0]['historico_status'], true) : $apiRows[0]['historico_status'];
-                if (is_array($parsed)) $apiTimelineRaw = $parsed;
+                if (is_array($parsed))
+                    $apiTimelineRaw = $parsed;
             }
-        } catch (Exception $e) {}
+        } catch (Exception $e) {
+        }
 
         if ($needsFallback && count($timelineData) > 0 && count($apiTimelineRaw) > 0) {
             foreach ($apiTimelineRaw as $apiEvt) {
@@ -2092,25 +2431,25 @@ $router->get('air/timeline/:awb', function($params) {
                 $apiAirport = strtoupper($apiEvt['aeroporto']);
                 $apiDate = isset($apiEvt['dataEvento']) ? strtotime($apiEvt['dataEvento']) : 0;
                 $matched = false;
-                
+
                 foreach ($timelineData as &$fcEvt) {
                     $fcDesc = strtoupper(isset($fcEvt['Description']) ? $fcEvt['Description'] : (isset($fcEvt['description']) ? $fcEvt['description'] : ''));
-                    $fcLoc  = strtoupper(isset($fcEvt['Location']) ? $fcEvt['Location'] : (isset($fcEvt['location']) ? $fcEvt['location'] : ''));
-                    
-                    $fcRaw  = isset($fcEvt['Timestamp']) ? $fcEvt['Timestamp'] : (isset($fcEvt['timestamp']) ? $fcEvt['timestamp'] : (isset($fcEvt['date']) ? $fcEvt['date'] : ''));
+                    $fcLoc = strtoupper(isset($fcEvt['Location']) ? $fcEvt['Location'] : (isset($fcEvt['location']) ? $fcEvt['location'] : ''));
+
+                    $fcRaw = isset($fcEvt['Timestamp']) ? $fcEvt['Timestamp'] : (isset($fcEvt['timestamp']) ? $fcEvt['timestamp'] : (isset($fcEvt['date']) ? $fcEvt['date'] : ''));
                     $fcTime = $fcRaw ? strtotime($fcRaw) : 0;
-                    
+
                     $statusMatch = (strpos($fcDesc, $apiStatus) !== false) || (strpos($fcLoc, $apiAirport) !== false);
-                    $timeClose   = $apiDate && $fcTime && abs($apiDate - $fcTime) < 2 * 3600;
+                    $timeClose = $apiDate && $fcTime && abs($apiDate - $fcTime) < 2 * 3600;
                     if ($statusMatch && ($timeClose || !$apiDate || !$fcTime)) {
                         $fcEvt['_pecas'] = isset($apiEvt['quantidadeCargo']) ? $apiEvt['quantidadeCargo'] : (isset($apiEvt['quantidadeCarga']) ? $apiEvt['quantidadeCarga'] : null);
-                        $fcEvt['_peso']  = isset($apiEvt['pesoCarga']) ? $apiEvt['pesoCarga'] : null;
-                        $matched = true; 
+                        $fcEvt['_peso'] = isset($apiEvt['pesoCarga']) ? $apiEvt['pesoCarga'] : null;
+                        $matched = true;
                         break;
                     }
                 }
                 unset($fcEvt);
-                
+
                 if (!$matched) {
                     $timelineData[] = array_merge($apiEvt, [
                         '_fromApi' => true,
@@ -2129,14 +2468,14 @@ $router->get('air/timeline/:awb', function($params) {
             }
         } elseif (!$needsFallback && count($apiTimelineRaw) > 0) {
             foreach ($apiTimelineRaw as $apiEvt) {
-                $apiStatus  = strtoupper($apiEvt['status']);
+                $apiStatus = strtoupper($apiEvt['status']);
                 $apiAirport = strtoupper($apiEvt['aeroporto']);
                 foreach ($timelineData as &$fcEvt) {
                     $fcDesc = strtoupper(isset($fcEvt['Description']) ? $fcEvt['Description'] : (isset($fcEvt['description']) ? $fcEvt['description'] : ''));
-                    $fcLoc  = strtoupper(isset($fcEvt['Location']) ? $fcEvt['Location'] : (isset($fcEvt['location']) ? $fcEvt['location'] : ''));
+                    $fcLoc = strtoupper(isset($fcEvt['Location']) ? $fcEvt['Location'] : (isset($fcEvt['location']) ? $fcEvt['location'] : ''));
                     if (strpos($fcDesc, $apiStatus) !== false || strpos($fcLoc, $apiAirport) !== false) {
                         $fcEvt['_pecas'] = isset($apiEvt['quantidadeCargo']) ? $apiEvt['quantidadeCargo'] : (isset($apiEvt['quantidadeCarga']) ? $apiEvt['quantidadeCarga'] : null);
-                        $fcEvt['_peso']  = isset($apiEvt['pesoCarga']) ? $apiEvt['pesoCarga'] : null;
+                        $fcEvt['_peso'] = isset($apiEvt['pesoCarga']) ? $apiEvt['pesoCarga'] : null;
                         break;
                     }
                 }
@@ -2149,62 +2488,110 @@ $router->get('air/timeline/:awb', function($params) {
             $allAreErrors = true;
             foreach ($timelineData as $entry) {
                 $desc = isset($entry['Description']) ? $entry['Description'] : (isset($entry['description']) ? $entry['description'] : (isset($entry['status']) ? $entry['status'] : ''));
-                if (!$isErrorEvent(String($desc))) { $allAreErrors = false; break; }
+                if (!$isErrorEvent(String($desc))) {
+                    $allAreErrors = false;
+                    break;
+                }
             }
         }
-        
-        if ($allAreErrors) sendJson(['success' => true, 'data' => [], 'tracking_failed' => true]);
+
+        if ($allAreErrors)
+            sendJson(['success' => true, 'data' => [], 'tracking_failed' => true]);
 
         $events = [];
         foreach ($timelineData as $idx => $entry) {
             if ((isset($entry['status']) && !isset($entry['Description']) && !isset($entry['description'])) || isset($entry['_fromApi'])) {
                 $statusCode = strtoupper($entry['status'] ?: '');
-                $airport    = isset($entry['aeroporto']) ? $entry['aeroporto'] : '';
-                $flight     = isset($entry['voo']) ? $entry['voo'] : '';
-                $qty        = isset($entry['_pecas']) ? $entry['_pecas'] : (isset($entry['quantidadeCargo']) ? $entry['quantidadeCargo'] : (isset($entry['quantidadeCarga']) ? $entry['quantidadeCarga'] : null));
-                $weight     = isset($entry['_peso']) ? $entry['_peso'] : (isset($entry['pesoCarga']) ? $entry['pesoCarga'] : null);
-                
+                $airport = isset($entry['aeroporto']) ? $entry['aeroporto'] : '';
+                $flight = isset($entry['voo']) ? $entry['voo'] : '';
+                $qty = isset($entry['_pecas']) ? $entry['_pecas'] : (isset($entry['quantidadeCargo']) ? $entry['quantidadeCargo'] : (isset($entry['quantidadeCarga']) ? $entry['quantidadeCarga'] : null));
+                $weight = isset($entry['_peso']) ? $entry['_peso'] : (isset($entry['pesoCarga']) ? $entry['pesoCarga'] : null);
+
                 $desc = $statusCode;
-                if ($airport) $desc .= " - $airport";
-                if ($flight)  $desc .= ", Flight $flight";
-                if ($qty && $qty > 0)             $desc .= ", Pieces: $qty";
-                if ($weight && $weight !== 'N/A') $desc .= ", Weight: $weight";
-                
+                if ($airport)
+                    $desc .= " - $airport";
+                if ($flight)
+                    $desc .= ", Flight $flight";
+                if ($qty && $qty > 0)
+                    $desc .= ", Pieces: $qty";
+                if ($weight && $weight !== 'N/A')
+                    $desc .= ", Weight: $weight";
+
                 $events[] = [
-                    'id' => $idx + 1, 'codigo_evento' => $statusCode ?: 'UNK', 'descricao_evento' => $desc,
-                    'data_hora_evento' => isset($entry['dataEvento']) ? $entry['dataEvento'] : null, 'fonte' => 'API', 'aeroporto' => $airport ?: null,
-                    'pecas' => ($qty && $qty > 0) ? (int)$qty : null,
-                    'peso' => ($weight && $weight !== 'N/A') ? (string)$weight : null
+                    'id' => $idx + 1,
+                    'codigo_evento' => $statusCode ?: 'UNK',
+                    'descricao_evento' => $desc,
+                    'data_hora_evento' => isset($entry['dataEvento']) ? $entry['dataEvento'] : null,
+                    'fonte' => 'API',
+                    'aeroporto' => $airport ?: null,
+                    'pecas' => ($qty && $qty > 0) ? (int) $qty : null,
+                    'peso' => ($weight && $weight !== 'N/A') ? (string) $weight : null
                 ];
                 continue;
             }
-            
-            $description   = isset($entry['Description']) ? $entry['Description'] : (isset($entry['description']) ? $entry['description'] : (isset($entry['status']) ? $entry['status'] : ''));
-            $codigoEvento  = $extractStatusCode($description);
+
+            $description = isset($entry['Description']) ? $entry['Description'] : (isset($entry['description']) ? $entry['description'] : (isset($entry['status']) ? $entry['status'] : ''));
+            $codigoEvento = $extractStatusCode($description);
             $eventDateTime = isset($entry['Timestamp']) ? $entry['Timestamp'] : (isset($entry['timestamp']) ? $entry['timestamp'] : (isset($entry['date']) ? $entry['date'] : (isset($entry['Date']) ? $entry['Date'] : (isset($entry['datetime']) ? $entry['datetime'] : (isset($entry['dataEvento']) ? $entry['dataEvento'] : (isset($entry['time']) ? $entry['time'] : null))))));
-            
+
             $events[] = [
-              'id' => $idx + 1, 'codigo_evento' => $codigoEvento, 'descricao_evento' => $description,
-              'data_hora_evento' => $eventDateTime, 'fonte' => isset($entry['Carrier']) ? $entry['Carrier'] : (isset($entry['carrier']) ? $entry['carrier'] : 'TRACKING'),
-              'aeroporto' => isset($entry['Location']) ? $entry['Location'] : (isset($entry['location']) ? $entry['location'] : (isset($entry['aeroporto']) ? $entry['aeroporto'] : null)),
-              'pecas' => isset($entry['_pecas']) ? (int)$entry['_pecas'] : $extractPiecesFromDesc($description),
-              'peso' => (isset($entry['_peso']) && $entry['_peso'] !== 'N/A') ? (string)$entry['_peso'] : $extractWeightFromDesc($description),
+                'id' => $idx + 1,
+                'codigo_evento' => $codigoEvento,
+                'descricao_evento' => $description,
+                'data_hora_evento' => $eventDateTime,
+                'fonte' => isset($entry['Carrier']) ? $entry['Carrier'] : (isset($entry['carrier']) ? $entry['carrier'] : 'TRACKING'),
+                'aeroporto' => isset($entry['Location']) ? $entry['Location'] : (isset($entry['location']) ? $entry['location'] : (isset($entry['aeroporto']) ? $entry['aeroporto'] : null)),
+                'pecas' => isset($entry['_pecas']) ? (int) $entry['_pecas'] : $extractPiecesFromDesc($description),
+                'peso' => (isset($entry['_peso']) && $entry['_peso'] !== 'N/A') ? (string) $entry['_peso'] : $extractWeightFromDesc($description),
             ];
         }
 
         $validIataCodes = array_flip([
-            'DEP','ARR','RCF','DLV','NFD','MAN','BKD','RCS','DIS','NIL','OFLD','FOH','TRM','PRE',
-            'AWD','CCD','TGC','DDL','AWR','POD','TFD','RCT','RCP','LOF','TDE','ASN','MIS','TFS',
-            'BKF','FWB','CAN','NIF','UNK','NOVO_MASTER','BCBP','RCD'
+            'DEP',
+            'ARR',
+            'RCF',
+            'DLV',
+            'NFD',
+            'MAN',
+            'BKD',
+            'RCS',
+            'DIS',
+            'NIL',
+            'OFLD',
+            'FOH',
+            'TRM',
+            'PRE',
+            'AWD',
+            'CCD',
+            'TGC',
+            'DDL',
+            'AWR',
+            'POD',
+            'TFD',
+            'RCT',
+            'RCP',
+            'LOF',
+            'TDE',
+            'ASN',
+            'MIS',
+            'TFS',
+            'BKF',
+            'FWB',
+            'CAN',
+            'NIF',
+            'UNK',
+            'NOVO_MASTER',
+            'BCBP',
+            'RCD'
         ]);
-        
-        $validEvents = array_filter($events, function($e) use ($isErrorEvent, $validIataCodes) {
+
+        $validEvents = array_filter($events, function ($e) use ($isErrorEvent, $validIataCodes) {
             return !$isErrorEvent($e['descricao_evento']) && isset($validIataCodes[strtoupper($e['codigo_evento'])]);
         });
-        
+
         // Re-ordenação
         $validEvents = array_values($validEvents);
-        $iataWeightTl = ['POD'=>44,'DLV'=>43,'NFD'=>42,'RCF'=>41,'AWD'=>40,'ARR'=>39,'TRM'=>38,'TFD'=>37,'DEP'=>36,'MAN'=>35,'RCS'=>34,'FOH'=>33,'BKD'=>32,'AWR'=>40,'CCD'=>40,'FWB'=>4,'RCT'=>11,'PRE'=>20,'DIS'=>30,'OFLD'=>28];
+        $iataWeightTl = ['POD' => 44, 'DLV' => 43, 'NFD' => 42, 'RCF' => 41, 'AWD' => 40, 'ARR' => 39, 'TRM' => 38, 'TFD' => 37, 'DEP' => 36, 'MAN' => 35, 'RCS' => 34, 'FOH' => 33, 'BKD' => 32, 'AWR' => 40, 'CCD' => 40, 'FWB' => 4, 'RCT' => 11, 'PRE' => 20, 'DIS' => 30, 'OFLD' => 28];
         if (count($validEvents) >= 2) {
             $topN = min(4, count($validEvents));
             $topWithDate = [];
@@ -2215,12 +2602,14 @@ $router->get('air/timeline/:awb', function($params) {
             }
             $latestDateMs = max(array_column($topWithDate, 'dateMs'));
             if ($latestDateMs > 0) {
-                $bestGroup = array_filter($topWithDate, function($x) use ($latestDateMs) { return $x['dateMs'] === $latestDateMs; });
+                $bestGroup = array_filter($topWithDate, function ($x) use ($latestDateMs) {
+                    return $x['dateMs'] === $latestDateMs;
+                });
                 $bestGroup = array_values($bestGroup);
-                
+
                 $bestIdx = $bestGroup[0]['idx'];
                 $bestW = isset($iataWeightTl[strtoupper($bestGroup[0]['ev']['codigo_evento'])]) ? $iataWeightTl[strtoupper($bestGroup[0]['ev']['codigo_evento'])] : 0;
-                
+
                 foreach ($bestGroup as $bg) {
                     $w = isset($iataWeightTl[strtoupper($bg['ev']['codigo_evento'])]) ? $iataWeightTl[strtoupper($bg['ev']['codigo_evento'])] : 0;
                     if ($w > $bestW || ($w === $bestW && $bg['idx'] < $bestIdx)) {
@@ -2249,22 +2638,28 @@ $router->get('air/timeline/:awb', function($params) {
                     $etdCutoffVal = $etdDate - 30 * 24 * 60 * 60;
                 } else {
                     $insertTime = strtotime($etdRows[0]['data_insert']);
-                    if ($insertTime > 0) $etdCutoffVal = $insertTime - 7 * 24 * 60 * 60;
+                    if ($insertTime > 0)
+                        $etdCutoffVal = $insertTime - 7 * 24 * 60 * 60;
                 }
             }
-        } catch (Exception $e) {}
+        } catch (Exception $e) {
+        }
 
         $nowLimit = time() + 6 * 3600;
-        $filteredEvents = array_filter($validEvents, function($e) use ($parseFlexibleDate, $nowLimit, $etdCutoffVal) {
-            if (!$e['data_hora_evento']) return $e['fonte'] !== 'API';
+        $filteredEvents = array_filter($validEvents, function ($e) use ($parseFlexibleDate, $nowLimit, $etdCutoffVal) {
+            if (!$e['data_hora_evento'])
+                return $e['fonte'] !== 'API';
             $eventDate = $parseFlexibleDate($e['data_hora_evento']);
-            if (!$eventDate) return $e['fonte'] !== 'API';
+            if (!$eventDate)
+                return $e['fonte'] !== 'API';
             $t = $eventDate->getTimestamp();
-            if ($t > $nowLimit) return false;
-            if ($etdCutoffVal !== null && $t < $etdCutoffVal) return false;
+            if ($t > $nowLimit)
+                return false;
+            if ($etdCutoffVal !== null && $t < $etdCutoffVal)
+                return false;
             return true;
         });
-        
+
         $filteredEvents = array_values($filteredEvents);
 
         if (count($filteredEvents) === 0) {
@@ -2280,24 +2675,31 @@ $router->get('air/timeline/:awb', function($params) {
             if (count($swapRows) > 0) {
                 foreach ($swapRows as $swap) {
                     $filteredEvents[] = [
-                      'id' => "swap-{$swap['old_mawb']}-{$swap['new_mawb']}",
-                      'codigo_evento' => 'NOVO_MASTER',
-                      'descricao_evento' => "Master atualizado: {$swap['old_mawb']} → {$swap['new_mawb']}",
-                      'data_hora_evento' => $swap['swapped_at'] ?: null,
-                      'fonte' => 'SISTEMA', 'aeroporto' => '', 'pecas' => null, 'peso' => null,
+                        'id' => "swap-{$swap['old_mawb']}-{$swap['new_mawb']}",
+                        'codigo_evento' => 'NOVO_MASTER',
+                        'descricao_evento' => "Master atualizado: {$swap['old_mawb']} → {$swap['new_mawb']}",
+                        'data_hora_evento' => $swap['swapped_at'] ?: null,
+                        'fonte' => 'SISTEMA',
+                        'aeroporto' => '',
+                        'pecas' => null,
+                        'peso' => null,
                     ];
                 }
-                usort($filteredEvents, function($a, $b) {
+                usort($filteredEvents, function ($a, $b) {
                     $da = $a['data_hora_evento'] ? strtotime($a['data_hora_evento']) : 0;
                     $db = $b['data_hora_evento'] ? strtotime($b['data_hora_evento']) : 0;
                     return $db - $da;
                 });
             }
-        } catch (Exception $e) {}
+        } catch (Exception $e) {
+        }
 
         $discrepancy = null;
         $allPieces = [];
-        foreach ($filteredEvents as $e) { if ($e['pecas'] !== null && $e['pecas'] > 0) $allPieces[] = $e['pecas']; }
+        foreach ($filteredEvents as $e) {
+            if ($e['pecas'] !== null && $e['pecas'] > 0)
+                $allPieces[] = $e['pecas'];
+        }
         if (count($allPieces) >= 2) {
             $minP = min($allPieces);
             $maxP = max($allPieces);
@@ -2310,14 +2712,17 @@ $router->get('air/timeline/:awb', function($params) {
             foreach ($filteredEvents as $e) {
                 $txt = $e['descricao_evento'];
                 if (preg_match('/(^|[^A-Z])(DISCREP|DIS)([^A-Z]|$)/i', $txt) || preg_match('/\b(DISCREPANCY|IRREGULAR|MISSING|SHORT\s+SHIPPED|OVERAGE)\b/i', $txt)) {
-                    $hasDis = true; break;
+                    $hasDis = true;
+                    break;
                 }
             }
-            if ($hasDis) $discrepancy = ['field' => 'dis', 'values' => [], 'min' => null, 'max' => null];
+            if ($hasDis)
+                $discrepancy = ['field' => 'dis', 'values' => [], 'min' => null, 'max' => null];
         }
 
         $resPayload = ['success' => true, 'data' => $filteredEvents];
-        if ($discrepancy) $resPayload['discrepancy'] = $discrepancy;
+        if ($discrepancy)
+            $resPayload['discrepancy'] = $discrepancy;
         sendJson($resPayload);
     } catch (Exception $e) {
         error_log('[GET air/timeline/:awb] ' . $e->getMessage());
@@ -2326,7 +2731,7 @@ $router->get('air/timeline/:awb', function($params) {
 });
 
 // GET /api/air/email-regras
-$router->get('air/email-regras', function($params) {
+$router->get('air/email-regras', function ($params) {
     try {
         $rows = queryWithRetry(getPDO(), "
             SELECT id, cliente_nome, cnpj_consignatario, email_cliente, aeroportos, eventos_disparo, canais, ativo, created_at, updated_at
@@ -2339,7 +2744,7 @@ $router->get('air/email-regras', function($params) {
 });
 
 // POST /api/air/email-regras
-$router->post('air/email-regras', function($params) {
+$router->post('air/email-regras', function ($params) {
     try {
         $body = getRequestBody();
         $cliente_nome = isset($body['cliente_nome']) ? $body['cliente_nome'] : null;
@@ -2354,7 +2759,9 @@ $router->post('air/email-regras', function($params) {
             INSERT INTO dados_dachser.t_email_cliente (cliente_nome, cnpj_consignatario, email_cliente, aeroportos, eventos_disparo, canais, ativo, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
         ", [
-            $cliente_nome, $cnpj_consignatario, $email_cliente,
+            $cliente_nome,
+            $cnpj_consignatario,
+            $email_cliente,
             is_string($aeroportos) ? $aeroportos : json_encode($aeroportos),
             is_string($eventos_disparo) ? $eventos_disparo : json_encode($eventos_disparo),
             is_string($canais) ? $canais : json_encode($canais),
@@ -2368,29 +2775,50 @@ $router->post('air/email-regras', function($params) {
 });
 
 // PATCH /api/air/email-regras/:id
-$router->patch('air/email-regras/:id', function($params) {
+$router->patch('air/email-regras/:id', function ($params) {
     try {
-        $id = (int)$params['id'];
+        $id = (int) $params['id'];
         $body = getRequestBody();
-        
+
         $sets = [];
         $sqlParams = [];
-        
-        if (isset($body['cliente_nome'])) { $sets[] = 'cliente_nome = ?'; $sqlParams[] = $body['cliente_nome']; }
-        if (isset($body['cnpj_consignatario'])) { $sets[] = 'cnpj_consignatario = ?'; $sqlParams[] = $body['cnpj_consignatario']; }
-        if (isset($body['email_cliente'])) { $sets[] = 'email_cliente = ?'; $sqlParams[] = $body['email_cliente']; }
-        if (isset($body['aeroportos'])) { $sets[] = 'aeroportos = ?'; $sqlParams[] = is_string($body['aeroportos']) ? $body['aeroportos'] : json_encode($body['aeroportos']); }
-        if (isset($body['eventos_disparo'])) { $sets[] = 'eventos_disparo = ?'; $sqlParams[] = is_string($body['eventos_disparo']) ? $body['eventos_disparo'] : json_encode($body['eventos_disparo']); }
-        if (isset($body['canais'])) { $sets[] = 'canais = ?'; $sqlParams[] = is_string($body['canais']) ? $body['canais'] : json_encode($body['canais']); }
-        if (isset($body['ativo'])) { $sets[] = 'ativo = ?'; $sqlParams[] = $body['ativo'] ? 1 : 0; }
-        
+
+        if (isset($body['cliente_nome'])) {
+            $sets[] = 'cliente_nome = ?';
+            $sqlParams[] = $body['cliente_nome'];
+        }
+        if (isset($body['cnpj_consignatario'])) {
+            $sets[] = 'cnpj_consignatario = ?';
+            $sqlParams[] = $body['cnpj_consignatario'];
+        }
+        if (isset($body['email_cliente'])) {
+            $sets[] = 'email_cliente = ?';
+            $sqlParams[] = $body['email_cliente'];
+        }
+        if (isset($body['aeroportos'])) {
+            $sets[] = 'aeroportos = ?';
+            $sqlParams[] = is_string($body['aeroportos']) ? $body['aeroportos'] : json_encode($body['aeroportos']);
+        }
+        if (isset($body['eventos_disparo'])) {
+            $sets[] = 'eventos_disparo = ?';
+            $sqlParams[] = is_string($body['eventos_disparo']) ? $body['eventos_disparo'] : json_encode($body['eventos_disparo']);
+        }
+        if (isset($body['canais'])) {
+            $sets[] = 'canais = ?';
+            $sqlParams[] = is_string($body['canais']) ? $body['canais'] : json_encode($body['canais']);
+        }
+        if (isset($body['ativo'])) {
+            $sets[] = 'ativo = ?';
+            $sqlParams[] = $body['ativo'] ? 1 : 0;
+        }
+
         if (count($sets) === 0) {
             sendJson(['success' => true]);
         }
-        
+
         $sets[] = 'updated_at = NOW()';
         $sqlParams[] = $id;
-        
+
         queryWithRetry(getPDO(), "UPDATE dados_dachser.t_email_cliente SET " . implode(', ', $sets) . " WHERE id = ?", $sqlParams);
         sendJson(['success' => true]);
     } catch (Exception $e) {
@@ -2399,9 +2827,9 @@ $router->patch('air/email-regras/:id', function($params) {
 });
 
 // DELETE /api/air/email-regras/:id
-$router->delete('air/email-regras/:id', function($params) {
+$router->delete('air/email-regras/:id', function ($params) {
     try {
-        $id = (int)$params['id'];
+        $id = (int) $params['id'];
         queryWithRetry(getPDO(), "DELETE FROM dados_dachser.t_email_cliente WHERE id = ?", [$id]);
         sendJson(['success' => true]);
     } catch (Exception $e) {
@@ -2412,7 +2840,7 @@ $router->delete('air/email-regras/:id', function($params) {
 // ── CCT ROUTES ───────────────────────────────────────────────────────────────
 
 // GET /api/cct/profiles
-$router->get('cct/profiles', function($params) {
+$router->get('cct/profiles', function ($params) {
     try {
         $rows = queryWithRetry(getPDO(), "
             SELECT DISTINCT nome_analista AS nome, email_analista AS email
@@ -2436,7 +2864,7 @@ $router->get('cct/profiles', function($params) {
 });
 
 // GET /api/cct/regras-notificacao
-$router->get('cct/regras-notificacao', function($params) {
+$router->get('cct/regras-notificacao', function ($params) {
     try {
         $rows = queryWithRetry(getPDO(), "SELECT * FROM dados_dachser.t_cct_regras_notificacao ORDER BY created_at DESC");
         sendJson(['success' => true, 'data' => $rows ?: []]);
@@ -2446,7 +2874,7 @@ $router->get('cct/regras-notificacao', function($params) {
 });
 
 // POST /api/cct/regras-notificacao
-$router->post('cct/regras-notificacao', function($params) {
+$router->post('cct/regras-notificacao', function ($params) {
     try {
         $body = getRequestBody();
         $cliente_nome = isset($body['cliente_nome']) ? $body['cliente_nome'] : null;
@@ -2461,11 +2889,13 @@ $router->post('cct/regras-notificacao', function($params) {
             INSERT INTO dados_dachser.t_cct_regras_notificacao (cliente_nome, cnpj_consignatario, aeroportos, eventos_disparo, canais, template_id, ativo)
              VALUES (?, ?, ?, ?, ?, ?, ?)
         ", [
-            $cliente_nome, $cnpj_consignatario,
+            $cliente_nome,
+            $cnpj_consignatario,
             is_string($aeroportos) ? $aeroportos : json_encode($aeroportos),
             is_string($eventos_disparo) ? $eventos_disparo : json_encode($eventos_disparo),
             is_string($canais) ? $canais : json_encode($canais),
-            $template_id, $ativo ? 1 : 0
+            $template_id,
+            $ativo ? 1 : 0
         ]);
 
         sendJson(['success' => true]);
@@ -2475,22 +2905,43 @@ $router->post('cct/regras-notificacao', function($params) {
 });
 
 // PATCH /api/cct/regras-notificacao/:id
-$router->patch('cct/regras-notificacao/:id', function($params) {
+$router->patch('cct/regras-notificacao/:id', function ($params) {
     try {
-        $id = (int)$params['id'];
+        $id = (int) $params['id'];
         $body = getRequestBody();
-        
+
         $sets = [];
         $sqlParams = [];
-        
-        if (isset($body['cliente_nome'])) { $sets[] = 'cliente_nome = ?'; $sqlParams[] = $body['cliente_nome']; }
-        if (isset($body['cnpj_consignatario'])) { $sets[] = 'cnpj_consignatario = ?'; $sqlParams[] = $body['cnpj_consignatario']; }
-        if (isset($body['aeroportos'])) { $sets[] = 'aeroportos = ?'; $sqlParams[] = is_string($body['aeroportos']) ? $body['aeroportos'] : json_encode($body['aeroportos']); }
-        if (isset($body['eventos_disparo'])) { $sets[] = 'eventos_disparo = ?'; $sqlParams[] = is_string($body['eventos_disparo']) ? $body['eventos_disparo'] : json_encode($body['eventos_disparo']); }
-        if (isset($body['canais'])) { $sets[] = 'canais = ?'; $sqlParams[] = is_string($body['canais']) ? $body['canais'] : json_encode($body['canais']); }
-        if (isset($body['template_id'])) { $sets[] = 'template_id = ?'; $sqlParams[] = $body['template_id']; }
-        if (isset($body['ativo'])) { $sets[] = 'ativo = ?'; $sqlParams[] = $body['ativo'] ? 1 : 0; }
-        
+
+        if (isset($body['cliente_nome'])) {
+            $sets[] = 'cliente_nome = ?';
+            $sqlParams[] = $body['cliente_nome'];
+        }
+        if (isset($body['cnpj_consignatario'])) {
+            $sets[] = 'cnpj_consignatario = ?';
+            $sqlParams[] = $body['cnpj_consignatario'];
+        }
+        if (isset($body['aeroportos'])) {
+            $sets[] = 'aeroportos = ?';
+            $sqlParams[] = is_string($body['aeroportos']) ? $body['aeroportos'] : json_encode($body['aeroportos']);
+        }
+        if (isset($body['eventos_disparo'])) {
+            $sets[] = 'eventos_disparo = ?';
+            $sqlParams[] = is_string($body['eventos_disparo']) ? $body['eventos_disparo'] : json_encode($body['eventos_disparo']);
+        }
+        if (isset($body['canais'])) {
+            $sets[] = 'canais = ?';
+            $sqlParams[] = is_string($body['canais']) ? $body['canais'] : json_encode($body['canais']);
+        }
+        if (isset($body['template_id'])) {
+            $sets[] = 'template_id = ?';
+            $sqlParams[] = $body['template_id'];
+        }
+        if (isset($body['ativo'])) {
+            $sets[] = 'ativo = ?';
+            $sqlParams[] = $body['ativo'] ? 1 : 0;
+        }
+
         if (count($sets) === 0) {
             sendJson(['success' => true]);
         }
@@ -2503,9 +2954,9 @@ $router->patch('cct/regras-notificacao/:id', function($params) {
 });
 
 // DELETE /api/cct/regras-notificacao/:id
-$router->delete('cct/regras-notificacao/:id', function($params) {
+$router->delete('cct/regras-notificacao/:id', function ($params) {
     try {
-        $id = (int)$params['id'];
+        $id = (int) $params['id'];
         queryWithRetry(getPDO(), "DELETE FROM dados_dachser.t_cct_regras_notificacao WHERE id = ?", [$id]);
         sendJson(['success' => true]);
     } catch (Exception $e) {
@@ -2514,18 +2965,24 @@ $router->delete('cct/regras-notificacao/:id', function($params) {
 });
 
 // GET /api/cct/leadcomex-logs/stats
-$router->get('cct/leadcomex-logs/stats', function($params) {
+$router->get('cct/leadcomex-logs/stats', function ($params) {
     try {
         $date_from = isset($_GET['date_from']) ? $_GET['date_from'] : null;
         $date_to = isset($_GET['date_to']) ? $_GET['date_to'] : null;
-        
+
         $dateThreshold = '2026-01-26';
         $where = "WHERE DATE(dep_date) >= '$dateThreshold'";
         $sqlParams = [];
-        
-        if ($date_from) { $where .= " AND DATE(created_at) >= ?"; $sqlParams[] = $date_from; }
-        if ($date_to)   { $where .= " AND DATE(created_at) <= ?"; $sqlParams[] = $date_to; }
-        
+
+        if ($date_from) {
+            $where .= " AND DATE(created_at) >= ?";
+            $sqlParams[] = $date_from;
+        }
+        if ($date_to) {
+            $where .= " AND DATE(created_at) <= ?";
+            $sqlParams[] = $date_to;
+        }
+
         $rows = queryWithRetry(getPDO(), "
             SELECT COUNT(*) AS total,
                     SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS success_count,
@@ -2536,22 +2993,22 @@ $router->get('cct/leadcomex-logs/stats', function($params) {
                     COUNT(DISTINCT DATE(created_at)) AS days_with_data
              FROM dados_dachser.t_leadcomex_enrichment_logs $where
         ", $sqlParams);
-        
+
         $row = isset($rows[0]) ? $rows[0] : [];
-        $total = isset($row['total']) ? (int)$row['total'] : 0;
-        $success = isset($row['success_count']) ? (int)$row['success_count'] : 0;
-        
+        $total = isset($row['total']) ? (int) $row['total'] : 0;
+        $success = isset($row['success_count']) ? (int) $row['success_count'] : 0;
+
         sendJson([
             'success' => true,
             'stats' => [
                 'total' => $total,
                 'success_count' => $success,
-                'error_count' => isset($row['error_count']) ? (int)$row['error_count'] : 0,
+                'error_count' => isset($row['error_count']) ? (int) $row['error_count'] : 0,
                 'success_rate' => $total > 0 ? number_format(($success / $total) * 100, 1) : '0.0',
-                'avg_time_ms' => (int)round(isset($row['avg_time_ms']) ? $row['avg_time_ms'] : 0),
+                'avg_time_ms' => (int) round(isset($row['avg_time_ms']) ? $row['avg_time_ms'] : 0),
                 'avg_offset_days' => number_format(isset($row['avg_offset_days']) ? $row['avg_offset_days'] : 0, 1),
                 'avg_attempts' => number_format(isset($row['avg_attempts']) ? $row['avg_attempts'] : 0, 1),
-                'days_with_data' => isset($row['days_with_data']) ? (int)$row['days_with_data'] : 0
+                'days_with_data' => isset($row['days_with_data']) ? (int) $row['days_with_data'] : 0
             ]
         ]);
     } catch (Exception $e) {
@@ -2560,20 +3017,24 @@ $router->get('cct/leadcomex-logs/stats', function($params) {
 });
 
 // GET /api/cct/leadcomex-logs/:id
-$router->get('cct/leadcomex-logs/:id', function($params) {
+$router->get('cct/leadcomex-logs/:id', function ($params) {
     try {
-        $id = (int)$params['id'];
+        $id = (int) $params['id'];
         $rows = queryWithRetry(getPDO(), "SELECT * FROM dados_dachser.t_leadcomex_enrichment_logs WHERE id = ?", [$id]);
         if (!$rows || count($rows) === 0) {
             sendJson(['success' => false, 'error' => 'Log não encontrado'], 404);
         }
         $row = $rows[0];
-        $parseSafe = function($col) {
-            try { return $col ? json_decode($col, true) : []; } catch(Exception $e) { return []; }
+        $parseSafe = function ($col) {
+            try {
+                return $col ? json_decode($col, true) : [];
+            } catch (Exception $e) {
+                return [];
+            }
         };
-        
+
         $log = array_merge($row, [
-            'success' => (int)$row['success'] === 1,
+            'success' => (int) $row['success'] === 1,
             'lc_bloqueios_ativos' => $parseSafe($row['lc_bloqueios_ativos_json']),
             'lc_bloqueios_baixados' => $parseSafe($row['lc_bloqueios_baixados_json']),
             'lc_divergencias' => $parseSafe($row['lc_divergencias_json']),
@@ -2585,7 +3046,7 @@ $router->get('cct/leadcomex-logs/:id', function($params) {
             'attempts' => $parseSafe($row['attempts_json']),
             'raw_response' => $row['raw_response_json'] ? json_decode($row['raw_response_json'], true) : null,
         ]);
-        
+
         sendJson(['success' => true, 'log' => $log]);
     } catch (Exception $e) {
         sendJson(['success' => false, 'error' => $e->getMessage()], 500);
@@ -2593,7 +3054,7 @@ $router->get('cct/leadcomex-logs/:id', function($params) {
 });
 
 // GET /api/cct/leadcomex-logs
-$router->get('cct/leadcomex-logs', function($params) {
+$router->get('cct/leadcomex-logs', function ($params) {
     try {
         $limit = isset($_GET['limit']) ? $_GET['limit'] : '100';
         $offset = isset($_GET['offset']) ? $_GET['offset'] : '0';
@@ -2609,7 +3070,9 @@ $router->get('cct/leadcomex-logs', function($params) {
 
         if ($hawb) {
             $where .= " AND (hawb LIKE ? OR mawb LIKE ? OR lc_hawb LIKE ?)";
-            $sqlParams[] = "%{$hawb}%"; $sqlParams[] = "%{$hawb}%"; $sqlParams[] = "%{$hawb}%";
+            $sqlParams[] = "%{$hawb}%";
+            $sqlParams[] = "%{$hawb}%";
+            $sqlParams[] = "%{$hawb}%";
         }
         if ($filterSuccess !== null && $filterSuccess !== '' && $filterSuccess !== 'all') {
             $where .= " AND success = ?";
@@ -2630,11 +3093,11 @@ $router->get('cct/leadcomex-logs', function($params) {
 
         $pdo = getPDO();
         $countRows = queryWithRetry($pdo, "SELECT COUNT(*) AS total FROM dados_dachser.t_leadcomex_enrichment_logs $where", $sqlParams);
-        $total = isset($countRows[0]['total']) ? (int)$countRows[0]['total'] : 0;
+        $total = isset($countRows[0]['total']) ? (int) $countRows[0]['total'] : 0;
 
-        $lim = min((int)$limit ?: 100, 500);
-        $off = (int)$offset ?: 0;
-        
+        $lim = min((int) $limit ?: 100, 500);
+        $off = (int) $offset ?: 0;
+
         $sql = "SELECT id, hawb, mawb, dep_date, success, matched_date, offset_days, total_attempts, total_time_ms,
                       execution_source, lc_hawb, lc_data_emissao, lc_situacao_lead, lc_situacao_portal, lc_tipo,
                       lc_situacao_carga, lc_categoria_carga, lc_aeroporto_origem, lc_aeroporto_destino,
@@ -2646,11 +3109,11 @@ $router->get('cct/leadcomex-logs', function($params) {
                ORDER BY created_at DESC LIMIT $lim OFFSET $off";
 
         $rows = queryWithRetry($pdo, $sql, $sqlParams);
-        
+
         $logs = [];
         foreach (($rows ?: []) as $row) {
             $logs[] = array_merge($row, [
-                'success' => (int)$row['success'] === 1,
+                'success' => (int) $row['success'] === 1,
                 'lc_bloqueios_ativos' => $row['lc_bloqueios_ativos_json'] ? json_decode($row['lc_bloqueios_ativos_json'], true) : [],
                 'lc_viagens_associadas' => $row['lc_viagens_associadas_json'] ? json_decode($row['lc_viagens_associadas_json'], true) : [],
                 'attempts' => $row['attempts_json'] ? json_decode($row['attempts_json'], true) : []
@@ -2665,9 +3128,11 @@ $router->get('cct/leadcomex-logs', function($params) {
 
 // ── PARSERS HELPER LOGIC ─────────────────────────────────────────────────────
 
-function parseAnthropicPdfJsonPHP($fileBase64, $prompt, $logName) {
+function parseAnthropicPdfJsonPHP($fileBase64, $prompt, $logName)
+{
     $apiKey = isset($_ENV['ANTHROPIC_API_KEY']) ? $_ENV['ANTHROPIC_API_KEY'] : null;
-    if (!$apiKey) throw new Exception('ANTHROPIC_API_KEY não configurada');
+    if (!$apiKey)
+        throw new Exception('ANTHROPIC_API_KEY não configurada');
 
     $res = fetch('https://api.anthropic.com/v1/messages', [
         'method' => 'POST',
@@ -2680,37 +3145,43 @@ function parseAnthropicPdfJsonPHP($fileBase64, $prompt, $logName) {
             'model' => isset($_ENV['PARSER_ANTHROPIC_MODEL']) ? $_ENV['PARSER_ANTHROPIC_MODEL'] : 'claude-sonnet-4-6',
             'max_tokens' => 16000,
             'temperature' => 0,
-            'messages' => [[
-                'role' => 'user',
-                'content' => [
-                    ['type' => 'text', 'text' => $prompt],
-                    ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => 'application/pdf', 'data' => $fileBase64]]
+            'messages' => [
+                [
+                    'role' => 'user',
+                    'content' => [
+                        ['type' => 'text', 'text' => $prompt],
+                        ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => 'application/pdf', 'data' => $fileBase64]]
+                    ]
                 ]
-            ]]
+            ]
         ])
     ]);
 
     if (!$res['ok']) {
-        if ($res['status'] === 429) throw new Exception('Limite de requisições excedido. Tente novamente em alguns minutos.');
+        if ($res['status'] === 429)
+            throw new Exception('Limite de requisições excedido. Tente novamente em alguns minutos.');
         throw new Exception("$logName Anthropic API error {$res['status']}: " . substr($res['body'], 0, 300));
     }
 
     $aiData = $res['json']();
     $content = isset($aiData['content'][0]['text']) ? $aiData['content'][0]['text'] : '';
-    if (!$content) throw new Exception('Resposta vazia da IA');
+    if (!$content)
+        throw new Exception('Resposta vazia da IA');
 
     $cleaned = preg_replace('/```(?:json)?\s*/i', '', $content);
     $cleaned = str_replace('```', '', $cleaned);
-    
+
     if (preg_match('/\{[\s\S]*\}/', $cleaned, $m)) {
         return json_decode($m[0], true);
     }
     return json_decode($cleaned, true);
 }
 
-function parseGeminiPdfJsonPHP($fileBase64, $mimeType, $systemPrompt, $userPrompt, $logName) {
+function parseGeminiPdfJsonPHP($fileBase64, $mimeType, $systemPrompt, $userPrompt, $logName)
+{
     $key = isset($_ENV['GEMINI_API_KEY']) ? $_ENV['GEMINI_API_KEY'] : null;
-    if (!$key) throw new Exception('GEMINI_API_KEY não configurada');
+    if (!$key)
+        throw new Exception('GEMINI_API_KEY não configurada');
 
     $res = fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", [
         'method' => 'POST',
@@ -2736,7 +3207,8 @@ function parseGeminiPdfJsonPHP($fileBase64, $mimeType, $systemPrompt, $userPromp
     ]);
 
     if (!$res['ok']) {
-        if ($res['status'] === 429) throw new Exception('Limite de requisições excedido.');
+        if ($res['status'] === 429)
+            throw new Exception('Limite de requisições excedido.');
         throw new Exception("$logName Gemini API error {$res['status']}: " . substr($res['body'], 0, 300));
     }
 
@@ -2744,7 +3216,7 @@ function parseGeminiPdfJsonPHP($fileBase64, $mimeType, $systemPrompt, $userPromp
     $content = isset($aiData['choices'][0]['message']['content']) ? $aiData['choices'][0]['message']['content'] : '';
     $cleaned = preg_replace('/```(?:json)?\s*/i', '', $content);
     $cleaned = str_replace('```', '', $cleaned);
-    
+
     if (preg_match('/\{[\s\S]*\}/', $cleaned, $m)) {
         return json_decode($m[0], true);
     }
@@ -2763,19 +3235,20 @@ $blCadastroPrompt = 'You are an expert at extracting data from Bill of Lading (B
 Extract ALL fields from this BL PDF and return a JSON object. If a field is not found, use null.';
 
 // POST /api/parsers/hawb-cadastro
-$router->post('parsers/hawb-cadastro', function($params) use ($hawbCadastroPrompt) {
+$router->post('parsers/hawb-cadastro', function ($params) use ($hawbCadastroPrompt) {
     $startTime = microtime(true);
     try {
         $body = getRequestBody();
         $fileBase64 = isset($body['fileBase64']) ? $body['fileBase64'] : null;
-        if (!$fileBase64) sendJson(['error' => 'fileBase64 é obrigatório'], 400);
-        
+        if (!$fileBase64)
+            sendJson(['error' => 'fileBase64 é obrigatório'], 400);
+
         // Claude call is async, but in PHP we run synchronously
         $data = parseAnthropicPdfJsonPHP($fileBase64, $hawbCadastroPrompt, 'parse-hawb-cadastro');
         sendJson([
             'success' => true,
             'data' => $data,
-            'processingTimeMs' => (int)round((microtime(true) - $startTime) * 1000)
+            'processingTimeMs' => (int) round((microtime(true) - $startTime) * 1000)
         ]);
     } catch (Exception $e) {
         sendJson(['error' => $e->getMessage()], 500);
@@ -2783,18 +3256,19 @@ $router->post('parsers/hawb-cadastro', function($params) use ($hawbCadastroPromp
 });
 
 // POST /api/parsers/bl-cadastro
-$router->post('parsers/bl-cadastro', function($params) use ($blCadastroPrompt) {
+$router->post('parsers/bl-cadastro', function ($params) use ($blCadastroPrompt) {
     $startTime = microtime(true);
     try {
         $body = getRequestBody();
         $fileBase64 = isset($body['fileBase64']) ? $body['fileBase64'] : null;
-        if (!$fileBase64) sendJson(['error' => 'fileBase64 é obrigatório'], 400);
-        
+        if (!$fileBase64)
+            sendJson(['error' => 'fileBase64 é obrigatório'], 400);
+
         $data = parseAnthropicPdfJsonPHP($fileBase64, $blCadastroPrompt, 'parse-bl-cadastro');
         sendJson([
             'success' => true,
             'data' => $data,
-            'processingTimeMs' => (int)round((microtime(true) - $startTime) * 1000)
+            'processingTimeMs' => (int) round((microtime(true) - $startTime) * 1000)
         ]);
     } catch (Exception $e) {
         sendJson(['error' => $e->getMessage()], 500);
@@ -2802,14 +3276,15 @@ $router->post('parsers/bl-cadastro', function($params) use ($blCadastroPrompt) {
 });
 
 // POST /api/parsers/manifest-swap
-$router->post('parsers/manifest-swap', function($params) {
+$router->post('parsers/manifest-swap', function ($params) {
     $startTime = microtime(true);
     try {
         $body = getRequestBody();
         $fileBase64 = isset($body['fileBase64']) ? $body['fileBase64'] : null;
         $mimeType = isset($body['mimeType']) ? $body['mimeType'] : 'application/pdf';
-        
-        if (!$fileBase64) sendJson(['error' => 'fileBase64 é obrigatório'], 400);
+
+        if (!$fileBase64)
+            sendJson(['error' => 'fileBase64 é obrigatório'], 400);
 
         $systemPrompt = "You are a specialist in parsing DACHSER air cargo manifest PDFs.
 Extract the MAWB and all HAWB entries. Return ONLY valid JSON with mawb and hawbs array.";
@@ -2821,11 +3296,11 @@ Extract the MAWB and all HAWB entries. Return ONLY valid JSON with mawb and hawb
             'Parse this DACHSER manifest PDF and extract the MAWB and all HAWBs with their details.',
             'parse-manifest-swap'
         );
-        
+
         sendJson([
             'success' => true,
             'data' => $data,
-            'processingTimeMs' => (int)round((microtime(true) - $startTime) * 1000)
+            'processingTimeMs' => (int) round((microtime(true) - $startTime) * 1000)
         ]);
     } catch (Exception $e) {
         sendJson(['error' => $e->getMessage()], 500);
@@ -2833,25 +3308,28 @@ Extract the MAWB and all HAWB entries. Return ONLY valid JSON with mawb and hawb
 });
 
 // POST /api/parsers/comprovante-pdf
-$router->post('parsers/comprovante-pdf', function($params) {
+$router->post('parsers/comprovante-pdf', function ($params) {
     try {
         $body = getRequestBody();
         $fileName = isset($body['fileName']) ? $body['fileName'] : '';
-        if (!$fileName) sendJson(['error' => 'fileName é obrigatório'], 400);
-        
+        if (!$fileName)
+            sendJson(['error' => 'fileName é obrigatório'], 400);
+
         // Simulação da lógica de parse de comprovante baseada no nome do arquivo
         $nameWithoutExt = preg_replace('/\.[^/.]+$/', '', $fileName);
-        
+
         preg_match_all('/(?<![0-9])(\d{5,13})(?![0-9])/', $nameWithoutExt, $matches);
         $collected = array_values(array_unique($matches[0] ?: []));
-        
+
         $spoScores = [];
         $ndScores = [];
-        
-        $addScore = function(&$scoreArray, $val, $score) {
-            if (!$val) return;
+
+        $addScore = function (&$scoreArray, $val, $score) {
+            if (!$val)
+                return;
             $v = trim($val);
-            if (!preg_match('/^\d+$/', $v) && !preg_match('/^\d{2,4}-\d{4,13}$/', $v)) return;
+            if (!preg_match('/^\d+$/', $v) && !preg_match('/^\d{2,4}-\d{4,13}$/', $v))
+                return;
             $scoreArray[$v] = max(isset($scoreArray[$v]) ? $scoreArray[$v] : 0, $score);
         };
 
@@ -2859,7 +3337,7 @@ $router->post('parsers/comprovante-pdf', function($params) {
             $addScore($spoScores, $c, 20);
             $addScore($ndScores, $c, 20);
         }
-        
+
         if (preg_match_all('/(\d{3})-(\d{6})[A-Z]\d{8}\.\d{1,3}/i', $fileName, $m, PREG_SET_ORDER)) {
             foreach ($m as $item) {
                 $addScore($spoScores, "{$item[1]}-{$item[2]}", 102);
@@ -2891,13 +3369,13 @@ $router->post('parsers/comprovante-pdf', function($params) {
 
         arsort($spoScores);
         arsort($ndScores);
-        
+
         $spoSortedKeys = array_keys($spoScores);
         $ndSortedKeys = array_keys($ndScores);
-        
+
         $maxSpoScore = count($spoScores) > 0 ? reset($spoScores) : 0;
         $maxNdScore = count($ndScores) > 0 ? reset($ndScores) : 0;
-        
+
         sendJson([
             'success' => true,
             'data' => [
@@ -2919,7 +3397,7 @@ $router->post('parsers/comprovante-pdf', function($params) {
 });
 
 // POST /api/parsers/boleto-barcode
-$router->post('parsers/boleto-barcode', function($params) {
+$router->post('parsers/boleto-barcode', function ($params) {
     try {
         $body = getRequestBody();
         $fileUrl = isset($body['fileUrl']) ? $body['fileUrl'] : null;
@@ -2934,16 +3412,17 @@ $router->post('parsers/boleto-barcode', function($params) {
             if (is_string($fileUrl) && preg_match('/\/api\/fin\/vouchers\/anexos\/([^\/]+)\/download/', $fileUrl, $internalMatch)) {
                 $anexoId = $internalMatch[1];
                 $rows = queryWithRetry(getFinPDO(), "SELECT file_content, mime_type FROM dados_dachser.t_voucher_anexos WHERE id = ? LIMIT 1", [$anexoId]);
-                
+
                 if (!$rows || count($rows) === 0 || !$rows[0]['file_content']) {
                     sendJson(['success' => false, 'error' => 'Anexo não encontrado no banco'], 404);
                 }
-                
+
                 $fileBase64 = base64_encode($rows[0]['file_content']);
                 $effectiveMediaType = $rows[0]['mime_type'] ?: $effectiveMediaType;
             } else {
                 $res = fetch($fileUrl);
-                if (!$res['ok']) sendJson(['success' => false, 'error' => 'Failed to fetch file from URL'], 400);
+                if (!$res['ok'])
+                    sendJson(['success' => false, 'error' => 'Failed to fetch file from URL'], 400);
                 $fileBase64 = base64_encode($res['body']);
                 // Tenta ler o header
                 $effectiveMediaType = 'application/pdf'; // fallback
@@ -2956,8 +3435,9 @@ $router->post('parsers/boleto-barcode', function($params) {
 
         // Extracao boleto com Anthropic
         $key = isset($_ENV['ANTHROPIC_FINANCEIRO_API_KEY']) ? $_ENV['ANTHROPIC_FINANCEIRO_API_KEY'] : (isset($_ENV['ANTHROPIC_API_KEY']) ? $_ENV['ANTHROPIC_API_KEY'] : null);
-        if (!$key) throw new Exception('ANTHROPIC_FINANCEIRO_API_KEY/ANTHROPIC_API_KEY não configurada');
-        
+        if (!$key)
+            throw new Exception('ANTHROPIC_FINANCEIRO_API_KEY/ANTHROPIC_API_KEY não configurada');
+
         $prompt = "Analise este documento e extraia a LINHA DIGITÁVEL do boleto ou arrecadação.
 Formatos possíveis:
 - Boleto bancário: 47 dígitos.
@@ -2979,13 +3459,15 @@ Se não encontrar nenhum código, responda apenas: NAO_ENCONTRADO";
                 'model' => isset($_ENV['FIN_ANTHROPIC_MODEL']) ? $_ENV['FIN_ANTHROPIC_MODEL'] : 'claude-sonnet-4-6',
                 'max_tokens' => 4000,
                 'temperature' => 0,
-                'messages' => [[
-                    'role' => 'user',
-                    'content' => [
-                        ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => $effectiveMediaType, 'data' => $fileBase64]],
-                        ['type' => 'text', 'text' => $prompt]
+                'messages' => [
+                    [
+                        'role' => 'user',
+                        'content' => [
+                            ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => $effectiveMediaType, 'data' => $fileBase64]],
+                            ['type' => 'text', 'text' => $prompt]
+                        ]
                     ]
-                ]]
+                ]
             ])
         ]);
 
@@ -2995,28 +3477,31 @@ Se não encontrar nenhum código, responda apenas: NAO_ENCONTRADO";
 
         $aiData = $res['json']();
         $text = isset($aiData['content'][0]['text']) ? $aiData['content'][0]['text'] : '';
-        
+
         if (stripos($text, 'NAO_ENCONTRADO') !== false) {
             sendJson(['success' => false, 'error' => 'Linha digitável não encontrada no documento']);
         }
 
         preg_match('/LIMPA:\s*(\d+)/i', $text, $limpaMatch);
         $limpa = isset($limpaMatch[1]) ? $limpaMatch[1] : preg_replace('/\D/', '', $text);
-        
-        if ($limpa[0] === '8' && strlen($limpa) > 48) $clean = substr($limpa, 0, 48);
-        elseif (strlen($limpa) > 47) $clean = substr($limpa, 0, 47);
-        else $clean = $limpa;
+
+        if (!empty($limpa) && $limpa[0] === '8' && strlen($limpa) > 48)
+            $clean = substr($limpa, 0, 48);
+        elseif (strlen($limpa) > 47)
+            $clean = substr($limpa, 0, 47);
+        else
+            $clean = $limpa;
 
         if (strlen($clean) !== 47 && strlen($clean) !== 48) {
             throw new Exception("Linha digitável com tamanho inválido (" . strlen($clean) . " dígitos)");
         }
 
-        $formatLinhaDigitavelFin = function($c) {
+        $formatLinhaDigitavelFin = function ($c) {
             if (strlen($c) === 47) {
-                return substr($c,0,5) . "." . substr($c,5,5) . " " . substr($c,10,5) . "." . substr($c,15,6) . " " . substr($c,21,5) . "." . substr($c,26,6) . " " . substr($c,32,1) . " " . substr($c,33);
+                return substr($c, 0, 5) . "." . substr($c, 5, 5) . " " . substr($c, 10, 5) . "." . substr($c, 15, 6) . " " . substr($c, 21, 5) . "." . substr($c, 26, 6) . " " . substr($c, 32, 1) . " " . substr($c, 33);
             }
             if (strlen($c) === 48) {
-                return substr($c,0,11) . "-" . substr($c,11,1) . " " . substr($c,12,11) . "-" . substr($c,23,1) . " " . substr($c,24,11) . "-" . substr($c,35,1) . " " . substr($c,36,11) . "-" . substr($c,47);
+                return substr($c, 0, 11) . "-" . substr($c, 11, 1) . " " . substr($c, 12, 11) . "-" . substr($c, 23, 1) . " " . substr($c, 24, 11) . "-" . substr($c, 35, 1) . " " . substr($c, 36, 11) . "-" . substr($c, 47);
             }
             return $c;
         };

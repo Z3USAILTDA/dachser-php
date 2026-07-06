@@ -112,6 +112,12 @@ $router->get('fin/users', function($params) {
     catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
 });
 
+// ── GET /api/fin/users/esteira ───────────────────────────────────────────────
+$router->get('fin/users/esteira', function($params) {
+    try { sendJson(['success' => true, 'users' => finQuery("SELECT id, username, email, is_admin, COALESCE(esteira_role, NULL) as esteira_role, COALESCE(esteira_active, 1) as esteira_active, supervisor_id FROM dados_dachser.t_users_dachser ORDER BY username ASC") ?: []]); }
+    catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
+});
+
 // ── GET /api/fin/vouchers/search-masters ─────────────────────────────────────
 $router->get('fin/vouchers/search-masters', function($params) {
     try {
@@ -482,6 +488,24 @@ $router->patch('fin/users/:id/active', function($params) {
     catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
 });
 
+// ── PATCH /api/fin/users/:id/esteira-role ────────────────────────────────────
+$router->patch('fin/users/:id/esteira-role', function($params) {
+    try { $b = getRequestBody(); finQuery("UPDATE dados_dachser.t_users_dachser SET esteira_role = ? WHERE id = ?", [$b['esteira_role'] ?? null, $params['id']]); sendJson(['success' => true]); }
+    catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
+});
+
+// ── PATCH /api/fin/users/:id/esteira-active ──────────────────────────────────
+$router->patch('fin/users/:id/esteira-active', function($params) {
+    try { $b = getRequestBody(); finQuery("UPDATE dados_dachser.t_users_dachser SET esteira_active = ? WHERE id = ?", [!empty($b['esteira_active']) ? 1 : 0, $params['id']]); sendJson(['success' => true]); }
+    catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
+});
+
+// ── PATCH /api/fin/users/:id/supervisor ──────────────────────────────────────
+$router->patch('fin/users/:id/supervisor', function($params) {
+    try { $b = getRequestBody(); finQuery("UPDATE dados_dachser.t_users_dachser SET supervisor_id = ? WHERE id = ?", [isset($b['supervisor_id']) && $b['supervisor_id'] !== '' ? (int)$b['supervisor_id'] : null, $params['id']]); sendJson(['success' => true]); }
+    catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
+});
+
 // ── GET /api/fin/accrual ──────────────────────────────────────────────────────
 $router->get('fin/accrual', function($params) {
     try {
@@ -605,6 +629,191 @@ $router->post('fin/vouchers/:id/anexos', function($params) {
         finQuery("INSERT INTO dados_dachser.t_voucher_anexos (id, voucher_id, tipo, file_name, file_url, file_size, created_at, is_master, filhos_spos) VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, ?)", [$anexoId, $voucherId, $b['tipo'], $b['file_name'], $b['file_url'], $b['file_size'] ?? 0, $isMaster, $filhosSposJson]);
         sendJson(['success' => true, 'anexoId' => $anexoId]);
     } catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
+});
+
+// ── GET /api/fin/local-charges ────────────────────────────────────────────────
+$router->get('fin/local-charges', function($params) {
+    $empty = function($source) {
+        return ['rows' => [], 'meta' => ['updated_at' => null, 'effective' => null], 'source' => $source];
+    };
+
+    $companies = [
+        ['key' => 'hapag', 'name' => 'HAPAG-LLOYD', 'table' => 't_local_charge'],
+        ['key' => 'cma',   'name' => 'CMA-CGM',    'table' => 't_local_charge_cma'],
+        ['key' => 'hmm',   'name' => 'HMM',        'table' => 't_local_charge_hmm'],
+        ['key' => 'msc',   'name' => 'MSC',        'table' => 't_local_charge_msc'],
+        ['key' => 'one',   'name' => 'ONE',        'table' => 't_local_charge_one'],
+        ['key' => 'zim',   'name' => 'ZIM',        'table' => 't_local_charge_zim'],
+    ];
+
+    try {
+        $map = [
+            'hapag' => $empty('HAPAG-LLOYD'),
+            'cma'   => $empty('CMA-CGM'),
+            'hmm'   => $empty('HMM'),
+            'msc'   => $empty('MSC'),
+            'one'   => $empty('ONE'),
+            'zim'   => $empty('ZIM'),
+        ];
+
+        foreach ($companies as $comp) {
+            $key = $comp['key'];
+            $name = $comp['name'];
+            $table = $comp['table'];
+
+            try {
+                $rows = finQuery("
+                    SELECT charge_description, charge_code, container_type, currency,
+                           fee, unit_of_measure, effective_date, expiry_date, effective,
+                           data_atualizacao, user_atualizacao
+                    FROM dados_dachser.$table
+                    ORDER BY charge_code
+                ");
+
+                if (!empty($rows)) {
+                    $mappedRows = [];
+                    foreach ($rows as $r) {
+                        $r['empresa'] = $name;
+                        $mappedRows[] = $r;
+                    }
+                    $map[$key]['rows'] = $mappedRows;
+                    $map[$key]['meta']['updated_at'] = $rows[0]['data_atualizacao'] ?? null;
+                    $map[$key]['meta']['effective']  = $rows[0]['effective'] ?? null;
+                }
+            } catch (Exception $companyErr) {
+                error_log("[GET /api/fin/local-charges] company query failed: " . $companyErr->getMessage());
+            }
+        }
+
+        sendJson(array_merge(['success' => true], $map));
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
+// ── GET /api/fin/fee-changes ──────────────────────────────────────────────────
+$router->get('fin/fee-changes', function($params) {
+    $historyCompanies = [
+        ['empresa' => 'HAPAG-LLOYD', 'table' => 't_local_charge_hapag_history'],
+        ['empresa' => 'CMA-CGM',    'table' => 't_local_charge_cma_history'],
+        ['empresa' => 'HMM',        'table' => 't_local_charge_hmm_history'],
+        ['empresa' => 'MSC',        'table' => 't_local_charge_msc_history'],
+        ['empresa' => 'ONE',        'table' => 't_local_charge_one_history'],
+        ['empresa' => 'ZIM',        'table' => 't_local_charge_zim_history'],
+    ];
+
+    try {
+        $allChanges = [];
+
+        foreach ($historyCompanies as $comp) {
+            $empresa = $comp['empresa'];
+            $table = $comp['table'];
+
+            try {
+                $rows = finQuery("
+                    WITH ranked AS (
+                      SELECT
+                        charge_description, charge_code, container_type, currency, unit_of_measure,
+                        fee, effective, chave, data_atualizacao_chave, data_atualizacao, user_atualizacao,
+                        ROW_NUMBER() OVER (
+                          PARTITION BY charge_code, container_type, currency
+                          ORDER BY data_atualizacao_chave DESC, data_atualizacao DESC
+                        ) AS rn
+                      FROM dados_dachser.$table
+                    )
+                    SELECT
+                      prev.fee                    AS fee_anterior,
+                      curr.fee                    AS fee_atual,
+                      (curr.fee - prev.fee)       AS diff_abs,
+                      CASE WHEN prev.fee IS NOT NULL AND prev.fee != 0
+                           THEN ROUND((curr.fee - prev.fee) / prev.fee * 100, 4)
+                           ELSE NULL
+                      END                         AS diff_pct,
+                      curr.charge_description,
+                      curr.charge_code,
+                      curr.container_type,
+                      curr.currency,
+                      curr.unit_of_measure,
+                      prev.effective              AS effective_anterior,
+                      curr.effective              AS effective_atual,
+                      prev.chave                  AS dt_chave_anterior,
+                      curr.chave                  AS dt_chave_atual,
+                      prev.data_atualizacao_chave AS dt_ordenacao_anterior,
+                      curr.data_atualizacao_chave AS dt_ordenacao_atual,
+                      prev.user_atualizacao       AS src_anterior,
+                      curr.src_atual              AS src_atual
+                    FROM ranked curr
+                    LEFT JOIN ranked prev
+                      ON  curr.charge_code    = prev.charge_code
+                      AND curr.container_type = prev.container_type
+                      AND curr.currency       = prev.currency
+                      AND prev.rn = 2
+                    WHERE curr.rn = 1
+                      AND prev.fee IS NOT NULL
+                      AND curr.fee != prev.fee
+                    ORDER BY curr.data_atualizacao_chave DESC, curr.charge_code
+                ");
+
+                if (!empty($rows)) {
+                    foreach ($rows as $row) {
+                        $allChanges[] = [
+                            'chave'              => $row['dt_chave_atual'] ?? null,
+                            'empresa'            => $empresa,
+                            'charge_description' => $row['charge_description'],
+                            'charge_code'        => $row['charge_code'],
+                            'container_type'     => $row['container_type'],
+                            'currency'           => $row['currency'],
+                            'unit_of_measure'    => $row['unit_of_measure'],
+                            'fee_anterior'       => $row['fee_anterior'],
+                            'fee_atual'          => $row['fee_atual'],
+                            'diff_abs'           => $row['diff_abs'],
+                            'diff_pct'           => $row['diff_pct'],
+                            'effective_anterior' => $row['effective_anterior'],
+                            'effective_atual'    => $row['effective_atual'],
+                            'dt_chave_anterior'  => $row['dt_chave_anterior'],
+                            'dt_chave_atual'     => $row['dt_chave_atual'],
+                            'dt_ordenacao_anterior' => $row['dt_ordenacao_anterior'],
+                            'dt_ordenacao_atual'    => $row['dt_ordenacao_atual'],
+                            'src_anterior'       => $row['src_anterior'],
+                            'src_atual'          => $row['src_atual']
+                        ];
+                    }
+                }
+            } catch (Exception $companyErr) {
+                error_log("[GET /api/fin/fee-changes] $table: " . $companyErr->getMessage());
+            }
+        }
+
+        usort($allChanges, function($a, $b) {
+            $ta = !empty($a['dt_ordenacao_atual']) ? strtotime($a['dt_ordenacao_atual']) : 0;
+            $tb = !empty($b['dt_ordenacao_atual']) ? strtotime($b['dt_ordenacao_atual']) : 0;
+            return $tb - $ta;
+        });
+
+        if (count($allChanges) > 0) {
+            $allChanges[0]['is_latest'] = true;
+        }
+
+        $seenEmpresa = [];
+        for ($i = 0; $i < count($allChanges); $i++) {
+            $emp = $allChanges[$i]['empresa'];
+            if (!in_array($emp, $seenEmpresa)) {
+                $seenEmpresa[] = $emp;
+                $allChanges[$i]['is_latest_empresa'] = true;
+            }
+        }
+
+        $latestMarked = [];
+        foreach ($allChanges as $c) {
+            if (!empty($c['is_latest']) || !empty($c['is_latest_empresa'])) {
+                $latestMarked[] = $c;
+            }
+        }
+
+        sendJson(['success' => true, 'changes' => $allChanges, 'latestMarked' => $latestMarked]);
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
 });
 
 // ── GET /api/fin/rm/fetch ─────────────────────────────────────────────────────
@@ -913,7 +1122,6 @@ $router->get('fin/metrics', function($params) {
         $offset = ($page - 1) * $perPage;
 
         $hiddenLogUsers = ['admin', 'herbert.zacatei', 'laricell', 'teste.test3'];
-        $placeholders = implode(', ', array_fill(0, count($hiddenLogUsers), '?'));
 
         $whereConditions = ["event_time BETWEEN ? AND ?"];
         $queryParams = ["$dateFrom 00:00:00", "$dateTo 23:59:59"];
@@ -924,6 +1132,11 @@ $router->get('fin/metrics', function($params) {
         }
 
         $whereConditions[] = "username IS NOT NULL AND username != '' AND username != 'unknown'";
+        // Exclude dashboard and admin routes
+        $whereConditions[] = "endpoint NOT LIKE '/dashboard%'";
+        $whereConditions[] = "endpoint NOT LIKE 'dashboard%'";
+        $whereConditions[] = "endpoint NOT LIKE '/admin%'";
+        $whereConditions[] = "endpoint NOT LIKE 'admin%'";
 
         if ($usernameFilter) {
             $whereConditions[] = "username LIKE ?";
@@ -932,11 +1145,15 @@ $router->get('fin/metrics', function($params) {
 
         if ($moduleFilter) {
             $mappedModule = strtolower($moduleFilter);
-            if ($mappedModule === 'maritimo') {
-                $mappedModule = 'sea';
+            if ($mappedModule === 'sea') {
+                // sea can be stored as /sea/ or /maritimo/
+                $whereConditions[] = "(LOWER(endpoint) LIKE ? OR LOWER(endpoint) LIKE ?)";
+                $queryParams[] = "%/sea/%";
+                $queryParams[] = "%/maritimo/%";
+            } else {
+                $whereConditions[] = "LOWER(endpoint) LIKE ?";
+                $queryParams[] = "%/" . $mappedModule . "/%";
             }
-            $whereConditions[] = "LOWER(endpoint) LIKE ?";
-            $queryParams[] = "%/" . $mappedModule . "/%";
         }
 
         $whereClause = "WHERE " . implode(' AND ', $whereConditions);
@@ -950,7 +1167,7 @@ $router->get('fin/metrics', function($params) {
         // 2. Get stats
         $statsSql = "SELECT
             COUNT(DISTINCT username) AS users,
-            COUNT(DISTINCT endpoint) AS endpoints,
+            COUNT(DISTINCT SUBSTRING_INDEX(endpoint, '#', 1)) AS endpoints,
             SUM(CASE WHEN method='GET' THEN 1 ELSE 0 END) AS get_calls,
             SUM(CASE WHEN method='POST' THEN 1 ELSE 0 END) AS post_calls
           FROM dados_dachser.t_usage_logs
@@ -980,17 +1197,17 @@ $router->get('fin/metrics', function($params) {
         }
 
         // 4. Get top endpoints
-        $endpointSql = "SELECT endpoint, COUNT(*) AS total
+        $endpointSql = "SELECT SUBSTRING_INDEX(endpoint, '#', 1) AS cleaned_endpoint, COUNT(*) AS total
           FROM dados_dachser.t_usage_logs
           $whereClause
-          GROUP BY endpoint
+          GROUP BY cleaned_endpoint
           ORDER BY total DESC
           LIMIT 5";
         $endpointResult = finQuery($endpointSql, $queryParams);
         $endpointData = [];
         foreach (($endpointResult ?: []) as $row) {
             $endpointData[] = [
-                'endpoint' => $row['endpoint'],
+                'endpoint' => $row['cleaned_endpoint'],
                 'total' => (int)$row['total']
             ];
         }
@@ -1033,7 +1250,6 @@ $router->get('fin/metrics/by-module', function($params) {
         $usernameFilter = $_GET['username'] ?? '';
 
         $hiddenLogUsers = ['admin', 'herbert.zacatei', 'laricell', 'teste.test3'];
-        $placeholders = implode(', ', array_fill(0, count($hiddenLogUsers), '?'));
 
         $whereConditions = ["DATE(event_time) BETWEEN ? AND ?"];
         $queryParams = [$dateFrom, $dateTo];
@@ -1044,6 +1260,11 @@ $router->get('fin/metrics/by-module', function($params) {
         }
 
         $whereConditions[] = "username IS NOT NULL AND username != '' AND username != 'unknown'";
+        // Exclude dashboard and admin routes from module aggregation (with or without leading slash)
+        $whereConditions[] = "endpoint NOT LIKE '/dashboard%'";
+        $whereConditions[] = "endpoint NOT LIKE 'dashboard%'";
+        $whereConditions[] = "endpoint NOT LIKE '/admin%'";
+        $whereConditions[] = "endpoint NOT LIKE 'admin%'";
 
         if ($usernameFilter) {
             $whereConditions[] = "username = ?";
@@ -1053,22 +1274,41 @@ $router->get('fin/metrics/by-module', function($params) {
         $whereClause = "WHERE " . implode(' AND ', $whereConditions);
 
         $sql = "SELECT
-            SUBSTRING_INDEX(SUBSTRING_INDEX(endpoint, '/', 2), '/', -1) AS module,
+            CASE 
+                WHEN endpoint LIKE 'event:%' THEN 
+                    CASE 
+                        WHEN endpoint LIKE 'event:admin.%' THEN 'admin'
+                        WHEN endpoint LIKE 'event:vouchers.%' OR endpoint LIKE 'event:regua.%' OR endpoint LIKE 'event:financeiro.%' OR endpoint LIKE 'event:disputas.%' THEN 'fin'
+                        WHEN endpoint LIKE 'event:chb.%' OR endpoint LIKE 'event:ocr.%' THEN 'chb'
+                        WHEN endpoint LIKE 'event:air.%' OR endpoint LIKE 'event:tracking.%' THEN 'air'
+                        WHEN endpoint LIKE 'event:sea.%' THEN 'sea'
+                        WHEN endpoint LIKE 'event:olimpo.%' THEN 'olimpo'
+                        WHEN endpoint LIKE 'event:cct.%' THEN 'cct'
+                        ELSE SUBSTRING_INDEX(SUBSTRING_INDEX(endpoint, ':', -1), '.', 1)
+                    END
+                ELSE 
+                    CASE 
+                        WHEN SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(endpoint, '#', 1), '/', 2), '/', -1) = 'maritimo' THEN 'sea'
+                        WHEN SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(endpoint, '#', 1), '/', 2), '/', -1) IN ('dashboard', 'admin', '') THEN NULL
+                        ELSE SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(endpoint, '#', 1), '/', 2), '/', -1)
+                    END
+            END AS module,
             COUNT(*)                AS totalAccesses,
             COUNT(DISTINCT username) AS uniqueUsers,
             SUBSTRING_INDEX(
-              GROUP_CONCAT(endpoint ORDER BY endpoint SEPARATOR '||'),
+              GROUP_CONCAT(SUBSTRING_INDEX(endpoint, '#', 1) ORDER BY endpoint SEPARATOR '||'),
               '||', 1
             ) AS topEndpoint
           FROM dados_dachser.t_usage_logs
           $whereClause
           GROUP BY module
+          HAVING module IS NOT NULL AND module NOT IN ('dashboard', 'admin', '')
           ORDER BY totalAccesses DESC";
 
         $rows = finQuery($sql, $queryParams);
 
         $labels = [
-            'air' => 'AIR Import',
+            'air' => 'AIR',
             'sea' => 'Marítimo',
             'fin' => 'Financeiro',
             'admin' => 'Admin',
@@ -1077,18 +1317,32 @@ $router->get('fin/metrics/by-module', function($params) {
             'cct' => 'CCT'
         ];
 
-        $modules = [];
+        $modulesMap = [
+            'air'    => ['module' => 'air',    'label' => 'AIR',       'totalAccesses' => 0, 'uniqueUsers' => 0, 'avgTimeOnScreenSec' => 0, 'topEndpoint' => null],
+            'sea'    => ['module' => 'sea',    'label' => 'Marítimo',  'totalAccesses' => 0, 'uniqueUsers' => 0, 'avgTimeOnScreenSec' => 0, 'topEndpoint' => null],
+            'fin'    => ['module' => 'fin',    'label' => 'Financeiro','totalAccesses' => 0, 'uniqueUsers' => 0, 'avgTimeOnScreenSec' => 0, 'topEndpoint' => null],
+            'chb'    => ['module' => 'chb',    'label' => 'CHB',       'totalAccesses' => 0, 'uniqueUsers' => 0, 'avgTimeOnScreenSec' => 0, 'topEndpoint' => null],
+            'olimpo' => ['module' => 'olimpo', 'label' => 'Olimpo',    'totalAccesses' => 0, 'uniqueUsers' => 0, 'avgTimeOnScreenSec' => 0, 'topEndpoint' => null],
+        ];
+
+        // Modules to completely ignore (never show)
+        $blockedModules = ['dashboard', 'admin', 'outros', '', null];
+
+        $otherModules = [];
+
         foreach (($rows ?: []) as $r) {
-            $modName = $r['module'] ?: 'outros';
-            $modules[] = [
-                'module' => $modName,
-                'label' => $labels[$modName] ?? strtoupper($modName),
-                'totalAccesses' => (int)$r['totalAccesses'],
-                'uniqueUsers' => (int)$r['uniqueUsers'],
-                'avgTimeOnScreenSec' => 0,
-                'topEndpoint' => $r['topEndpoint'] ?: null,
-            ];
+            $modName = strtolower($r['module'] ?? '');
+            // Skip blocked modules entirely
+            if (in_array($modName, $blockedModules, true)) continue;
+            if (isset($modulesMap[$modName])) {
+                $modulesMap[$modName]['totalAccesses'] = (int)$r['totalAccesses'];
+                $modulesMap[$modName]['uniqueUsers']   = (int)$r['uniqueUsers'];
+                $modulesMap[$modName]['topEndpoint']   = $r['topEndpoint'] ?: null;
+            }
+            // Ignore any other unknown modules — only the 5 core ones matter
         }
+
+        $modules = array_values($modulesMap);
 
         sendJson([
             'success' => true,
@@ -1113,7 +1367,6 @@ $router->get('fin/metrics/sessions', function($params) {
         $offset = ($page - 1) * $perPage;
 
         $hiddenLogUsers = ['admin', 'herbert.zacatei', 'laricell', 'teste.test3'];
-        $placeholders = implode(', ', array_fill(0, count($hiddenLogUsers), '?'));
 
         $whereConditions = ["event_time BETWEEN ? AND ?"];
         $queryParams = ["$dateFrom 00:00:00", "$dateTo 23:59:59"];
@@ -1124,6 +1377,11 @@ $router->get('fin/metrics/sessions', function($params) {
         }
 
         $whereConditions[] = "username IS NOT NULL AND username != '' AND username != 'unknown'";
+        // Exclude dashboard and admin routes
+        $whereConditions[] = "endpoint NOT LIKE '/dashboard%'";
+        $whereConditions[] = "endpoint NOT LIKE 'dashboard%'";
+        $whereConditions[] = "endpoint NOT LIKE '/admin%'";
+        $whereConditions[] = "endpoint NOT LIKE 'admin%'";
 
         if ($usernameFilter) {
             $whereConditions[] = "username LIKE ?";
@@ -1164,6 +1422,10 @@ $router->get('fin/metrics/sessions', function($params) {
             $eventsSql = "SELECT session_id AS sessionId, endpoint, method, event_time
                 FROM dados_dachser.t_usage_logs
                 WHERE session_id IN ($sessionPlaceholders)
+                AND endpoint NOT LIKE '/dashboard%'
+                AND endpoint NOT LIKE 'dashboard%'
+                AND endpoint NOT LIKE '/admin%'
+                AND endpoint NOT LIKE 'admin%'
                 ORDER BY event_time ASC";
 
             $eventsRows = finQuery($eventsSql, $sessionIds) ?: [];
@@ -1203,4 +1465,415 @@ $router->get('fin/metrics/sessions', function($params) {
         sendJson(['success' => false, 'error' => $e->getMessage()], 500);
     }
 });
+
+// ── GET /api/fin/regua/counts ────────────────────────────────────────────────
+$router->get('fin/regua/counts', function($params) {
+    try {
+        $MAX_DIAS_ATRASO = 120;
+        $sql = "
+          SELECT stage, COUNT(*) AS qt, COALESCE(SUM(valor_nf), 0) AS total_valor
+          FROM (
+            SELECT
+              CASE
+                WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) <= 0 THEN 'PRE'
+                WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) = 2 THEN 'D1'
+                WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 8 AND 14 THEN 'D7'
+                WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 16 AND 29 THEN 'D15'
+                WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 31 AND 44 THEN 'D30'
+                WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 46 AND 59 AND t.tipo_documento <> 'FAT_NF' THEN 'D45'
+                WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) >= 61 AND t.tipo_documento <> 'FAT_NF' THEN 'D60'
+                ELSE NULL
+              END AS stage, t.valor_nf
+            FROM dados_dachser.v_fin_regua_contas_receber t
+            WHERE NOT EXISTS (SELECT 1 FROM dados_dachser.t_fin_soft_delete sd WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci AND sd.active = 0)
+              AND (DATEDIFF(CURDATE(), t.data_prev_baixa) < 0 OR DATEDIFF(CURDATE(), t.data_prev_baixa) <= ? OR DATEDIFF(CURDATE(), t.data_prev_baixa) >= 46)
+          ) x
+          WHERE stage IS NOT NULL
+          GROUP BY stage
+        ";
+        $rows = finQuery($sql, [$MAX_DIAS_ATRASO]);
+        $counts = ['PRE' => 0, 'D1' => 0, 'D7' => 0, 'D15' => 0, 'D30' => 0, 'D45' => 0, 'D60' => 0];
+        $amounts = ['PRE' => 0, 'D1' => 0, 'D7' => 0, 'D15' => 0, 'D30' => 0, 'D45' => 0, 'D60' => 0];
+        if (!empty($rows)) {
+            foreach ($rows as $row) {
+                $st = $row['stage'];
+                if ($st && isset($counts[$st])) {
+                    $counts[$st] = (int)$row['qt'];
+                    $amounts[$st] = (float)$row['total_valor'];
+                }
+            }
+        }
+        sendJson(['success' => true, 'counts' => $counts, 'amounts' => $amounts]);
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
+// ── GET /api/fin/regua/stats ─────────────────────────────────────────────────
+$router->get('fin/regua/stats', function($params) {
+    try {
+        $rows = finQuery("SELECT COUNT(*) AS total_records, SUM(valor_nf) AS total_open_amount, MAX(datavalidade) AS last_update FROM dados_dachser.v_fin_regua_contas_receber");
+        $r = !empty($rows) ? $rows[0] : [];
+        sendJson([
+            'success' => true,
+            'stats' => [
+                'lastUpdate' => $r['last_update'] ?? null,
+                'totalRecords' => (int)($r['total_records'] ?? 0),
+                'totalOpenAmount' => (float)($r['total_open_amount'] ?? 0)
+            ]
+        ]);
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
+// ── GET /api/fin/regua/aging-defaults ────────────────────────────────────────
+$router->get('fin/regua/aging-defaults', function($params) {
+    sendJson([
+        'success' => true,
+        'recipients' => $_ENV['REGUA_EMAIL_RECIPIENTS'] ?? 'devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com',
+        'contato_email' => $_ENV['REGUA_CONTATO_EMAIL'] ?? 'jessica.costa@dachser.com',
+        'contato_telefone' => $_ENV['REGUA_CONTATO_TELEFONE'] ?? '+55 (19) 3312-6185'
+    ]);
+});
+
+// ── GET /api/fin/regua/stage ─────────────────────────────────────────────────
+$router->get('fin/regua/stage', function($params) {
+    try {
+        $stage = $_GET['stage'] ?? null;
+        if (!$stage) sendJson(['success' => false, 'error' => 'stage é obrigatório'], 400);
+        $MAX_DIAS_ATRASO = 120;
+        $s = preg_replace('/[^A-Z0-9+]/i', '', $stage);
+        $sql = "
+          SELECT
+            SUBSTRING_INDEX(t.razao_social, ' - ', 1) AS razao_base,
+            t.razao_social, t.documento,
+            COALESCE(NULLIF(t.numero_nf,''), t.documento) AS nf_exibicao,
+            DATE_FORMAT(t.data_prev_baixa, '%d/%m/%Y') AS data_venc_br,
+            DATEDIFF(CURDATE(), t.data_prev_baixa) AS dias,
+            CASE WHEN t.tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo_pagto,
+            t.valor_nf, t.cnpj, t.doc_key, t.id_rm, t.idlan, t.nd, t.modal,
+            t.tipo_documento, t.data_emissao, t.data_prev_baixa AS data_vencimento,
+            t.processo, t.master, t.house
+          FROM dados_dachser.v_fin_regua_contas_receber t
+          WHERE NOT EXISTS (SELECT 1 FROM dados_dachser.t_fin_soft_delete sd WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci AND sd.active = 0)
+            AND (
+              (? IN ('PRE','D1','D7','D15','D30','D45') AND (? = 'PRE' OR DATEDIFF(CURDATE(), t.data_prev_baixa) <= ?)) OR ? = 'D60'
+            )
+            AND (
+              CASE ?
+                WHEN 'PRE' THEN DATEDIFF(CURDATE(), t.data_prev_baixa) <= 0
+                WHEN 'D1'  THEN DATEDIFF(CURDATE(), t.data_prev_baixa) = 2
+                WHEN 'D7'  THEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 8 AND 14
+                WHEN 'D15' THEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 16 AND 29
+                WHEN 'D30' THEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 31 AND 44
+                WHEN 'D45' THEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 46 AND 59 AND t.tipo_documento <> 'FAT_NF'
+                WHEN 'D60' THEN DATEDIFF(CURDATE(), t.data_prev_baixa) >= 61 AND t.tipo_documento <> 'FAT_NF'
+                ELSE FALSE
+              END
+            )
+          ORDER BY t.data_prev_baixa ASC, t.razao_social ASC
+        ";
+        $rows = finQuery($sql, [$s, $s, $MAX_DIAS_ATRASO, $s, $s]);
+        $formattedRows = [];
+        if (!empty($rows)) {
+            foreach ($rows as $r) {
+                $r['valor_br'] = $r['valor_nf'] !== null ? 'R$ ' . number_format((float)$r['valor_nf'], 2, ',', '.') : '-';
+                $formattedRows[] = $r;
+            }
+        }
+        sendJson(['success' => true, 'rows' => $formattedRows]);
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
+// ── GET /api/fin/regua/clientes-resumo ───────────────────────────────────────
+$router->get('fin/regua/clientes-resumo', function($params) {
+    try {
+        $cliente = $_GET['cliente'] ?? null;
+        if (!$cliente) sendJson(['success' => false, 'error' => 'cliente é obrigatório'], 400);
+        $searchTerm = "%" . $cliente . "%";
+        $rows = finQuery("
+          SELECT SUBSTRING_INDEX(t.razao_social, ' - ', 1) AS razao_base, t.razao_social, t.cnpj, COUNT(*) AS qtd_faturas
+          FROM dados_dachser.v_fin_regua_contas_receber t
+          WHERE NOT EXISTS (SELECT 1 FROM dados_dachser.t_fin_soft_delete sd WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci AND sd.active = 0)
+            AND (t.razao_social LIKE ? OR t.cnpj LIKE ?)
+          GROUP BY t.cnpj, t.razao_social
+          ORDER BY razao_base ASC LIMIT 50
+        ", [$searchTerm, $searchTerm]);
+        sendJson(['success' => true, 'rows' => $rows ?: []]);
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
+// ── POST /api/fin/regua/send-aging ───────────────────────────────────────────
+$router->post('fin/regua/send-aging', function($params) {
+    try {
+        $b = getRequestBody();
+        $cnpj = $b['cnpj'] ?? null;
+        $cnpjs = $b['cnpjs'] ?? [];
+        $razao_base = $b['razao_base'] ?? null;
+        $razao_bases = $b['razao_bases'] ?? [];
+        $cliente = $b['cliente'] ?? null;
+        $email_to = $b['email_to'] ?? null;
+        $custom_text = $b['custom_text'] ?? null;
+
+        if (!$cnpj && empty($cnpjs) && !$razao_base && empty($razao_bases)) {
+            sendJson(['success' => false, 'error' => 'cnpj, cnpjs, razao_base ou razao_bases é obrigatório'], 400);
+        }
+
+        $parseEmails = function($input) {
+            $fallbackStr = $_ENV['REGUA_EMAIL_RECIPIENTS'] ?? 'devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com';
+            $fallback = array_filter(array_map('trim', preg_split('/[;,\n]/', strtolower($fallbackStr))), function($e) {
+                return filter_var($e, FILTER_VALIDATE_EMAIL);
+            });
+            if (empty($input) || !trim($input)) return array_values($fallback);
+            $emails = array_filter(array_map('trim', preg_split('/[;,\n]/', strtolower($input))), function($e) {
+                return filter_var($e, FILTER_VALIDATE_EMAIL);
+            });
+            return !empty($emails) ? array_values($emails) : array_values($fallback);
+        };
+
+        $formatCnpj = function($c) {
+            $d = preg_replace('/\D/', '', strval($c));
+            return strlen($d) === 14 ? substr($d, 0, 2) . '.' . substr($d, 2, 3) . '.' . substr($d, 5, 3) . '/' . substr($d, 8, 4) . '-' . substr($d, 12, 2) : $c;
+        };
+
+        $formatCnpjShort = function($c) {
+            $d = preg_replace('/\D/', '', strval($c));
+            return strlen($d) === 14 ? substr($d, 0, 2) . '.' . substr($d, 2, 3) . '.' . substr($d, 5, 3) . ' ' . substr($d, 8, 4) . '-' . substr($d, 12, 2) : $c;
+        };
+
+        $allRazaoBases = (!empty($razao_bases) && is_array($razao_bases)) ? $razao_bases : ($razao_base ? [$razao_base] : []);
+        $inputCnpjsRaw = (!empty($cnpjs) && is_array($cnpjs)) ? $cnpjs : ($cnpj ? [$cnpj] : []);
+        $recipientList = $parseEmails($email_to);
+
+        $allCnpjs = [];
+        if (!empty($allRazaoBases)) {
+            $ph = implode(',', array_fill(0, count($allRazaoBases), '?'));
+            $cnpjRows = finQuery("SELECT DISTINCT REPLACE(REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-',''),' ','') AS cnpj FROM dados_dachser.v_fin_regua_contas_receber WHERE SUBSTRING_INDEX(razao_social, ' - ', 1) IN ($ph)", $allRazaoBases);
+            if (!empty($cnpjRows)) {
+                foreach ($cnpjRows as $r) {
+                    if (!empty($r['cnpj'])) $allCnpjs[] = strval($r['cnpj']);
+                }
+            }
+        } else {
+            foreach ($inputCnpjsRaw as $c) {
+                $d = preg_replace('/\D/', '', strval($c));
+                if ($d) $allCnpjs[] = $d;
+            }
+            $allCnpjs = array_values(array_unique($allCnpjs));
+        }
+
+        if (empty($allCnpjs)) {
+            sendJson(['success' => false, 'error' => 'Nenhum CNPJ encontrado para gerar o Aging List.']);
+        }
+
+        $ph = implode(',', array_fill(0, count($allCnpjs), '?'));
+        $invoices = finQuery("
+          SELECT t.documento, COALESCE(t.nd,'') AS nd, COALESCE(t.ref_cliente,'') AS referencia_cliente,
+            COALESCE(NULLIF(t.numero_nf,''),'') AS numero_nf, COALESCE(t.modal,'') AS modal, t.tipo_documento,
+            DATE_FORMAT(t.data_emissao,'%d/%m/%Y') AS data_emissao, DATE_FORMAT(t.data_vencimento,'%d/%m/%Y') AS data_vencimento,
+            t.valor_nf, t.razao_social, t.cnpj,
+            COALESCE(t.processo,'') AS numero_processo, COALESCE(t.house,'') AS house, COALESCE(t.master,'') AS master,
+            'Em atraso' AS status_fatura, 'Financeiro' AS responsavel
+          FROM dados_dachser.v_fin_regua_contas_receber t
+          WHERE REPLACE(REPLACE(REPLACE(REPLACE(t.cnpj,'.',''),'/',''),'-',''),' ','') IN ($ph)
+            AND DATEDIFF(CURDATE(), t.data_vencimento) >= 1
+            AND NOT EXISTS (SELECT 1 FROM dados_dachser.t_fin_soft_delete sd WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci AND sd.active = 0)
+          ORDER BY t.cnpj, t.data_vencimento ASC
+        ", $allCnpjs);
+
+        if (empty($invoices)) {
+            sendJson(['success' => false, 'error' => 'Nenhum título vencido encontrado para este cliente.']);
+        }
+
+        $invoicesByCnpj = [];
+        foreach ($invoices as $inv) {
+            $invoicesByCnpj[$inv['cnpj']][] = $inv;
+        }
+
+        $clienteName = $cliente ?: ($invoices[0]['razao_social'] ?? 'Cliente');
+        $currentDate = date('d/m/Y');
+
+        $sheets = [];
+        foreach ($invoicesByCnpj as $cnpjKey => $cnpjInvoices) {
+            $sheetName = substr($formatCnpjShort($cnpjKey), 0, 31);
+            $rows = [];
+            // Header 1
+            $rows[] = ['DACHSER', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Valor total em atraso', ''];
+            // Header 2
+            $totalValue = array_reduce($cnpjInvoices, function($s, $i) { return $s + (float)($i['valor_nf'] ?? 0); }, 0.0);
+            $rows[] = ['', '', '', $clienteName . ' - Demonstrativo de Faturamento', '', '', '', '', '', '', '', '', '', '', 'R$ ' . number_format($totalValue, 2, ',', '.'), ''];
+            // Header 3
+            $rows[] = ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', $currentDate];
+            // Header 4
+            $rows[] = ['Período de Faturamento:', '01/01/2022 a 31/12/2027', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+            // Header 5 (Headers)
+            $rows[] = ["DOCUMENTO","ND","REF. CLIENTE","NOTA FISC","MODAL","TIPO DOC","EMISSÃO","VENCTO","C.N.P.J","CLIENTE","VALOR","PROCESSO","MASTER","HOUSE","STATUS","RESPONSÁVEL"];
+
+            // Data rows
+            foreach ($cnpjInvoices as $inv) {
+                $rows[] = [
+                    $inv['documento'] ?? '',
+                    $inv['nd'] ?? '',
+                    $inv['referencia_cliente'] ?? '',
+                    $inv['numero_nf'] ?? '',
+                    $inv['modal'] ?? '',
+                    $inv['tipo_documento'] ?? '',
+                    $inv['data_emissao'] ?? '',
+                    $inv['data_vencimento'] ?? '',
+                    $formatCnpj($inv['cnpj'] ?? ''),
+                    $inv['razao_social'] ?? '',
+                    (float)($inv['valor_nf'] ?? 0),
+                    $inv['numero_processo'] ?? '',
+                    $inv['master'] ?? '',
+                    $inv['house'] ?? '',
+                    $inv['status_fatura'] ?? 'Em atraso',
+                    $inv['responsavel'] ?? 'Financeiro'
+                ];
+            }
+
+            $sheets[$sheetName] = ['rows' => $rows];
+        }
+
+        $excelData = generateSimpleXlsx($sheets);
+        $excelBuffer = base64_encode($excelData);
+        $dateForFile = str_replace('/', '.', date('d/m/Y'));
+
+        if ($custom_text && trim($custom_text)) {
+            $htmlContent = nl2br(htmlspecialchars($custom_text));
+            $htmlContent = preg_replace('/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/', '<a href="mailto:$1">$1</a>', $htmlContent);
+            $emailBodyHtml = "<p>$htmlContent</p>";
+        } else {
+            $cnpjsLines = [];
+            foreach ($allCnpjs as $c) {
+                $cnpjsLines[] = '<strong>' . htmlspecialchars($formatCnpj($c)) . '</strong>';
+            }
+            $cnpjsList = implode('<br/>', $cnpjsLines);
+            $emailBodyHtml = "<p>Boa tarde!<br/>Tudo bem?</p><p>Segue anexo, aging list para os CNPJ's:</p><p>$cnpjsList</p><p>Por gentileza, poderia verificar e nos retornar com a programação de pagamento para essa semana?</p><p>Agradecemos a sua atenção e colaboração.</p><p>Atenciosamente,<br/><strong>Financeiro Dachser</strong></p>";
+        }
+        $emailHtml = "<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#333;\">$emailBodyHtml</div>";
+
+        $attachments = [
+            [
+                'filename' => "Aging_" . $clienteName . "_" . $dateForFile . ".xlsx",
+                'content' => $excelBuffer
+            ]
+        ];
+
+        $res = sendEmailResend($recipientList, "Aging List - " . $clienteName, $emailHtml, '', $attachments);
+
+        if ($res) {
+            sendJson(['success' => true, 'message' => "Aging List enviada para " . count($recipientList) . " destinatário(s)", 'sent_to' => $recipientList]);
+        } else {
+            sendJson(['success' => false, 'error' => 'Falha ao enviar e-mail pelo Resend.'], 500);
+        }
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
+// ── POST /api/fin/regua/send-emails ──────────────────────────────────────────
+$router->post('fin/regua/send-emails', function($params) {
+    try {
+        sendJson(['success' => true, 'sent' => 0, 'skipped' => 0, 'errors' => [], 'message' => 'Bulk send endpoint — implementação completa pendente']);
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
+// ── EXCEL HELPERS ────────────────────────────────────────────────────────────
+function generateSimpleXlsx($sheets) {
+    $tempFile = tempnam(sys_get_temp_dir(), 'xlsx');
+    $zip = new ZipArchive();
+    if ($zip->open($tempFile, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        throw new Exception("Não foi possível criar arquivo zip temporário");
+    }
+
+    $relsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>';
+    $zip->addFromString('_rels/.rels', $relsXml);
+
+    $sheetsContentTypes = '';
+    $sheetsRels = '';
+    $sheetsWorkbook = '';
+
+    $sheetIndex = 1;
+    foreach ($sheets as $sName => $sData) {
+        $sheetsContentTypes .= '<Override PartName="/xl/worksheets/sheet' . $sheetIndex . '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+        $sheetsRels .= '<Relationship Id="rId' . $sheetIndex . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' . $sheetIndex . '.xml"/>';
+        $sheetsWorkbook .= '<sheet name="' . htmlspecialchars($sName, ENT_QUOTES, 'UTF-8') . '" sheetId="' . $sheetIndex . '" r:id="rId' . $sheetIndex . '"/>';
+
+        $sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>';
+
+        $rowNumber = 1;
+        foreach ($sData['rows'] as $row) {
+            $sheetXml .= '<row r="' . $rowNumber . '">';
+            $colIndex = 0;
+            foreach ($row as $cellVal) {
+                $ref = getCellRef($colIndex, $rowNumber);
+                if ($cellVal === null || $cellVal === '') {
+                    // Empty cell
+                } else if (is_numeric($cellVal) && !is_string($cellVal)) {
+                    $sheetXml .= '<c r="' . $ref . '"><v>' . $cellVal . '</v></c>';
+                } else {
+                    $sheetXml .= '<c r="' . $ref . '" t="inlineStr"><is><t>' . htmlspecialchars(strval($cellVal), ENT_QUOTES, 'UTF-8') . '</t></is></c>';
+                }
+                $colIndex++;
+            }
+            $sheetXml .= '</row>';
+            $rowNumber++;
+        }
+
+        $sheetXml .= '  </sheetData>
+</worksheet>';
+        $zip->addFromString('xl/worksheets/sheet' . $sheetIndex . '.xml', $sheetXml);
+        $sheetIndex++;
+    }
+
+    $contentTypesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  ' . $sheetsContentTypes . '
+</Types>';
+    $zip->addFromString('[Content_Types].xml', $contentTypesXml);
+
+    $workbookRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  ' . $sheetsRels . '
+</Relationships>';
+    $zip->addFromString('xl/_rels/workbook.xml.rels', $workbookRelsXml);
+
+    $workbookXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    ' . $sheetsWorkbook . '
+  </sheets>
+</workbook>';
+    $zip->addFromString('xl/workbook.xml', $workbookXml);
+
+    $zip->close();
+    $data = file_get_contents($tempFile);
+    unlink($tempFile);
+    return $data;
+}
+
+function getCellRef($colIndex, $rowIndex) {
+    $letters = '';
+    $temp = $colIndex;
+    while ($temp >= 0) {
+        $letters = chr(($temp % 26) + 65) . $letters;
+        $temp = intval($temp / 26) - 1;
+    }
+    return $letters . $rowIndex;
+}
 

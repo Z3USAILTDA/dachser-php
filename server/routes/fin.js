@@ -1,4 +1,4 @@
-﻿/**
+/**
  * server/routes/fin.js
  * Rotas FIN: /api/fin/*, /api/notifications/voucher, /api/freetime/*, /api/fin/disputas/*
  * Pool: MARIADB_FIN_* — databases: dados_dachser, ai_agente
@@ -4613,14 +4613,22 @@ app.get('/api/fin/metrics/by-module', async (req, res) => {
       FROM dados_dachser.t_usage_logs
       WHERE DATE(event_time) BETWEEN ? AND ?
         AND username NOT IN (${HIDDEN.map(() => '?').join(', ')})
+        AND endpoint NOT LIKE '/dashboard%'
+        AND endpoint NOT LIKE 'dashboard%'
+        AND endpoint NOT LIKE '/admin%'
+        AND endpoint NOT LIKE 'admin%'
         AND username IS NOT NULL AND username != ''
         ${userFilter}
       GROUP BY module
       ORDER BY totalAccesses DESC
     `, params);
-    const LABELS = { air: 'AIR Import', sea: 'Marítimo', fin: 'Financeiro', admin: 'Admin', olimpo: 'Olimpo', chb: 'CHB', cct: 'CCT' };
-    const modules = (rows || []).map(r => ({
-      module: r.module || 'outros',
+    const LABELS = { air: 'AIR', sea: 'Marítimo', fin: 'Financeiro', admin: 'Admin', olimpo: 'Olimpo', chb: 'CHB', cct: 'CCT' };
+    const BLOCKED_MODULES = ['dashboard', 'admin', 'outros', '', null];
+    
+    const modules = (rows || [])
+      .filter(r => !BLOCKED_MODULES.includes(r.module))
+      .map(r => ({
+      module: r.module,
       label: LABELS[r.module] || (r.module || 'Outros').toUpperCase(),
       totalAccesses: Number(r.totalAccesses) || 0,
       uniqueUsers: Number(r.uniqueUsers) || 0,

@@ -2,7 +2,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogOut, Plane, Ship, CreditCard, FileText, Building2, UserCog } from "lucide-react";
-import { useUsageLog } from "@/hooks/useUsageLog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import logoZ3us from "@/assets/logo-z3us.png";
 import dachserBg from "@/assets/dachser-background.jpg";
@@ -176,7 +175,6 @@ const menuItems: MenuItem[] = [
   },
 ];
 const Dashboard = () => {
-  useUsageLog({ endpoint: "/dashboard" });
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [expandedChild, setExpandedChild] = useState<string | null>(null);
