@@ -257,12 +257,7 @@ const MetricsUsage = () => {
       const data = await apiGet(`/api/fin/metrics?${params}`);
 
       if (data) {
-        const BLOCKED_PREFIXES = ['/dashboard', 'dashboard', '/admin', 'admin'];
-        const filteredLogs = (data.logs || []).filter((log: { endpoint: string }) => {
-          const ep = (log.endpoint || '').toLowerCase().replace(/#.*$/, '');
-          return !BLOCKED_PREFIXES.some(prefix => ep === prefix || ep.startsWith(prefix + '/'));
-        });
-        setLogs(filteredLogs);
+        setLogs(data.logs || []);
         setStats(data.stats || {
           total: 0,
           distinctUsers: 0,
@@ -546,18 +541,19 @@ const MetricsUsage = () => {
             </div>
             <div>
               <label className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground block mb-1">Módulo</label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {['air', 'sea', 'fin', 'chb', 'olimpo'].map((mod) => (
-                  <button
-                    key={mod}
-                    onClick={() => { setModuleFilter(moduleFilter === mod ? '' : mod); setCurrentPage(1); }}
-                    className={`rounded-xl p-3 border transition-all hover:bg-white/5 ${moduleFilter === mod ? 'border-primary/60 bg-primary/5' : 'border-white/10 bg-[#0a0b10]'}`}
-                  >
-                    <div className="text-[11px] uppercase tracking-[0.16em] font-semibold text-primary">{mod.toUpperCase()}</div>
-                    <div className="text-xs text-muted-foreground mt-1">{moduleStats.find(m => m.module === mod)?.totalAccesses ?? 0} acessos</div>
-                  </button>
-                ))}
-              </div>
+              <select
+                value={moduleFilter}
+                onChange={(e) => { setModuleFilter(e.target.value); setCurrentPage(1); }}
+                className="w-full px-3 py-2 rounded-full border border-white/20 bg-[#13141a] text-foreground text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              >
+                <option value="">(todos)</option>
+                <option value="air">AIR</option>
+                <option value="chb">CHB</option>
+                <option value="maritimo">SEA</option>
+                <option value="fin">FIN</option>
+                <option value="olimpo">OLIMPO</option>
+                <option value="admin">ADMIN</option>
+              </select>
             </div>
             <div>
               <label className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground block mb-1">Registros por página</label>
@@ -596,18 +592,89 @@ const MetricsUsage = () => {
         </PageCard>
       </div>
 
-      {/* Sessu00f5es */}
+      {/* Uso por Módulo */}
       <PageCard>
         <div className="flex justify-between items-end gap-3 mb-3">
           <div>
-            <div className="text-sm uppercase tracking-[0.18em] font-semibold">Sessu00f5es</div>
+            <div className="text-sm uppercase tracking-[0.18em] font-semibold">Uso por Módulo</div>
             <p className="text-xs text-muted-foreground">
-              Cada linha u00e9 uma sessu00e3o (1 aba do navegador). Clique para ver a timeline cronolu00f3gica de telas visitadas.
+              Acessos, usuários únicos e tempo médio estimado na tela por módulo (gap entre eventos consecutivos, capado em 30 min).
+            </p>
+          </div>
+          <div className="text-[10px] text-muted-foreground uppercase tracking-[0.12em]">
+            {loadingModules ? "Carregando..." : `${moduleStats.length} módulos`}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+          {moduleStats.length === 0 && !loadingModules ? (
+            <div className="col-span-full text-center text-muted-foreground text-sm py-6">
+              Sem atividade no período.
+            </div>
+          ) : (
+            moduleStats.filter((m) => m.module?.toLowerCase() !== "admin").map((m) => {
+              const mins = Math.floor(m.avgTimeOnScreenSec / 60);
+              const secs = m.avgTimeOnScreenSec % 60;
+              const timeLabel = m.avgTimeOnScreenSec > 0
+                ? (mins > 0 ? `${mins}m ${secs}s` : `${secs}s`)
+                : "—";
+              const isActive = moduleFilter === m.module;
+              return (
+                <button
+                  key={m.module}
+                  onClick={() => { setModuleFilter(isActive ? "" : m.module); setCurrentPage(1); }}
+                  className={`text-left rounded-xl p-3 border transition-all hover:bg-white/5 ${
+                    isActive
+                      ? "border-primary/60 bg-primary/5 shadow-[0_0_0_1px_rgba(255,200,0,0.4)]"
+                      : "border-white/10 bg-[#0a0b10]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] uppercase tracking-[0.16em] font-semibold text-primary">
+                      {m.label}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">{m.totalAccesses} acessos</span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div>
+                      <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">Usuários</div>
+                      <div className="text-base font-bold">{m.uniqueUsers}</div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">Tempo médio</div>
+                      <div className="text-base font-bold">{timeLabel}</div>
+                    </div>
+                  </div>
+                  {m.topEndpoint && (() => {
+                    const pretty = prettifyEndpoint(m.topEndpoint);
+                    return (
+                      <div className="mt-2 pt-2 border-t border-white/10">
+                        <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">Top endpoint</div>
+                        <div className="text-[11px] truncate text-foreground/80" title={m.topEndpoint}>
+                          <span className="truncate">{pretty.label}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </button>
+              );
+            })
+          )}
+        </div>
+      </PageCard>
+
+      {/* Sessões */}
+      <PageCard>
+        <div className="flex justify-between items-end gap-3 mb-3">
+          <div>
+            <div className="text-sm uppercase tracking-[0.18em] font-semibold">Sessões</div>
+            <p className="text-xs text-muted-foreground">
+              Cada linha é uma sessão (1 aba do navegador). Clique para ver a timeline cronológica de telas visitadas.
             </p>
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/12 text-xs">
             <span className="w-2 h-2 rounded-full bg-primary" />
-            {loadingSessions ? "Carregando..." : sessions.length + " sess\u00e3o(\u00f5es)"}
+            {loadingSessions ? "Carregando..." : `${sessions.length} sessão(ões)`}
           </div>
         </div>
 
@@ -635,12 +702,12 @@ const MetricsUsage = () => {
                 sessions.map((s) => {
                   const isOpen = expandedSession === s.sessionId;
 
-                  // Filter out dashboard/admin events from session timeline
                   const BLOCKED_EP = ['/dashboard', 'dashboard', '/admin', 'admin'];
                   const filteredEvents = s.events.filter((ev: { endpoint: string; method: string; event_time: string }) => {
                     const ep = (ev.endpoint || '').toLowerCase().replace(/#.*$/, '');
                     return !BLOCKED_EP.some(b => ep === b || ep.startsWith(b + '/'));
                   });
+
                   // ===== Tempo ativo real (soma dos #dur=ms dos eventos VO) =====
                   const activeMsTotal = filteredEvents.reduce((acc, ev) => {
                     if (ev.method === "VO" || ev.method === "V_OUT" || ev.method === "VIEW_END") {
