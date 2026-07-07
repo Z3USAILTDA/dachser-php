@@ -158,7 +158,7 @@ $router->get('demurrage/containers', function($params) use ($eligibleIn) {
         if (!empty($_GET['dispute_status']) && $_GET['dispute_status'] !== 'all') { $where[] = 'dc.dispute_status = ?'; $qParams[] = $_GET['dispute_status']; }
         if (!empty($_GET['audit_status']) && $_GET['audit_status'] !== 'all') { $where[] = 'dc.audit_status = ?'; $qParams[] = $_GET['audit_status']; }
 
-        $containers = finQuery("SELECT dc.*, dc.bl AS hbl FROM dados_dachser.t_dachser_demurrage_containers dc WHERE " . implode(' AND ', $where) . " ORDER BY dc.updated_at DESC LIMIT ?", array_merge($qParams, [$safeLimit]));
+        $containers = finQuery("SELECT dc.*, dc.bl AS hbl FROM dados_dachser.t_dachser_demurrage_containers dc WHERE " . implode(' AND ', $where) . " ORDER BY dc.updated_at DESC LIMIT $safeLimit", $qParams);
 
         if ($containers && count($containers) > 0) {
             $clientes = array_unique(array_filter(array_column($containers, 'cliente')));
@@ -323,14 +323,14 @@ $router->post('demurrage/rates/bulk', function($params) {
 $router->get('demurrage/containers/:id/events', function($params) {
     try {
         $id = $params['id'];
-        $limit = (int)($_GET['limit'] ?? 50);
+        $limit = min(max((int)($_GET['limit'] ?? 50), 1), 200);
         $containerNumber = null;
         if (ctype_digit((string)$id)) {
             $cr = finQuery('SELECT numero FROM dados_dachser.t_dachser_demurrage_containers WHERE id = ? LIMIT 1', [$id]);
             $containerNumber = $cr[0]['numero'] ?? null;
         } else { $containerNumber = $id; }
         if (!$containerNumber) { sendJson(['success' => true, 'data' => []]); }
-        $rows = finQuery("SELECT id, mbl_id, container, event_code, event_description, event_datetime, location, vessel_name, voyage, container_status, eta, source, created_at FROM dados_dachser.t_sea_tracking_history WHERE container = ? ORDER BY event_datetime DESC, created_at DESC LIMIT ?", [$containerNumber, $limit]);
+        $rows = finQuery("SELECT id, mbl_id, container, event_code, event_description, event_datetime, location, vessel_name, voyage, container_status, eta, source, created_at FROM dados_dachser.t_sea_tracking_history WHERE container = ? ORDER BY event_datetime DESC, created_at DESC LIMIT $limit", [$containerNumber]);
         sendJson(['success' => true, 'data' => $rows ?: []]);
     } catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
 });
@@ -437,7 +437,7 @@ $router->get('demurrage/pre-invoices', function($params) use ($eligibleIn) {
         if (!empty($_GET['status']) && $_GET['status'] !== 'all') { $where[] = 'status = ?'; $qParams[] = $_GET['status']; }
         if (!empty($_GET['workflow_status']) && $_GET['workflow_status'] !== 'all') { $where[] = 'workflow_status = ?'; $qParams[] = $_GET['workflow_status']; }
         if (!empty($_GET['client_name'])) { $where[] = 'client_name LIKE ?'; $qParams[] = "%{$_GET['client_name']}%"; }
-        $preInvoices = finQuery("SELECT * FROM dados_dachser.t_dachser_demurrage_pre_invoices WHERE " . implode(' AND ', $where) . " ORDER BY created_at DESC LIMIT ?", array_merge($qParams, [$limit]));
+        $preInvoices = finQuery("SELECT * FROM dados_dachser.t_dachser_demurrage_pre_invoices WHERE " . implode(' AND ', $where) . " ORDER BY created_at DESC LIMIT $limit", $qParams);
         sendJson(['success' => true, 'data' => $preInvoices ?: []]);
     } catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
 });
@@ -483,7 +483,8 @@ $router->get('demurrage/alerts', function($params) use ($eligibleIn) {
         $qParams = [];
         if (!empty($_GET['container_id'])) { $conditions[] = 'container_id = ?'; $qParams[] = $_GET['container_id']; }
         if (!empty($_GET['status']) && $_GET['status'] !== 'all') { $conditions[] = 'status = ?'; $qParams[] = $_GET['status']; }
-        $rows = finQuery("SELECT * FROM dados_dachser.t_dachser_demurrage_alerts WHERE " . implode(' AND ', $conditions) . " ORDER BY sent_at DESC LIMIT ?", array_merge($qParams, [(int)($_GET['limit'] ?? 100)]));
+        $limit = (int)($_GET['limit'] ?? 100);
+        $rows = finQuery("SELECT * FROM dados_dachser.t_dachser_demurrage_alerts WHERE " . implode(' AND ', $conditions) . " ORDER BY sent_at DESC LIMIT $limit", $qParams);
         $parsed = array_map(function($a) { $a['recipient_emails'] = isset($a['recipient_emails']) ? json_decode($a['recipient_emails'], true) : []; return $a; }, $rows ?: []);
         sendJson(['success' => true, 'data' => $parsed]);
     } catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
@@ -506,7 +507,8 @@ $router->get('demurrage/disputes', function($params) use ($eligibleIn) {
         if (!empty($_GET['container_id'])) { $conditions[] = 'container_id = ?'; $qParams[] = $_GET['container_id']; }
         if (!empty($_GET['status']) && $_GET['status'] !== 'all') { $conditions[] = 'status = ?'; $qParams[] = $_GET['status']; }
         if (!empty($_GET['client_name'])) { $conditions[] = 'client_name LIKE ?'; $qParams[] = "%{$_GET['client_name']}%"; }
-        $rows = finQuery("SELECT * FROM dados_dachser.t_dachser_demurrage_disputes WHERE " . implode(' AND ', $conditions) . " ORDER BY opened_at DESC LIMIT ?", array_merge($qParams, [(int)($_GET['limit'] ?? 100)]));
+        $limit = (int)($_GET['limit'] ?? 100);
+        $rows = finQuery("SELECT * FROM dados_dachser.t_dachser_demurrage_disputes WHERE " . implode(' AND ', $conditions) . " ORDER BY opened_at DESC LIMIT $limit", $qParams);
         sendJson(['success' => true, 'data' => $rows ?: []]);
     } catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
 });

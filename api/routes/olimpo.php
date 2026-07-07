@@ -393,8 +393,9 @@ $router->get('olimpo/cobranca/client-faturas', function($params) use ($DB) {
         $vencSort = $_GET['vencSort'] ?? '';
         $order = $vencSort === 'asc' ? 't.data_prev_baixa ASC' : ($vencSort === 'desc' ? 't.data_prev_baixa DESC' : "CASE WHEN t.data_prev_baixa < CURDATE() THEN 0 ELSE 1 END, t.data_prev_baixa ASC");
         $agingBase = agingBaseSubquery($DB);
-        $qParams = $modal ? [$clientName, $modal, $pl['limit'], $pl['offset']] : [$clientName, $pl['limit'], $pl['offset']];
-        $rows = olimpoQuery("SELECT t.doc_key, t.documento, t.numero_nf, t.nd, t.cnpj, t.razao_social, DATE_FORMAT(t.data_emissao, '%d/%m/%Y') AS data_emissao, DATE_FORMAT(t.data_prev_baixa, '%d/%m/%Y') AS data_vencimento, t.valor_nf, t.valor_liquido, t.modal, t.tipo_documento, t.processo AS numero_processo, t.master, t.house, t.condicao_pag AS condicao_pagamento, t.nome_vendedor, t.id_rm, t.idlan, CASE WHEN t.is_disputa = 1 THEN 1 ELSE 0 END AS disputa FROM ($agingBase) t LEFT JOIN $DB.t_fin_cliente_grupo g ON g.razao_social COLLATE utf8mb4_unicode_ci = UPPER(TRIM(COALESCE(t.razao_social,''))) COLLATE utf8mb4_unicode_ci WHERE COALESCE(g.grupo, TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1))) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci $modalClause ORDER BY $order LIMIT ? OFFSET ?", $qParams);
+        $qParams = $modal ? [$clientName, $modal] : [$clientName];
+        $limit = $pl['limit']; $offset = $pl['offset'];
+        $rows = olimpoQuery("SELECT t.doc_key, t.documento, t.numero_nf, t.nd, t.cnpj, t.razao_social, DATE_FORMAT(t.data_emissao, '%d/%m/%Y') AS data_emissao, DATE_FORMAT(t.data_prev_baixa, '%d/%m/%Y') AS data_vencimento, t.valor_nf, t.valor_liquido, t.modal, t.tipo_documento, t.processo AS numero_processo, t.master, t.house, t.condicao_pag AS condicao_pagamento, t.nome_vendedor, t.id_rm, t.idlan, CASE WHEN t.is_disputa = 1 THEN 1 ELSE 0 END AS disputa FROM ($agingBase) t LEFT JOIN $DB.t_fin_cliente_grupo g ON g.razao_social COLLATE utf8mb4_unicode_ci = UPPER(TRIM(COALESCE(t.razao_social,''))) COLLATE utf8mb4_unicode_ci WHERE COALESCE(g.grupo, TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1))) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci $modalClause ORDER BY $order LIMIT $limit OFFSET $offset", $qParams);
         $countParams = $modal ? [$clientName, $modal] : [$clientName];
         $countRows = olimpoQuery("SELECT COUNT(*) AS total FROM ($agingBase) t LEFT JOIN $DB.t_fin_cliente_grupo g ON g.razao_social COLLATE utf8mb4_unicode_ci = UPPER(TRIM(COALESCE(t.razao_social,''))) COLLATE utf8mb4_unicode_ci WHERE COALESCE(g.grupo, TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1))) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci $modalClause", $countParams);
         sendJson(['success' => true, 'rows' => $rows, 'total' => (int)($countRows[0]['total'] ?? 0), 'page' => $pl['page'], 'pageSize' => $pl['limit']]);
@@ -452,7 +453,7 @@ $router->get('olimpo/search-clientes', function($params) use ($DB) {
         $q = trim($_GET['q'] ?? '');
         $limit = min((int)($_GET['limit'] ?? 15), 50);
         if (strlen($q) < 2) { sendJson(['success' => true, 'clientes' => []]); }
-        $rows = olimpoQuery("SELECT DISTINCT nome_cliente, dchr_customer_number, cnpj FROM $DB.t_clientes_base WHERE nome_cliente LIKE ? ORDER BY nome_cliente ASC LIMIT ?", ["%$q%", $limit]);
+        $rows = olimpoQuery("SELECT DISTINCT nome_cliente, dchr_customer_number, cnpj FROM $DB.t_clientes_base WHERE nome_cliente LIKE ? ORDER BY nome_cliente ASC LIMIT $limit", ["%$q%"]);
         sendJson(['success' => true, 'clientes' => $rows ?: []]);
     } catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
 });
@@ -465,7 +466,7 @@ $router->get('olimpo/search-analistas', function($params) use ($DB) {
         $modal = strtoupper($_GET['modal'] ?? '');
         if (strlen($q) < 2) { sendJson(['success' => true, 'analistas' => []]); }
         $tipoFilter = $modal === 'AIR' ? "AND tipo_processo IN ('AI','AE','AIR IMPORT','AIR EXPORT')" : ($modal === 'SEA' ? "AND tipo_processo IN ('SI','SE','SEA IMPORT','SEA EXPORT')" : '');
-        $rows = olimpoQuery("SELECT DISTINCT nome_analista, email_analista FROM $DB.t_master_dados WHERE nome_analista LIKE ? $tipoFilter AND nome_analista IS NOT NULL AND TRIM(nome_analista) != '' ORDER BY nome_analista ASC LIMIT ?", ["$q%", $limit]);
+        $rows = olimpoQuery("SELECT DISTINCT nome_analista, email_analista FROM $DB.t_master_dados WHERE nome_analista LIKE ? $tipoFilter AND nome_analista IS NOT NULL AND TRIM(nome_analista) != '' ORDER BY nome_analista ASC LIMIT $limit", ["$q%"]);
         sendJson(['success' => true, 'analistas' => $rows ?: []]);
     } catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
 });
@@ -545,7 +546,7 @@ $router->post('sea/tracking/events', function($params) use ($DB) {
         $mbl_id = $body['mbl_id'] ?? null;
         if (!$mbl_id) { sendJson(['success' => true, 'data' => []]); }
         $lim = min((int)($body['limit'] ?? 200), 500);
-        $rows = olimpoQuery("SELECT id, mbl_id, container, event_datetime, event_description, event_location, voyage FROM $DB.t_sea_tracking_history WHERE mbl_id = ? ORDER BY event_datetime DESC LIMIT ?", [$mbl_id, $lim]);
+        $rows = olimpoQuery("SELECT id, mbl_id, container, event_datetime, event_description, event_location, voyage FROM $DB.t_sea_tracking_history WHERE mbl_id = ? ORDER BY event_datetime DESC LIMIT $lim", [$mbl_id]);
         sendJson(['success' => true, 'data' => $rows ?: []]);
     } catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
 });

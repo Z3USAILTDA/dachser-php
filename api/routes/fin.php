@@ -943,6 +943,67 @@ $router->post('fin/vouchers/batch-documents', function($params) {
     } catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
 });
 
+// ── GET /api/freetime ────────────────────────────────────────────────────────
+$router->get('freetime', function($params) {
+    try {
+        $rows = finQuery("SELECT * FROM dados_dachser.t_client_free_time WHERE ativo = TRUE ORDER BY created_at DESC");
+        sendJson(['success' => true, 'data' => $rows ?: []]);
+    } catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
+});
+
+// ── GET /api/freetime/for-client ─────────────────────────────────────────────
+$router->get('freetime/for-client', function($params) {
+    try {
+        $cliente_nome = $_GET['cliente_nome'] ?? null;
+        $mbl = $_GET['mbl'] ?? null;
+        if ($mbl) {
+            $rows = finQuery("SELECT * FROM dados_dachser.t_client_free_time WHERE tipo_ft = 'PROCESSO' AND mbl = ? AND ativo = TRUE LIMIT 1", [$mbl]);
+            if ($rows && count($rows) > 0) { sendJson(['success' => true, 'data' => $rows[0]]); return; }
+        }
+        if ($cliente_nome) {
+            $rows = finQuery("SELECT * FROM dados_dachser.t_client_free_time WHERE tipo_ft = 'CONTRATO' AND cliente_nome = ? AND ativo = TRUE AND (vigencia_inicio IS NULL OR vigencia_inicio <= CURDATE()) AND (vigencia_fim IS NULL OR vigencia_fim >= CURDATE()) ORDER BY created_at DESC LIMIT 1", [$cliente_nome]);
+            if ($rows && count($rows) > 0) { sendJson(['success' => true, 'data' => $rows[0]]); return; }
+        }
+        sendJson(['success' => true, 'data' => null]);
+    } catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
+});
+
+// ── POST /api/freetime ───────────────────────────────────────────────────────
+$router->post('freetime', function($params) {
+    try {
+        $d = getRequestBody();
+        $id = genUUID();
+        finQuery("INSERT INTO dados_dachser.t_client_free_time (id, tipo_ft, cliente_nome, mbl, free_time_demurrage_days, demurrage_type, demurrage_currency, demurrage_amount, vigencia_inicio, vigencia_fim, observacao, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [$id, $d['tipo_ft'] ?? 'CONTRATO', $d['cliente_nome'] ?? null, $d['mbl'] ?? null, $d['free_time_demurrage_days'] ?? null, $d['demurrage_type'] ?? null, $d['demurrage_currency'] ?? null, $d['demurrage_amount'] ?? null, $d['vigencia_inicio'] ?? null, $d['vigencia_fim'] ?? null, $d['observacao'] ?? null, $d['updated_by'] ?? null]);
+        $rows = finQuery("SELECT * FROM dados_dachser.t_client_free_time WHERE id = ?", [$id]);
+        sendJson(['success' => true, 'data' => $rows[0]]);
+    } catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
+});
+
+// ── PATCH /api/freetime/:id ──────────────────────────────────────────────────
+$router->patch('freetime/:id', function($params) {
+    try {
+        $id = $params['id'];
+        $d = getRequestBody();
+        $setClauses = []; $values = [];
+        $fields = ['tipo_ft','cliente_nome','mbl','free_time_demurrage_days','demurrage_type','demurrage_currency','demurrage_amount','vigencia_inicio','vigencia_fim','observacao','updated_by'];
+        foreach ($fields as $f) { if (isset($d[$f])) { $setClauses[] = "$f = ?"; $values[] = $d[$f]; } }
+        if (count($setClauses) > 0) {
+            $values[] = $id;
+            finQuery("UPDATE dados_dachser.t_client_free_time SET " . implode(', ', $setClauses) . " WHERE id = ?", $values);
+        }
+        $rows = finQuery("SELECT * FROM dados_dachser.t_client_free_time WHERE id = ?", [$id]);
+        sendJson(['success' => true, 'data' => $rows[0] ?? null]);
+    } catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
+});
+
+// ── DELETE /api/freetime/:id ─────────────────────────────────────────────────
+$router->delete('freetime/:id', function($params) {
+    try {
+        finQuery("UPDATE dados_dachser.t_client_free_time SET ativo = FALSE WHERE id = ?", [$params['id']]);
+        sendJson(['success' => true]);
+    } catch (Exception $e) { sendJson(['success' => false, 'error' => $e->getMessage()], 500); }
+});
+
 // ── GET /api/freetime/voucher ─────────────────────────────────────────────────
 $router->get('freetime/voucher', function($params) {
     try {
