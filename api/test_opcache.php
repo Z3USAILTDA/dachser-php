@@ -20,5 +20,6 @@ if (function_exists('opcache_reset')) {
 echo json_encode([
     "success" => $success,
     "message" => $msg,
+    "disable_functions" => ini_get('disable_functions'),
     "time" => date('c')
 ], JSON_PRETTY_PRINT);
