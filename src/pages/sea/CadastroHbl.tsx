@@ -47,6 +47,8 @@ export default function CadastroHbl() {
       if (result.success) {
         setStatusMessage({ type: 'success', message: 'HBL cadastrado com sucesso!' });
         setTimeout(() => navigate("/sea/submeter-hbl-mbl", { state: { itemId: result.itemId } }), 800);
+      } else {
+        setStatusMessage({ type: 'error', message: 'Erro ao cadastrar: ' + (result.error || 'Erro desconhecido') });
       }
     } catch (error: any) {
       console.error('Upload error:', error);

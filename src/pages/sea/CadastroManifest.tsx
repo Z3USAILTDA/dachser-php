@@ -48,6 +48,8 @@ export default function CadastroManifest() {
       if (result.success) {
         setStatusMessage({ type: 'success', message: 'Manifest cadastrado com sucesso!' });
         setTimeout(() => navigate("/sea/submeter-manifest-hbl", { state: { itemId: result.itemId } }), 800);
+      } else {
+        setStatusMessage({ type: 'error', message: 'Erro ao cadastrar: ' + (result.error || 'Erro desconhecido') });
       }
     } catch (error: any) {
       console.error('Upload error:', error);

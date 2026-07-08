@@ -1193,19 +1193,54 @@ $router->get('sea/files/:id/download', function($params) {
 
 // POST /api/sea/upload-base-file
 $router->post('sea/upload-base-file', function($params) {
+    // Configura limites de tempo e memória para uploads maiores
+    ini_set('memory_limit', '1024M');
+    set_time_limit(300);
+
     try {
-        $body = getRequestBody();
-        $fileName = $body['fileName'];
-        $fileBase64 = $body['fileBase64'];
-        $view = isset($body['view']) ? $body['view'] : 'manifest_hbl';
+        $uploadResult = handleFileUpload(isset($_FILES['file']) ? $_FILES['file'] : null, 'sea');
+        if (!$uploadResult['success']) {
+            sendJson(['success' => false, 'error' => $uploadResult['error']], 400);
+        }
+
+        $fileName = $uploadResult['originalName'];
+        $mimeType = $uploadResult['mime'];
+        $filePath = $uploadResult['path'];
+        $fileSize = $uploadResult['size'];
+        $view = isset($_POST['analysisType']) ? $_POST['analysisType'] : 'manifest_hbl';
+
+        // Tenta extrair o número do container a partir do nome do arquivo (ex: Manifest SEKU5762065.xlsx)
+        $container = null;
+        if (preg_match('/\b([A-Z]{4}\d{7})\b/', $fileName, $matches)) {
+            $container = $matches[1];
+        }
 
         $pdo = getSeaPDO();
-        $stmtFile = $pdo->prepare("INSERT INTO dados_dachser.t_sea_files (filename, mime, size_bytes, file_content, created_at) VALUES (?, 'application/pdf', ?, ?, NOW())");
-        $stmtFile->execute([$fileName, strlen(base64_decode($fileBase64)), $fileBase64]);
+        
+        // Abre o arquivo em modo leitura binária para persistir como BLOB eficientemente
+        $fp = fopen($filePath, 'rb');
+        
+        // rel_path e url são NOT NULL no banco. Definimos '' temporariamente
+        $stmtFile = $pdo->prepare("INSERT INTO dados_dachser.t_sea_files (filename, mime, size_bytes, file_content, rel_path, url, created_at) VALUES (?, ?, ?, ?, '', '', NOW())");
+        $stmtFile->bindValue(1, $fileName);
+        $stmtFile->bindValue(2, $mimeType);
+        $stmtFile->bindValue(3, $fileSize);
+        $stmtFile->bindValue(4, $fp, PDO::PARAM_LOB);
+        $stmtFile->execute();
         $fileId = $pdo->lastInsertId();
+        
+        if (is_resource($fp)) {
+            fclose($fp);
+        }
 
-        $stmtItem = $pdo->prepare("INSERT INTO dados_dachser.t_sea_items (view, arquivo_id, arquivo_label, status, active, created_at) VALUES (?, ?, ?, 'queued', 1, NOW())");
-        $stmtItem->execute([$view, $fileId, $fileName]);
+        // Atualiza a URL do arquivo com a rota de download correta
+        $fileUrl = "/api/sea/files/{$fileId}/download";
+        $stmtUpdateFile = $pdo->prepare("UPDATE dados_dachser.t_sea_files SET url = ? WHERE id = ?");
+        $stmtUpdateFile->execute([$fileUrl, $fileId]);
+
+        // Insere o item na tabela t_sea_items registrando o container
+        $stmtItem = $pdo->prepare("INSERT INTO dados_dachser.t_sea_items (view, arquivo_id, arquivo_label, container, status, active, created_at) VALUES (?, ?, ?, ?, 'queued', 1, NOW())");
+        $stmtItem->execute([$view, $fileId, $fileName, $container]);
         $itemId = $pdo->lastInsertId();
 
         sendJson(['success' => true, 'itemId' => (int)$itemId, 'fileId' => (int)$fileId]);

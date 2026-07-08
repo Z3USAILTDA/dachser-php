@@ -2,6 +2,9 @@
 // api/index.php
 // Entrada unificada para requisições de API sob Apache/XAMPP
 
+// Ativa buffering de saída para evitar que warnings/erros quebrem a estrutura do JSON
+ob_start();
+
 // 1. CORS Headers
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS");
@@ -44,6 +47,11 @@ require_once __DIR__ . '/routes/upload_helper.php';
 // Helpers para retorno de JSON
 function sendJson($data, $status = 200)
 {
+    // Limpa qualquer output bufferizado anteriormente (e.g. warnings, echos acidentais)
+    if (ob_get_length() > 0) {
+        ob_clean();
+    }
+
     if (!headers_sent()) {
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
@@ -61,7 +69,8 @@ function sendJson($data, $status = 200)
         flush();
     }
 
-    // Ao invés de 'exit', retornamos para que register_shutdown_function ou código seguinte possa rodar
+    // Encerra imediatamente para garantir que nenhum warning, notice ou HTML posterior corrompa o JSON
+    exit(0);
 }
 
 // Helper para ler corpo em formato JSON
