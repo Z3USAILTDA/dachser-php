@@ -107,13 +107,66 @@ function extractIATA($loc)
         return strtoupper($endMatch[1]);
     return strtoupper(substr(preg_replace('/[^A-Za-z]/', '', $t), 0, 3));
 }
-
 // Core compute tracking
-function computeTrackingData()
+function computeTrackingData($forceRecompute = false, $daysLimit = null, $limit = null, $cursor_data = null, $cursor_id = null)
 {
-    $cached = getCache('trackingResultCache', 25);
-    if ($cached)
-        return $cached;
+    $lockFile = sys_get_temp_dir() . '/dachser_cache_lock_trackingResultCache.lock';
+    
+    $effectiveCutoff = ETD_CUTOFF;
+    if ($daysLimit !== null) {
+        $effectiveCutoff = date('Y-m-d', strtotime("-$daysLimit days"));
+    }
+
+    if ($limit === null && !$forceRecompute && $daysLimit === null) {
+        $cacheInfo = getCacheStale('trackingResultCache', 25);
+        if ($cacheInfo) {
+            if (!$cacheInfo['is_stale']) {
+                return $cacheInfo['value'];
+            }
+            // Retorna o valor stale imediatamente, agenda atualização em background
+            if (!file_exists($lockFile) || (time() - filemtime($lockFile) > 60)) {
+                touch($lockFile);
+                register_shutdown_function(function () use ($lockFile) {
+                    // Roda force compute no background
+                    try {
+                        computeTrackingData(true, null);
+                    } catch (Throwable $e) {
+                        error_log("[tracking bg] " . $e->getMessage());
+                    } finally {
+                        @unlink($lockFile);
+                    }
+                });
+            }
+            return $cacheInfo['value'];
+        }
+
+        // Se não tem cache, e outro request está processando, aguarda para não derrubar o banco
+        if (file_exists($lockFile) && (time() - filemtime($lockFile) < 60)) {
+            for ($i = 0; $i < 20; $i++) {
+                sleep(1);
+                $cacheInfo = getCacheStale('trackingResultCache', 25);
+                if ($cacheInfo)
+                    return $cacheInfo['value'];
+            }
+        }
+
+        // Se não tem cache algum, fazemos o primeiro carregamento rápido (ex: 5 dias)
+        // e agendamos o carregamento completo (todas as datas) no background.
+        if (!file_exists($lockFile) || (time() - filemtime($lockFile) > 60)) {
+            touch($lockFile);
+            register_shutdown_function(function () use ($lockFile) {
+                try {
+                    computeTrackingData(true, null);
+                } catch (Throwable $e) {
+                    error_log("[tracking bg] " . $e->getMessage());
+                } finally {
+                    @unlink($lockFile);
+                }
+            });
+        }
+
+        return computeTrackingData(true, 5);
+    }
 
     $pdo = getPDO();
     $normalizeDesc = function ($s) {
@@ -157,9 +210,18 @@ function computeTrackingData()
         return strlen($b['needle']) - strlen($a['needle']);
     });
 
+    $queryParams = [$effectiveCutoff];
+    $cursorCondition = "";
+    if ($cursor_data !== null && $cursor_id !== null) {
+        $cursorCondition = " AND ((tda.etd < ?) OR (tda.etd = ? AND tda.id < ?))";
+        $queryParams[] = $cursor_data;
+        $queryParams[] = $cursor_data;
+        $queryParams[] = $cursor_id;
+    }
+
     $sql = "
         WITH base AS (
-          SELECT tda.awb_number AS AWB, tda.hawb_number AS HAWB, tda.consignee_nome AS CLIENTE,
+          SELECT tda.id, tda.awb_number AS AWB, tda.hawb_number AS HAWB, tda.consignee_nome AS CLIENTE,
               tda.tipo_servico AS TIPO_SERVICO, tda.etd AS ETD,
               tdaf.origin AS ORIGEM, tdaf.destination AS DESTINO, tda.clerk AS ANALISTA,
               tdaf.last_status_code,
@@ -192,7 +254,7 @@ function computeTrackingData()
           FROM dados_dachser.t_dados_aereo tda
           LEFT JOIN dados_dachser.t_fato_aereo tdaf
               ON tdaf.awb = tda.awb_number
-          WHERE tda.etd >= ?
+          WHERE tda.etd >= ? {$cursorCondition}
         ),
         event_time AS (
           SELECT b.*,
@@ -231,7 +293,12 @@ function computeTrackingData()
         FROM sla_calc s
     ";
 
-    $rows = queryWithRetry($pdo, $sql, [ETD_CUTOFF]);
+    if ($limit !== null) {
+        // Filtra ETDs inválidos (ano > 2100) e ordena por id DESC para trazer os mais recentes
+        $sql .= " ORDER BY CASE WHEN YEAR(s.ETD) > 2100 THEN 0 ELSE 1 END DESC, s.ETD DESC, s.id DESC LIMIT " . intval($limit);
+    }
+
+    $rows = queryWithRetry($pdo, $sql, $queryParams);
 
     $missingClienteHawbs = [];
     foreach (($rows ?: []) as $r) {
@@ -283,7 +350,7 @@ function computeTrackingData()
               SELECT tda.awb_number AS awb, tda.hawb_number AS hawb, tdaf.timeline_json
               FROM dados_dachser.t_dados_aereo tda
               INNER JOIN dados_dachser.t_fato_aereo tdaf ON tdaf.awb = tda.awb_number AND JSON_VALID(tdaf.hawbs_json) AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
-              WHERE tda.etd >= '" . ETD_CUTOFF . "' $awbInClause AND tdaf.timeline_json IS NOT NULL AND JSON_VALID(tdaf.timeline_json)
+              WHERE tda.etd >= '" . $effectiveCutoff . "' $awbInClause AND tdaf.timeline_json IS NOT NULL AND JSON_VALID(tdaf.timeline_json)
             ),
             eventos_disc AS (
               SELECT b.awb, b.hawb, jt.ordem, jt.description,
@@ -502,7 +569,7 @@ function computeTrackingData()
     };
 
     $resolveCodeFromSlot = function ($nativeCode, $desc) use ($validate, $exactMap, $keywordIndex, $resolveCode) {
-        $native = strtoupper(trim($nativeCode));
+        $native = strtoupper(trim((string)($nativeCode ?? '')));
         if ($native && preg_match('/^[A-Z]{2,5}$/', $native)) {
             $v = $validate($native);
             if ($v)
@@ -930,7 +997,8 @@ function computeTrackingData()
             return preg_match('/\b[A-Z]{2,3}\s?\d{2,5}-T\b/', $clean) || preg_match('/\b[A-Z]{2,3}\s?\d{2,5}\s*X\s*\/\s*D\b/', $clean);
         };
 
-        $electedDesc = (string) ($top['desc'] ?: ($row["desc{$top['idx']}"] ?: ''));
+        $idx = $top['idx'];
+        $electedDesc = (string) ($top['desc'] ?: (($idx >= 0 && isset($row["desc{$idx}"])) ? $row["desc{$idx}"] : ''));
         $isGroundTransport = false;
         if ($electedDesc && $hasGroundFlightPattern($electedDesc))
             $isGroundTransport = true;
@@ -940,6 +1008,7 @@ function computeTrackingData()
         }
 
         $data[] = [
+            'id' => $row['id'] ?: '',
             'awb_number' => $row['AWB'] ?: '',
             'hawb_number' => $row['HAWB'] ?: '',
             'consignee_nome' => $row['CLIENTE'] ?: (isset($clienteMap[$row['HAWB']]) ? $clienteMap[$row['HAWB']] : ''),
@@ -972,6 +1041,24 @@ function computeTrackingData()
         ];
     }
 
+    if ($limit !== null) {
+        $nextCursor = null;
+        if (count($data) >= intval($limit)) {
+            $lastRow = end($rows);
+            $nextCursor = [
+                'cursor_data' => $lastRow['ETD'] ?: '',
+                'cursor_id' => intval($lastRow['id'] ?: 0)
+            ];
+        }
+        return [
+            'success' => true,
+            'items' => $data,
+            'data' => $data, // backward compatibility
+            'count' => count($data),
+            'next_cursor' => $nextCursor
+        ];
+    }
+
     $result = ['success' => true, 'data' => $data, 'failed_count' => count($failed)];
     setCache('trackingResultCache', $result, 25);
     return $result;
@@ -982,7 +1069,12 @@ function computeTrackingData()
 // GET /api/air/tracking-aereo
 $router->get('air/tracking-aereo', function ($params) {
     try {
-        $result = computeTrackingData();
+        $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 100; // Default to 100 to prevent 504 on old frontend
+        $cursor_data = isset($_GET['cursor_data']) ? $_GET['cursor_data'] : null;
+        $cursor_id = isset($_GET['cursor_id']) ? intval($_GET['cursor_id']) : null;
+        $force = isset($_GET['force']) ? ($_GET['force'] === '1' || $_GET['force'] === 'true') : false;
+
+        $result = computeTrackingData($force, null, $limit, $cursor_data, $cursor_id);
         sendJson($result);
     } catch (Exception $e) {
         error_log('[GET air/tracking-aereo] ' . $e->getMessage());
@@ -1617,26 +1709,43 @@ $router->delete('air/check-awb/:id', function ($params) {
 // POST /api/air/check-awb/upload
 $router->post('air/check-awb/upload', function ($params) {
     try {
-        $body = getRequestBody();
-        $fileName = isset($body['fileName']) ? $body['fileName'] : null;
-        $mimeType = isset($body['mimeType']) ? $body['mimeType'] : 'application/pdf';
-        $fileBase64 = isset($body['fileBase64']) ? $body['fileBase64'] : null;
-        $uploadedBy = isset($body['uploadedBy']) ? $body['uploadedBy'] : null;
-
-        if (!$fileName || !$fileBase64) {
-            sendJson(['success' => false, 'error' => 'fileName e fileBase64 são obrigatórios.'], 400);
+        error_log("[CheckAwb Upload] Arquivo de upload recebido: " . ($_FILES['file']['name'] ?? 'N/A'));
+        
+        $uploadResult = handleFileUpload(isset($_FILES['file']) ? $_FILES['file'] : null, 'air');
+        if (!$uploadResult['success']) {
+            error_log("[CheckAwb Upload] Falha no upload físico: " . ($uploadResult['error'] ?? ''));
+            sendJson([
+                'success' => false,
+                'step' => 'upload_arquivo',
+                'message' => 'Falha no upload do arquivo físico para a pasta temporária.',
+                'error' => $uploadResult['error']
+            ], 400);
         }
 
-        $buffer = base64_decode($fileBase64);
+        $fileName = $uploadResult['originalName'];
+        $mimeType = $uploadResult['mime'];
+        $destinationPath = $uploadResult['path'];
+
+        $buffer = file_get_contents($destinationPath);
         $pdo = getPDO();
 
+        $uploadedBy = isset($_POST['uploadedBy']) && $_POST['uploadedBy'] !== 'null' ? (int) $_POST['uploadedBy'] : null;
+
+        error_log("[CheckAwb Upload] Salvando no banco de dados...");
         $stmt = $pdo->prepare("INSERT INTO " . DOCUMENT_TABLE . " (filename, file_type, file_size, file_content, uploaded_by) VALUES (?, ?, ?, ?, ?)");
-        $stmt->execute([$fileName, $mimeType, strlen($buffer), $buffer, $uploadedBy]);
+        $stmt->execute([$fileName, $mimeType, $uploadResult['size'], $buffer, $uploadedBy]);
         $documentId = $pdo->lastInsertId();
 
+        error_log("[CheckAwb Upload] Arquivo cadastrado com sucesso. ID do arquivo criado: " . $documentId);
         sendJson(['success' => true, 'documentId' => (int) $documentId]);
     } catch (Exception $e) {
-        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+        error_log("[CheckAwb Upload] Erro crítico no upload: " . $e->getMessage());
+        sendJson([
+            'success' => false,
+            'step' => 'cadastro_arquivo',
+            'message' => 'Falha ao cadastrar arquivo no banco de dados.',
+            'error' => $e->getMessage()
+        ], 500);
     }
 });
 
@@ -1665,18 +1774,25 @@ $router->get('air/check-awb/document/:id', function ($params) {
 // POST /api/air/check-awb/parse
 $router->post('air/check-awb/parse', function ($params) {
     try {
-        $body = getRequestBody();
-        $fileBase64 = isset($body['fileBase64']) ? $body['fileBase64'] : null;
-        $mimeType = isset($body['mimeType']) ? $body['mimeType'] : 'application/pdf';
-        $documentType = isset($body['documentType']) ? $body['documentType'] : 'house_awb';
+        error_log("[CheckAwb Parse] Iniciando parse do arquivo: " . ($_FILES['file']['name'] ?? 'N/A'));
+        $uploadResult = handleFileUpload(isset($_FILES['file']) ? $_FILES['file'] : null, 'air');
+        if (!$uploadResult['success']) {
+            error_log("[CheckAwb Parse] Falha no upload temporário: " . ($uploadResult['error'] ?? ''));
+            sendJson([
+                'success' => false,
+                'step' => 'upload_arquivo',
+                'message' => 'Falha ao processar arquivo temporário para extração.',
+                'error' => $uploadResult['error']
+            ], 400);
+            return;
+        }
 
-        if (!$fileBase64)
-            sendJson(['success' => false, 'error' => 'fileBase64 é obrigatório.'], 400);
+        $documentType = isset($_POST['documentType']) ? $_POST['documentType'] : 'house_awb';
+        $mimeType = $uploadResult['mime'];
+        $fileBase64 = base64_encode(file_get_contents($uploadResult['path']));
 
         $apiKey = isset($_ENV['ANTHROPIC_API_KEY']) ? $_ENV['ANTHROPIC_API_KEY'] : null;
-        if (!$apiKey)
-            sendJson(['success' => false, 'error' => 'ANTHROPIC_API_KEY não configurada.'], 500);
-
+        
         if ($documentType === 'house_awb') {
             $systemPrompt = "Você é um especialista em extração de dados de documentos AWB (Air Waybill) e House AWB para operações logísticas.
 Extraia as informações com ALTA PRECISÃO seguindo estas REGRAS:
@@ -1719,40 +1835,139 @@ Retorne APENAS JSON válido.";
 }";
         }
 
-        $isImage = strpos($mimeType, 'image/') === 0;
-        $contentBlock = $isImage
-            ? ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $mimeType, 'data' => $fileBase64]]
-            : ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => 'application/pdf', 'data' => $fileBase64]];
+        $rawText = '';
+        $success = false;
 
-        $res = fetch('https://api.anthropic.com/v1/messages', [
-            'method' => 'POST',
-            'headers' => [
-                'x-api-key' => $apiKey,
-                'anthropic-version' => '2023-06-01',
-                'content-type' => 'application/json'
-            ],
-            'body' => json_encode([
-                'model' => isset($_ENV['PARSER_ANTHROPIC_MODEL']) ? $_ENV['PARSER_ANTHROPIC_MODEL'] : 'claude-sonnet-4-6',
-                'max_tokens' => 4096,
-                'system' => $systemPrompt,
-                'messages' => [['role' => 'user', 'content' => [$contentBlock, ['type' => 'text', 'text' => $userPrompt]]]]
-            ])
-        ]);
+        // 1. Tentar Anthropic se houver chave e parecer válida
+        if ($apiKey && strpos($apiKey, 'sk-ant') === 0) {
+            error_log("[CheckAwb Parse] Tentando chamada para a API Anthropic...");
+            try {
+                $isImage = strpos($mimeType, 'image/') === 0;
+                $contentBlock = $isImage
+                    ? ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $mimeType, 'data' => $fileBase64]]
+                    : ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => 'application/pdf', 'data' => $fileBase64]];
 
-        if (!$res['ok']) {
-            sendJson(['success' => false, 'error' => 'Erro ao processar extração na API Claude: ' . $res['status']], 502);
+                $res = fetch('https://api.anthropic.com/v1/messages', [
+                    'method' => 'POST',
+                    'headers' => [
+                        'x-api-key' => $apiKey,
+                        'anthropic-version' => '2023-06-01',
+                        'content-type' => 'application/json'
+                    ],
+                    'body' => json_encode([
+                        'model' => isset($_ENV['PARSER_ANTHROPIC_MODEL']) ? $_ENV['PARSER_ANTHROPIC_MODEL'] : 'claude-sonnet-4-6',
+                        'max_tokens' => 4096,
+                        'system' => $systemPrompt,
+                        'messages' => [['role' => 'user', 'content' => [$contentBlock, ['type' => 'text', 'text' => $userPrompt]]]]
+                    ])
+                ]);
+
+                if ($res['ok']) {
+                    $aiData = $res['json']();
+                    $rawText = isset($aiData['content'][0]['text']) ? $aiData['content'][0]['text'] : '';
+                    error_log("[CheckAwb Parse] Resposta Anthropic recebida.");
+                    $success = true;
+                } else {
+                    $errorDetail = substr(isset($res['body']) ? $res['body'] : 'No body', 0, 500);
+                    error_log("[CheckAwb Parse] Falha na API Anthropic (Status " . $res['status'] . "): " . $errorDetail);
+                }
+            } catch (Exception $ex) {
+                error_log("[CheckAwb Parse] Exceção durante chamada Anthropic: " . $ex->getMessage());
+            }
         }
 
-        $aiData = $res['json']();
-        $rawText = isset($aiData['content'][0]['text']) ? $aiData['content'][0]['text'] : '';
+        // 2. Fallback para Gemini se a chamada da Anthropic não funcionou
+        if (!$success) {
+            $geminiKey = isset($_ENV['GEMINI_API_KEY']) ? $_ENV['GEMINI_API_KEY'] : null;
+            if (!$geminiKey) {
+                error_log("[CheckAwb Parse] Erro: Sem chave do Gemini para fallback.");
+                sendJson([
+                    'success' => false,
+                    'step' => 'verificacao_config',
+                    'message' => 'Nenhuma API Key válida configurada para extração.',
+                    'error' => 'NO_VALID_API_KEY'
+                ], 500);
+                return;
+            }
+
+            error_log("[CheckAwb Parse] Executando fallback/direto com Gemini...");
+            try {
+                $geminiRes = fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', [
+                    'method' => 'POST',
+                    'headers' => [
+                        'Authorization' => "Bearer $geminiKey",
+                        'Content-Type' => 'application/json'
+                    ],
+                    'body' => json_encode([
+                        'model' => isset($_ENV['PARSER_GEMINI_MODEL']) ? $_ENV['PARSER_GEMINI_MODEL'] : 'gemini-2.5-pro',
+                        'messages' => [
+                            ['role' => 'system', 'content' => $systemPrompt],
+                            [
+                                'role' => 'user',
+                                'content' => [
+                                    ['type' => 'text', 'text' => $userPrompt],
+                                    ['type' => 'image_url', 'image_url' => ['url' => "data:$mimeType;base64,$fileBase64"]]
+                                ]
+                            ]
+                        ],
+                        'max_tokens' => 4096,
+                        'temperature' => 0
+                    ])
+                ]);
+
+                if ($geminiRes['ok']) {
+                    $aiData = $geminiRes['json']();
+                    $rawText = isset($aiData['choices'][0]['message']['content']) ? $aiData['choices'][0]['message']['content'] : '';
+                    error_log("[CheckAwb Parse] Resposta Gemini recebida.");
+                    $success = true;
+                } else {
+                    $errorDetail = substr(isset($geminiRes['body']) ? $geminiRes['body'] : 'No body', 0, 500);
+                    error_log("[CheckAwb Parse] Falha no fallback Gemini (Status " . $geminiRes['status'] . "): " . $errorDetail);
+                    sendJson([
+                        'success' => false,
+                        'step' => 'chamada_gemini',
+                        'message' => 'Erro na API do Gemini ao tentar extrair dados do documento.',
+                        'error' => "Status: {$geminiRes['status']}. Detalhe: {$errorDetail}"
+                    ], 502);
+                    return;
+                }
+            } catch (Exception $ex) {
+                error_log("[CheckAwb Parse] Exceção crítica no fallback Gemini: " . $ex->getMessage());
+                sendJson([
+                    'success' => false,
+                    'step' => 'chamada_gemini_ex',
+                    'message' => 'Erro interno ao processar fallback com o Gemini.',
+                    'error' => $ex->getMessage()
+                ], 500);
+                return;
+            }
+        }
+
+        // 3. Processar a resposta obtida (de qualquer um dos modelos)
         if (preg_match('/\{[\s\S]*\}/', $rawText, $jsonMatch)) {
             $parsed = json_decode($jsonMatch[0], true);
+            error_log("[CheckAwb Parse] Parse de JSON concluído com sucesso.");
             sendJson(array_merge(['success' => true], $parsed));
+            return;
         } else {
-            sendJson(['success' => false, 'error' => 'Não foi possível extrair JSON da IA.'], 500);
+            error_log("[CheckAwb Parse] Falha ao extrair JSON da resposta do modelo.");
+            sendJson([
+                'success' => false,
+                'step' => 'extracao_json',
+                'message' => 'A resposta do modelo de IA não continha um formato JSON estruturado válido.',
+                'error' => $rawText
+            ], 500);
+            return;
         }
     } catch (Exception $e) {
-        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+        error_log("[CheckAwb Parse] Erro crítico no parse do documento: " . $e->getMessage());
+        sendJson([
+            'success' => false,
+            'step' => 'processamento_geral',
+            'message' => 'Ocorreu um erro interno ao processar e extrair os dados do arquivo.',
+            'error' => $e->getMessage()
+        ], 500);
+        return;
     }
 });
 
@@ -1771,14 +1986,17 @@ $router->post('air/check-awb', function ($params) {
         $createdBy = isset($body['createdBy']) ? $body['createdBy'] : null;
         $documentId = isset($body['documentId']) ? $body['documentId'] : null;
 
+        error_log("[CheckAwb Create] Iniciando persistência de validação para AWB: $awbNumber | CNPJ: $cnpj");
         $pdo = getPDO();
         $stmt = $pdo->prepare("
             INSERT INTO " . CHECK_TABLE . "
                (awb_number, cnpj, origin, destination, customer, validation_status, validation_message, matched_rule_id, created_by)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ");
+         ");
         $stmt->execute([$awbNumber, $cnpj, $origin, $destination, $customer, $validationStatus, $validationMessage, $matchedRuleId, $createdBy]);
         $checkId = $pdo->lastInsertId();
+
+        error_log("[CheckAwb Create] Gravação em t_check_awb concluída (ID: $checkId). Salvando dados extraídos em t_parsed_awb...");
 
         $stmtParsed = $pdo->prepare("
             INSERT INTO " . PARSED_TABLE . "
@@ -1817,9 +2035,16 @@ $router->post('air/check-awb', function ($params) {
             $references
         ]);
 
+        error_log("[CheckAwb Create] Gravação concluída com sucesso para o ID de validação: " . $checkId);
         sendJson(['success' => true, 'checkId' => (int) $checkId]);
     } catch (Exception $e) {
-        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+        error_log("[CheckAwb Create] Falha crítica ao salvar resultado no banco: " . $e->getMessage());
+        sendJson([
+            'success' => false,
+            'step' => 'salvar_resultado',
+            'message' => 'Erro ao salvar o resultado final da validação e extração no banco.',
+            'error' => $e->getMessage()
+        ], 500);
     }
 });
 
@@ -2488,7 +2713,7 @@ $router->get('air/timeline/:awb', function ($params) {
             $allAreErrors = true;
             foreach ($timelineData as $entry) {
                 $desc = isset($entry['Description']) ? $entry['Description'] : (isset($entry['description']) ? $entry['description'] : (isset($entry['status']) ? $entry['status'] : ''));
-                if (!$isErrorEvent(String($desc))) {
+                if (!$isErrorEvent(strval($desc))) {
                     $allAreErrors = false;
                     break;
                 }
@@ -3131,50 +3356,64 @@ $router->get('cct/leadcomex-logs', function ($params) {
 function parseAnthropicPdfJsonPHP($fileBase64, $prompt, $logName)
 {
     $apiKey = isset($_ENV['ANTHROPIC_API_KEY']) ? $_ENV['ANTHROPIC_API_KEY'] : null;
-    if (!$apiKey)
-        throw new Exception('ANTHROPIC_API_KEY não configurada');
+    $tryAnthropic = ($apiKey && strpos($apiKey, 'sk-ant') === 0);
 
-    $res = fetch('https://api.anthropic.com/v1/messages', [
-        'method' => 'POST',
-        'headers' => [
-            'x-api-key' => $apiKey,
-            'anthropic-version' => '2023-06-01',
-            'Content-Type' => 'application/json'
-        ],
-        'body' => json_encode([
-            'model' => isset($_ENV['PARSER_ANTHROPIC_MODEL']) ? $_ENV['PARSER_ANTHROPIC_MODEL'] : 'claude-sonnet-4-6',
-            'max_tokens' => 16000,
-            'temperature' => 0,
-            'messages' => [
-                [
-                    'role' => 'user',
-                    'content' => [
-                        ['type' => 'text', 'text' => $prompt],
-                        ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => 'application/pdf', 'data' => $fileBase64]]
+    if ($tryAnthropic) {
+        try {
+            $res = fetch('https://api.anthropic.com/v1/messages', [
+                'method' => 'POST',
+                'headers' => [
+                    'x-api-key' => $apiKey,
+                    'anthropic-version' => '2023-06-01',
+                    'Content-Type' => 'application/json'
+                ],
+                'body' => json_encode([
+                    'model' => isset($_ENV['PARSER_ANTHROPIC_MODEL']) ? $_ENV['PARSER_ANTHROPIC_MODEL'] : 'claude-sonnet-4-6',
+                    'max_tokens' => 16000,
+                    'temperature' => 0,
+                    'messages' => [
+                        [
+                            'role' => 'user',
+                            'content' => [
+                                ['type' => 'text', 'text' => $prompt],
+                                ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => 'application/pdf', 'data' => $fileBase64]]
+                            ]
+                        ]
                     ]
-                ]
-            ]
-        ])
-    ]);
+                ])
+            ]);
 
-    if (!$res['ok']) {
-        if ($res['status'] === 429)
-            throw new Exception('Limite de requisições excedido. Tente novamente em alguns minutos.');
-        throw new Exception("$logName Anthropic API error {$res['status']}: " . substr($res['body'], 0, 300));
+            if ($res['ok']) {
+                $aiData = $res['json']();
+                $content = isset($aiData['content'][0]['text']) ? $aiData['content'][0]['text'] : '';
+                if ($content) {
+                    $cleaned = preg_replace('/```(?:json)?\s*/i', '', $content);
+                    $cleaned = str_replace('```', '', $cleaned);
+
+                    if (preg_match('/\{[\s\S]*\}/', $cleaned, $m)) {
+                        return json_decode($m[0], true);
+                    }
+                    return json_decode($cleaned, true);
+                }
+            } else {
+                $errorDetail = substr(isset($res['body']) ? $res['body'] : 'No body', 0, 500);
+                error_log("[Anthropic {$logName}] Call failed with status: {$res['status']}. Details: {$errorDetail}. Falling back to Gemini...");
+            }
+        } catch (Exception $e) {
+            error_log("[Anthropic {$logName}] Exception: {$e->getMessage()}. Falling back to Gemini...");
+        }
+    } else {
+        error_log("[Anthropic {$logName}] Key not configured or invalid. Falling back to Gemini...");
     }
 
-    $aiData = $res['json']();
-    $content = isset($aiData['content'][0]['text']) ? $aiData['content'][0]['text'] : '';
-    if (!$content)
-        throw new Exception('Resposta vazia da IA');
-
-    $cleaned = preg_replace('/```(?:json)?\s*/i', '', $content);
-    $cleaned = str_replace('```', '', $cleaned);
-
-    if (preg_match('/\{[\s\S]*\}/', $cleaned, $m)) {
-        return json_decode($m[0], true);
-    }
-    return json_decode($cleaned, true);
+    // Fallback to Gemini
+    return parseGeminiPdfJsonPHP(
+        $fileBase64,
+        'application/pdf',
+        'You are an expert logistics document parser. Extract all requested fields and return a JSON object.',
+        $prompt,
+        $logName . '-fallback'
+    );
 }
 
 function parseGeminiPdfJsonPHP($fileBase64, $mimeType, $systemPrompt, $userPrompt, $logName)
@@ -3238,10 +3477,11 @@ Extract ALL fields from this BL PDF and return a JSON object. If a field is not 
 $router->post('parsers/hawb-cadastro', function ($params) use ($hawbCadastroPrompt) {
     $startTime = microtime(true);
     try {
-        $body = getRequestBody();
-        $fileBase64 = isset($body['fileBase64']) ? $body['fileBase64'] : null;
-        if (!$fileBase64)
-            sendJson(['error' => 'fileBase64 é obrigatório'], 400);
+        $uploadResult = handleFileUpload(isset($_FILES['file']) ? $_FILES['file'] : null, 'air');
+        if (!$uploadResult['success']) {
+            sendJson(['success' => false, 'error' => $uploadResult['error']], 400);
+        }
+        $fileBase64 = base64_encode(file_get_contents($uploadResult['path']));
 
         // Claude call is async, but in PHP we run synchronously
         $data = parseAnthropicPdfJsonPHP($fileBase64, $hawbCadastroPrompt, 'parse-hawb-cadastro');
@@ -3259,10 +3499,11 @@ $router->post('parsers/hawb-cadastro', function ($params) use ($hawbCadastroProm
 $router->post('parsers/bl-cadastro', function ($params) use ($blCadastroPrompt) {
     $startTime = microtime(true);
     try {
-        $body = getRequestBody();
-        $fileBase64 = isset($body['fileBase64']) ? $body['fileBase64'] : null;
-        if (!$fileBase64)
-            sendJson(['error' => 'fileBase64 é obrigatório'], 400);
+        $uploadResult = handleFileUpload(isset($_FILES['file']) ? $_FILES['file'] : null, 'air');
+        if (!$uploadResult['success']) {
+            sendJson(['success' => false, 'error' => $uploadResult['error']], 400);
+        }
+        $fileBase64 = base64_encode(file_get_contents($uploadResult['path']));
 
         $data = parseAnthropicPdfJsonPHP($fileBase64, $blCadastroPrompt, 'parse-bl-cadastro');
         sendJson([
@@ -3279,12 +3520,12 @@ $router->post('parsers/bl-cadastro', function ($params) use ($blCadastroPrompt) 
 $router->post('parsers/manifest-swap', function ($params) {
     $startTime = microtime(true);
     try {
-        $body = getRequestBody();
-        $fileBase64 = isset($body['fileBase64']) ? $body['fileBase64'] : null;
-        $mimeType = isset($body['mimeType']) ? $body['mimeType'] : 'application/pdf';
-
-        if (!$fileBase64)
-            sendJson(['error' => 'fileBase64 é obrigatório'], 400);
+        $uploadResult = handleFileUpload(isset($_FILES['file']) ? $_FILES['file'] : null, 'air');
+        if (!$uploadResult['success']) {
+            sendJson(['success' => false, 'error' => $uploadResult['error']], 400);
+        }
+        $fileBase64 = base64_encode(file_get_contents($uploadResult['path']));
+        $mimeType = $uploadResult['mime'];
 
         $systemPrompt = "You are a specialist in parsing DACHSER air cargo manifest PDFs.
 Extract the MAWB and all HAWB entries. Return ONLY valid JSON with mawb and hawbs array.";
@@ -3312,8 +3553,10 @@ $router->post('parsers/comprovante-pdf', function ($params) {
     try {
         $body = getRequestBody();
         $fileName = isset($body['fileName']) ? $body['fileName'] : '';
-        if (!$fileName)
+        if (!$fileName) {
             sendJson(['error' => 'fileName é obrigatório'], 400);
+            return;
+        }
 
         // Simulação da lógica de parse de comprovante baseada no nome do arquivo
         $nameWithoutExt = preg_replace('/\.[^/.]+$/', '', $fileName);
@@ -3397,6 +3640,7 @@ $router->post('parsers/comprovante-pdf', function ($params) {
 });
 
 // POST /api/parsers/boleto-barcode
+// POST /api/parsers/boleto-barcode
 $router->post('parsers/boleto-barcode', function ($params) {
     try {
         $body = getRequestBody();
@@ -3415,14 +3659,17 @@ $router->post('parsers/boleto-barcode', function ($params) {
 
                 if (!$rows || count($rows) === 0 || !$rows[0]['file_content']) {
                     sendJson(['success' => false, 'error' => 'Anexo não encontrado no banco'], 404);
+                    return;
                 }
 
                 $fileBase64 = base64_encode($rows[0]['file_content']);
                 $effectiveMediaType = $rows[0]['mime_type'] ?: $effectiveMediaType;
             } else {
                 $res = fetch($fileUrl);
-                if (!$res['ok'])
+                if (!$res['ok']) {
                     sendJson(['success' => false, 'error' => 'Failed to fetch file from URL'], 400);
+                    return;
+                }
                 $fileBase64 = base64_encode($res['body']);
                 // Tenta ler o header
                 $effectiveMediaType = 'application/pdf'; // fallback
@@ -3431,13 +3678,12 @@ $router->post('parsers/boleto-barcode', function ($params) {
 
         if (!$fileBase64) {
             sendJson(['success' => false, 'error' => 'No file data provided'], 400);
+            return;
         }
 
         // Extracao boleto com Anthropic
         $key = isset($_ENV['ANTHROPIC_FINANCEIRO_API_KEY']) ? $_ENV['ANTHROPIC_FINANCEIRO_API_KEY'] : (isset($_ENV['ANTHROPIC_API_KEY']) ? $_ENV['ANTHROPIC_API_KEY'] : null);
-        if (!$key)
-            throw new Exception('ANTHROPIC_FINANCEIRO_API_KEY/ANTHROPIC_API_KEY não configurada');
-
+        
         $prompt = "Analise este documento e extraia a LINHA DIGITÁVEL do boleto ou arrecadação.
 Formatos possíveis:
 - Boleto bancário: 47 dígitos.
@@ -3448,38 +3694,91 @@ FORMATADA: <linha formatada>
 LIMPA: <somente dígitos, 47 ou 48>
 Se não encontrar nenhum código, responda apenas: NAO_ENCONTRADO";
 
-        $res = fetch('https://api.anthropic.com/v1/messages', [
-            'method' => 'POST',
-            'headers' => [
-                'x-api-key' => $key,
-                'anthropic-version' => '2023-06-01',
-                'Content-Type' => 'application/json'
-            ],
-            'body' => json_encode([
-                'model' => isset($_ENV['FIN_ANTHROPIC_MODEL']) ? $_ENV['FIN_ANTHROPIC_MODEL'] : 'claude-sonnet-4-6',
-                'max_tokens' => 4000,
-                'temperature' => 0,
-                'messages' => [
-                    [
-                        'role' => 'user',
-                        'content' => [
-                            ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => $effectiveMediaType, 'data' => $fileBase64]],
-                            ['type' => 'text', 'text' => $prompt]
-                        ]
-                    ]
-                ]
-            ])
-        ]);
+        $text = '';
+        $success = false;
 
-        if (!$res['ok']) {
-            throw new Exception("Anthropic boleto error {$res['status']}: " . substr($res['body'], 0, 300));
+        $tryAnthropic = ($key && strpos($key, 'sk-ant') === 0);
+        if ($tryAnthropic) {
+            try {
+                $res = fetch('https://api.anthropic.com/v1/messages', [
+                    'method' => 'POST',
+                    'headers' => [
+                        'x-api-key' => $key,
+                        'anthropic-version' => '2023-06-01',
+                        'Content-Type' => 'application/json'
+                    ],
+                    'body' => json_encode([
+                        'model' => isset($_ENV['FIN_ANTHROPIC_MODEL']) ? $_ENV['FIN_ANTHROPIC_MODEL'] : 'claude-sonnet-4-6',
+                        'max_tokens' => 4000,
+                        'temperature' => 0,
+                        'messages' => [
+                            [
+                                'role' => 'user',
+                                'content' => [
+                                    ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => $effectiveMediaType, 'data' => $fileBase64]],
+                                    ['type' => 'text', 'text' => $prompt]
+                                ]
+                            ]
+                        ]
+                    ])
+                ]);
+
+                if ($res['ok']) {
+                    $aiData = $res['json']();
+                    $text = isset($aiData['content'][0]['text']) ? $aiData['content'][0]['text'] : '';
+                    $success = true;
+                } else {
+                    $errorDetail = substr(isset($res['body']) ? $res['body'] : 'No body', 0, 500);
+                    error_log("[Boleto Barcode] Anthropic failed (Status " . $res['status'] . "): " . $errorDetail);
+                }
+            } catch (Exception $e) {
+                error_log("[Boleto Barcode] Anthropic Exception: " . $e->getMessage());
+            }
         }
 
-        $aiData = $res['json']();
-        $text = isset($aiData['content'][0]['text']) ? $aiData['content'][0]['text'] : '';
+        // Gemini Fallback
+        if (!$success) {
+            $geminiKey = isset($_ENV['GEMINI_API_KEY']) ? $_ENV['GEMINI_API_KEY'] : null;
+            if (!$geminiKey) {
+                throw new Exception("Nenhuma API key configurada para extração do boleto.");
+            }
+            error_log("[Boleto Barcode] Executando fallback com Gemini...");
+            
+            $geminiRes = fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', [
+                'method' => 'POST',
+                'headers' => [
+                    'Authorization' => "Bearer $geminiKey",
+                    'Content-Type' => 'application/json'
+                ],
+                'body' => json_encode([
+                    'model' => isset($_ENV['PARSER_GEMINI_MODEL']) ? $_ENV['PARSER_GEMINI_MODEL'] : 'gemini-2.5-pro',
+                    'messages' => [
+                        [
+                            'role' => 'user',
+                            'content' => [
+                                ['type' => 'text', 'text' => $prompt],
+                                ['type' => 'image_url', 'image_url' => ['url' => "data:$effectiveMediaType;base64,$fileBase64"]]
+                            ]
+                        ]
+                    ],
+                    'max_tokens' => 4000,
+                    'temperature' => 0
+                ])
+            ]);
+
+            if ($geminiRes['ok']) {
+                $aiData = $geminiRes['json']();
+                $text = isset($aiData['choices'][0]['message']['content']) ? $aiData['choices'][0]['message']['content'] : '';
+                $success = true;
+            } else {
+                $errorDetail = substr(isset($geminiRes['body']) ? $geminiRes['body'] : 'No body', 0, 500);
+                throw new Exception("Erro ao tentar ler o documento com Gemini. Detalhe: " . $errorDetail);
+            }
+        }
 
         if (stripos($text, 'NAO_ENCONTRADO') !== false) {
             sendJson(['success' => false, 'error' => 'Linha digitável não encontrada no documento']);
+            return;
         }
 
         preg_match('/LIMPA:\s*(\d+)/i', $text, $limpaMatch);

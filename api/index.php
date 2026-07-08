@@ -13,9 +13,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
 }
 
-// Oculta warnings em ambiente de produção se desejado, mas mostra erros fatais
-ini_set('display_errors', 1);
-error_reporting(E_ALL);
+// Em produção, nunca exibir erros — eles corrompem o JSON
+ini_set('display_errors', 0);
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE & ~E_WARNING);
 
 // 2. Carrega dependências de infraestrutura
 require_once __DIR__ . '/env.php';
@@ -39,19 +39,34 @@ if ($envFile) {
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/router.php';
 require_once __DIR__ . '/helper.php';
+require_once __DIR__ . '/routes/upload_helper.php';
 
 // Helpers para retorno de JSON
-function sendJson($data, $status = 200) {
+function sendJson($data, $status = 200)
+{
     if (!headers_sent()) {
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
     }
     echo json_encode($data);
-    exit;
+
+    // Se existir função de terminar a request (PHP-FPM), executamos para liberar o client
+    // e permitir que o script continue rodando em background (ex: atualizar cache).
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+    } else {
+        // Fallback para fechar buffer e tentar liberar a conexão
+        while (ob_get_level() > 0)
+            ob_end_flush();
+        flush();
+    }
+
+    // Ao invés de 'exit', retornamos para que register_shutdown_function ou código seguinte possa rodar
 }
 
 // Helper para ler corpo em formato JSON
-function getRequestBody() {
+function getRequestBody()
+{
     $input = file_get_contents('php://input');
     return json_decode($input, true) ?? [];
 }
@@ -90,6 +105,7 @@ if ($route === 'health' && $method === 'GET') {
         'service' => 'dachser-api-php',
         'time' => date('c')
     ]);
+    return;
 }
 
 // Executa o roteamento
