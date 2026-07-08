@@ -8,6 +8,21 @@ header("Content-Type: text/plain; charset=utf-8");
 
 echo "DEBUG SUBMIT START\n";
 
+require_once __DIR__ . '/env.php';
+
+// Carrega o .env correspondente
+$paths = [
+    dirname(__DIR__, 2) . '/.env',
+    dirname(__DIR__) . '/.env',
+    __DIR__ . '/.env'
+];
+foreach ($paths as $path) {
+    if (file_exists($path)) {
+        loadEnv($path);
+        break;
+    }
+}
+
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/helper.php';
 
