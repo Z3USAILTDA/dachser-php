@@ -22,6 +22,23 @@ $router->get('admin/sla-config', function($params) {
     }
 });
 
+// GET /api/admin/clear-opcache
+$router->get('admin/clear-opcache', function($params) {
+    try {
+        if (function_exists('opcache_reset')) {
+            if (opcache_reset()) {
+                sendJson(['success' => true, 'message' => 'OPcache has been reset successfully!']);
+            } else {
+                sendJson(['success' => false, 'error' => 'Failed to reset OPcache.'], 500);
+            }
+        } else {
+            sendJson(['success' => false, 'error' => 'opcache_reset function does not exist.'], 500);
+        }
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
 // PATCH /api/admin/sla-config/:id
 $router->patch('admin/sla-config/:id', function($params) {
     try {
