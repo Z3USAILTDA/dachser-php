@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPatch, apiDelete } from "@/services/apiClient";
+import { apiGet, apiPost, apiPatch, apiDelete, apiUrl } from "@/services/apiClient";
 
 interface ExtractedFile {
   name: string;
@@ -141,7 +141,7 @@ export const maritimoApi = {
    * Poll analysis status from backend
    */
   async pollAnalysis(analysisId: string): Promise<AnalysisStatus> {
-    const response = await fetch(`/api/sea/maritimo/analysis/${encodeURIComponent(analysisId)}`);
+    const response = await fetch(apiUrl(`/api/sea/maritimo/analysis/${encodeURIComponent(analysisId)}`));
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -192,11 +192,13 @@ export const maritimoApi = {
    */
   async uploadBaseFile({ file, analysisType }: UploadBaseFileParams): Promise<{ success: boolean; itemId?: string; item?: MaritimoItem; error?: string }> {
     try {
-      const base64 = await fileToBase64(file);
-      const response = await fetch('/api/sea/upload-base-file', {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('analysisType', analysisType || 'manifest_hbl');
+
+      const response = await fetch(apiUrl('/api/sea/upload-base-file'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_name: file.name, file_base64: base64, mime_type: file.type, analysisType }),
+        body: formData,
       });
 
       if (!response.ok) {
@@ -205,7 +207,7 @@ export const maritimoApi = {
       }
 
       const data = await response.json();
-      return { success: true, itemId: data?.item?.id, item: data?.item };
+      return { success: true, itemId: data?.itemId || data?.item?.id, item: data?.item };
     } catch (error: any) {
       console.error('Upload error:', error);
       return { success: false, error: error.message || 'Erro ao fazer upload' };
@@ -230,7 +232,7 @@ export const maritimoApi = {
       content: await fileToBase64(file),
     })));
 
-    const response = await fetch('/api/sea/maritimo/submit-analysis', {
+    const response = await fetch(apiUrl('/api/sea/maritimo/submit-analysis'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -245,6 +247,10 @@ export const maritimoApi = {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       
+      if (errorData.error) {
+        throw new Error(errorData.error);
+      }
+      
       if (response.status === 413) {
         throw new Error('Arquivos muito grandes. Reduza o tamanho total dos arquivos.');
       } else if (response.status === 504 || response.status === 502) {
@@ -253,7 +259,7 @@ export const maritimoApi = {
         throw new Error('Erro no servidor. Tente novamente em alguns instantes.');
       }
       
-      throw new Error(errorData.error || 'Erro ao conectar com o servidor');
+      throw new Error('Erro ao conectar com o servidor');
     }
 
     const data = await response.json();
@@ -352,7 +358,7 @@ export const maritimoApi = {
       if (!file) return { success: false, extracted: [], source: '' };
 
       const base64 = await fileToBase64(file);
-      const response = await fetch('/api/sea/extract-attachments', {
+      const response = await fetch(apiUrl('/api/sea/extract-attachments'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file_name: file.name, file_base64: base64 }),
