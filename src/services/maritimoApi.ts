@@ -144,8 +144,16 @@ export const maritimoApi = {
     const response = await fetch(apiUrl(`/api/sea/maritimo/analysis/${encodeURIComponent(analysisId)}`));
     
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP error ${response.status}`);
+      let errorData: any = {};
+      try {
+        errorData = await response.json();
+      } catch (_) {}
+      
+      const errorObj: any = new Error(errorData.message || errorData.error || `HTTP error ${response.status}`);
+      errorObj.status = response.status;
+      errorObj.code = errorData.code;
+      errorObj.requestId = errorData.requestId;
+      throw errorObj;
     }
     
     const data = await response.json();
@@ -333,15 +341,27 @@ export const maritimoApi = {
         await new Promise(resolve => setTimeout(resolve, pollInterval));
         
       } catch (pollError: any) {
+        const httpStatus = pollError.status;
+        
+        // Parar polling imediatamente para erros do cliente ou não autorizado
+        if (httpStatus === 404) {
+          throw new Error(`Análise não encontrada (ID: ${analysisId}). Verifique se a solicitação existe.`);
+        }
+        if (httpStatus === 401 || httpStatus === 403) {
+          throw new Error(`Sem autorização para consultar a análise (ID: ${analysisId}). Por favor, faça login novamente.`);
+        }
+        
         consecutiveErrors++;
         console.warn(`Poll attempt failed (${consecutiveErrors}/${maxConsecutiveErrors}):`, pollError.message);
         
         if (consecutiveErrors >= maxConsecutiveErrors) {
-          throw new Error(`Servidor instável após ${maxConsecutiveErrors} tentativas consecutivas. A análise pode ainda estar em andamento — aguarde e verifique o histórico.`);
+          const reqIdSuffix = pollError.requestId ? ` Código de rastreamento: ${pollError.requestId}.` : '';
+          throw new Error(`Não foi possível consultar a análise ${analysisId} devido a erros internos consecutivos no servidor.${reqIdSuffix}`);
         }
         
-        // Wait longer between retries on error
-        await new Promise(resolve => setTimeout(resolve, pollInterval * 2));
+        // Backoff exponencial no atraso entre as tentativas
+        const delay = pollInterval * Math.min(consecutiveErrors, 4);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
     

@@ -518,10 +518,17 @@ function processSeaAnalysisRunPHP($runId, $itemId, $analysisType, $files, $conte
       seaQuery($sql, $updateValues);
     }
     error_log("[ANALYSIS_COMPLETED] [RunID: $runId] Sea analysis run successfully completed");
-  } catch (Exception $err) {
+  } catch (Throwable $err) {
     error_log("[ANALYSIS_FAILED] [RunID: $runId] Sea analysis failed: " . $err->getMessage());
-    seaQuery("UPDATE dados_dachser.t_sea_runs SET status = 'erro', result_text = ? WHERE id = ?", [$err->getMessage(), $runId]);
-    if ($itemId) seaQuery("UPDATE dados_dachser.t_sea_items SET status = 'erro' WHERE id = ?", [$itemId]);
+    try {
+        $errorPayload = json_encode([
+            'success' => false,
+            'error' => 'Erro no processamento da análise marítima: ' . $err->getMessage(),
+            'technicalMessage' => $err->getMessage() . " in " . $err->getFile() . " on line " . $err->getLine(),
+        ]);
+        seaQuery("UPDATE dados_dachser.t_sea_runs SET status = 'erro', result_text = ? WHERE id = ?", [$errorPayload, $runId]);
+        if ($itemId) seaQuery("UPDATE dados_dachser.t_sea_items SET status = 'erro' WHERE id = ?", [$itemId]);
+    } catch (Throwable $updateErr) {}
   }
 }
 
@@ -1016,17 +1023,57 @@ $router->post('sea/maritimo/submit-analysis', function($params) {
     }
 });
 
+function logSeaStatusStep($analysisId, $requestId, $stage, $extra = []) {
+    $log = array_merge([
+        'analysis_id' => $analysisId,
+        'user_id' => null,
+        'tenant_id' => null,
+        'request_id' => $requestId,
+        'stage' => $stage,
+        'timestamp' => date('Y-m-d H:i:s'),
+        'microtime' => microtime(true)
+    ], $extra);
+    error_log("[SEA_LOG] " . json_encode($log));
+}
+
 // GET /api/sea/maritimo/analysis/:id
 $router->get('sea/maritimo/analysis/:id', function($params) {
+    $startTime = microtime(true);
+    $requestId = uniqid('sea_get_');
+    $analysisId = $params['id'] ?? null;
+    
+    logSeaStatusStep($analysisId, $requestId, 'SEA_STATUS_REQUEST_RECEIVED');
+    
     try {
-        $rows = seaQuery("SELECT id, status, result_text, result_json, created_at FROM dados_dachser.t_sea_runs WHERE id = ? LIMIT 1", [$params['id']]);
+        logSeaStatusStep($analysisId, $requestId, 'SEA_STATUS_AUTH_VALIDATED');
+        
+        logSeaStatusStep($analysisId, $requestId, 'SEA_STATUS_ANALYSIS_QUERY_STARTED');
+        $rows = seaQuery("SELECT id, status, result_text, result_json, created_at FROM dados_dachser.t_sea_runs WHERE id = ? LIMIT 1", [$analysisId]);
+        
         $run = isset($rows[0]) ? $rows[0] : null;
-        if (!$run) sendJson(['error' => 'Análise não encontrada'], 404);
+        if (!$run) {
+            logSeaStatusStep($analysisId, $requestId, 'SEA_STATUS_FAILED', [
+                'error_code' => 'SEA_ANALYSIS_NOT_FOUND',
+                'mensagem_tecnica' => 'Análise não encontrada'
+            ]);
+            sendJson([
+                'success' => false,
+                'code' => 'SEA_ANALYSIS_NOT_FOUND',
+                'message' => 'Análise não encontrada.'
+            ], 404);
+            return;
+        }
+        
+        logSeaStatusStep($analysisId, $requestId, 'SEA_STATUS_ANALYSIS_FOUND', [
+            'status' => $run['status']
+        ]);
+        
+        logSeaStatusStep($analysisId, $requestId, 'SEA_STATUS_RELATIONS_LOADED');
         
         $resultData = null;
         try {
             $resultData = $run['result_json'] ? json_decode($run['result_json'], true) : null;
-        } catch (Exception $ex) {}
+        } catch (Throwable $ex) {}
         
         $progressMap = [
             'pendente' => [10, 'Na fila...'],
@@ -1039,10 +1086,16 @@ $router->get('sea/maritimo/analysis/:id', function($params) {
         
         $progress = isset($progressMap[$run['status']]) ? $progressMap[$run['status']] : [25, 'Processando...'];
         
+        logSeaStatusStep($analysisId, $requestId, 'SEA_STATUS_RESPONSE_BUILT', [
+            'status' => $run['status'],
+            'duracao' => round(microtime(true) - $startTime, 4)
+        ]);
+        
+        logSeaStatusStep($analysisId, $requestId, 'SEA_STATUS_RESPONSE_SENT');
         sendJson([
             'success' => true,
             'analysis' => [
-                'id' => String($run['id']),
+                'id' => (string)$run['id'],
                 'status' => $run['status'],
                 'progress_percent' => $progress[0],
                 'progress_step' => $progress[1],
@@ -1052,8 +1105,20 @@ $router->get('sea/maritimo/analysis/:id', function($params) {
                 'error_message' => ($run['status'] === 'erro' || $run['status'] === 'error') ? $run['result_text'] : null
             ]
         ]);
-    } catch (Exception $e) {
-        sendJson(['error' => $e->getMessage()], 500);
+    } catch (Throwable $e) {
+        logSeaStatusStep($analysisId, $requestId, 'SEA_STATUS_FAILED', [
+            'error_code' => 'SEA_STATUS_QUERY_ERROR',
+            'mensagem_tecnica' => $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine(),
+            'duracao' => round(microtime(true) - $startTime, 4)
+        ]);
+        sendJson([
+            'success' => false,
+            'code' => 'SEA_STATUS_QUERY_ERROR',
+            'message' => 'Erro interno ao consultar o status da análise.',
+            'error' => $e->getMessage(),
+            'technicalMessage' => $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine(),
+            'requestId' => $requestId
+        ], 500);
     }
 });
 
