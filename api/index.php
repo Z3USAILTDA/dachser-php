@@ -110,12 +110,22 @@ $method = $_SERVER['REQUEST_METHOD'];
 // Rota de teste de deploy
 if ($route === 'test-deploy' && $method === 'GET') {
     $seaFile = __DIR__ . '/routes/sea.php';
+    $chbFile = __DIR__ . '/routes/chb.php';
+    $helperFile = __DIR__ . '/helper.php';
     sendJson([
         'success' => true,
+        'backendVersion' => defined('BACKEND_API_VERSION') ? BACKEND_API_VERSION : 'unknown',
         'sea_file_exists' => file_exists($seaFile),
         'sea_file_size' => file_exists($seaFile) ? filesize($seaFile) : 0,
         'sea_file_md5' => file_exists($seaFile) ? md5_file($seaFile) : '',
         'sea_file_mtime' => file_exists($seaFile) ? date('c', filemtime($seaFile)) : '',
+        'chb_file_exists' => file_exists($chbFile),
+        'chb_file_size' => file_exists($chbFile) ? filesize($chbFile) : 0,
+        'chb_file_md5' => file_exists($chbFile) ? md5_file($chbFile) : '',
+        'chb_file_mtime' => file_exists($chbFile) ? date('c', filemtime($chbFile)) : '',
+        'helper_file_size' => file_exists($helperFile) ? filesize($helperFile) : 0,
+        'helper_file_md5' => file_exists($helperFile) ? md5_file($helperFile) : '',
+        'helper_file_mtime' => file_exists($helperFile) ? date('c', filemtime($helperFile)) : '',
     ]);
     return;
 }
@@ -229,7 +239,8 @@ if ($route === 'background-worker' && $method === 'POST') {
                     $jobData['itemId'],
                     $jobData['analysisType'],
                     $jobData['files'],
-                    $jobData['context']
+                    $jobData['context'],
+                    isset($jobData['requestId']) ? $jobData['requestId'] : null
                 );
             } else if ($task === 'chb_analysis') {
                 require_once __DIR__ . '/routes/chb.php';
@@ -255,6 +266,7 @@ if ($route === 'health' && $method === 'GET') {
     sendJson([
         'success' => true,
         'service' => 'dachser-api-php',
+        'backendVersion' => defined('BACKEND_API_VERSION') ? BACKEND_API_VERSION : 'unknown',
         'time' => date('c')
     ]);
     return;

@@ -232,7 +232,9 @@ export default function SubmeterManifestHbl() {
           throw new Error(response.error);
         }
       } else {
-        console.log('Falling back to polling mode');
+        // O submit-analysis é sempre assíncrono (worker em background) — isto não é um
+        // "fallback" de falha, é o fluxo normal: agora acompanhamos o status por polling.
+        console.log('Analysis queued — polling for status', response.analysisId);
         setAnalysisStep("Processando com IA...");
         result = await maritimoApi.pollAnalysisUntilComplete(response.analysisId, (percent, step) => {
           setAnalysisProgress(Math.min(percent, 95));

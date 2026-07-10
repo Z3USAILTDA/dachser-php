@@ -43,8 +43,9 @@ try {
         $analysisType = $jobData['analysisType'];
         $files = $jobData['files'];
         $context = $jobData['context'];
-        
-        processSeaAnalysisRunPHP($runId, $itemId, $analysisType, $files, $context);
+        $requestId = isset($jobData['requestId']) ? $jobData['requestId'] : null;
+
+        processSeaAnalysisRunPHP($runId, $itemId, $analysisType, $files, $context, $requestId);
     } else if ($task === 'chb_analysis') {
         require_once __DIR__ . '/routes/chb.php';
         

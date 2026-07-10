@@ -507,22 +507,25 @@ export default function ConferenciaChb() {
       console.log(`Analysis request submitted: ${requestId}`);
       setAnalysisProgress('Analisando documentos...');
 
-      // Step 2: Poll for result (max 120 seconds)
-      const maxPollTime = 120 * 1000; // 120 seconds (2 minutes)
+      // Step 2: Poll for result. O backend tem seu próprio watchdog (worker não
+      // iniciou em 45s / IA travada em 600s) que é a autoridade sobre o status —
+      // o frontend só precisa continuar perguntando por tempo suficiente para
+      // testemunhar esse status final em vez de decidir sozinho que "falhou".
+      const maxPollTime = 11 * 60 * 1000; // 11 minutos (> 600s do watchdog de IA no backend)
       const pollInterval = 4000; // 4 seconds
       const startTime = Date.now();
       let data: any = null;
+      let lastStatus = 'pending';
 
       while (pollingRef.current && (Date.now() - startTime) < maxPollTime) {
         await new Promise(resolve => setTimeout(resolve, pollInterval));
-        
+
         if (!pollingRef.current) {
           console.log('Polling cancelled by user');
           break;
         }
 
         const elapsedSecs = Math.floor((Date.now() - startTime) / 1000);
-        setAnalysisProgress(`Analisando documentos... (${elapsedSecs}s / 120s)`);
 
         const pollResponse = await fetch(apiUrl('/api/chb/analyze-documents'), {
           method: 'POST',
@@ -537,6 +540,13 @@ export default function ConferenciaChb() {
 
         const pollData = await pollResponse.json();
         console.log(`Poll status: ${pollData.status}`);
+        lastStatus = pollData.status;
+
+        if (pollData.status === 'pending') {
+          setAnalysisProgress(`Aguardando início do processamento... (${elapsedSecs}s)`);
+        } else if (pollData.status === 'processing') {
+          setAnalysisProgress(`Análise em andamento... (${elapsedSecs}s)`);
+        }
 
         if (pollData.status === 'completed') {
           data = pollData.result;
@@ -544,7 +554,14 @@ export default function ConferenciaChb() {
         }
 
         if (pollData.status === 'error') {
-          throw new Error(pollData.error || 'Erro na análise dos documentos');
+          const elapsed = pollData.elapsedSeconds ? `${pollData.elapsedSeconds} segundos` : `${elapsedSecs} segundos`;
+          const structuredMsg = `Não foi possível concluir a análise CHB.\n` +
+            `Solicitação: ${requestId}\n` +
+            `Etapa: ${pollData.stage || 'N/A'}\n` +
+            `Código: ${pollData.errorCode || 'CHB_PROCESSING_ERROR'}\n` +
+            `Tempo decorrido: ${elapsed}.\n` +
+            `Mensagem técnica: ${pollData.error || 'Erro na análise dos documentos'}`;
+          throw new Error(structuredMsg);
         }
 
         // Continue polling for 'pending' or 'processing' status
@@ -558,7 +575,17 @@ export default function ConferenciaChb() {
       }
 
       if (!data) {
-        throw new Error(`A análise não foi concluída dentro do tempo esperado. Solicitação: ${requestId}. O processamento pode estar indisponível. Tente novamente ou consulte os logs.`);
+        // O backend ainda não atingiu um status terminal (completed/error) dentro
+        // da janela de acompanhamento do frontend. Isso NÃO significa que o
+        // backend marcou a análise como falha — apenas que paramos de perguntar
+        // para proteger a interface. O watchdog do backend continuará avaliando
+        // a próxima vez que alguém consultar este requestId.
+        throw new Error(
+          `Não foi possível confirmar a conclusão da análise dentro do tempo de acompanhamento do navegador.\n` +
+          `Solicitação: ${requestId}\n` +
+          `Último status observado: ${lastStatus}\n` +
+          `O processamento pode continuar em segundo plano. Reabra esta conferência em alguns minutos para verificar o resultado.`
+        );
       }
 
       setAnalysisProgress('');

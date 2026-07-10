@@ -2,6 +2,143 @@
 // api/helper.php
 // Funções utilitárias e simulação do fetch do Javascript
 
+// Versão do backend PHP — bump a cada alteração relevante de comportamento.
+// Exposta em /api/health, /api/test-deploy e nos logs estruturados SEA_*/CHB_*
+// para permitir confirmar qual código está realmente em produção (não confundir
+// com a versão do frontend).
+define('BACKEND_API_VERSION', '2026.07.10-sea-chb-worker-fix-1');
+
+/**
+ * Normaliza uma data vinda de extração de IA para o formato SQL (Y-m-d) ou NULL.
+ * Nunca deve retornar string vazia — colunas DATE não aceitam ''.
+ * Trata: null, '', ' ', 'N/A', '-', '--', 'DD/MM/YYYY', 'DD-MM-YYYY', 'YYYY-MM-DD'.
+ */
+function normalizeSqlDate($value) {
+    if ($value === null) return null;
+    $v = trim((string)$value);
+    if ($v === '' || strcasecmp($v, 'N/A') === 0 || strcasecmp($v, 'NULL') === 0 || $v === '-' || $v === '--') {
+        return null;
+    }
+
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) {
+        $d = DateTime::createFromFormat('Y-m-d', $v);
+        return ($d && $d->format('Y-m-d') === $v) ? $v : null;
+    }
+
+    if (preg_match('/^\d{2}\/\d{2}\/\d{4}$/', $v)) {
+        $d = DateTime::createFromFormat('d/m/Y', $v);
+        return ($d && $d->format('d/m/Y') === $v) ? $d->format('Y-m-d') : null;
+    }
+
+    if (preg_match('/^\d{2}-\d{2}-\d{4}$/', $v)) {
+        $d = DateTime::createFromFormat('d-m-Y', $v);
+        return ($d && $d->format('d-m-Y') === $v) ? $d->format('Y-m-d') : null;
+    }
+
+    // Formato não reconhecido: preferimos NULL a arriscar SQLSTATE[22007]
+    error_log("[DATE_NORMALIZE_UNRECOGNIZED] raw=" . json_encode($value));
+    return null;
+}
+
+/**
+ * Descreve (sem expor) o estado de uma variável de ambiente de chave de API.
+ * Usado para diagnóstico SEA_AI_CONFIG_VALIDATED / CHB_AI_CONFIG_VALIDATED.
+ */
+function describeEnvKey($name) {
+    $val = isset($_ENV[$name]) ? $_ENV[$name] : (getenv($name) ?: null);
+    $nonEmpty = $val !== null && $val !== false && trim((string)$val) !== '';
+    return [
+        'var' => $name,
+        'found' => $val !== null && $val !== false,
+        'non_empty' => $nonEmpty,
+        'length' => $nonEmpty ? strlen($val) : 0,
+        'fingerprint' => $nonEmpty ? substr(hash('sha256', $val), 0, 8) : null,
+        'sapi' => PHP_SAPI,
+    ];
+}
+
+/**
+ * Valida presença de uma chave de IA obrigatória. Lança exceção com código
+ * padronizado (ex: SEA_AI_CONFIG_MISSING / CHB_AI_CONFIG_MISSING) se ausente.
+ * Usada no início do processamento em background para falhar rápido em vez
+ * de deixar a análise presa em pending/pendente.
+ */
+function requireAiKey($envNames, $errorCode, $logTag) {
+    $envNames = is_array($envNames) ? $envNames : [$envNames];
+    $found = null;
+    $diagAll = [];
+    foreach ($envNames as $name) {
+        $diag = describeEnvKey($name);
+        $diagAll[] = $diag;
+        if ($diag['non_empty'] && !$found) {
+            $found = $diag;
+        }
+    }
+    error_log("[$logTag] " . json_encode(['candidates' => $diagAll, 'sapi' => PHP_SAPI, 'backendVersion' => BACKEND_API_VERSION]));
+    if (!$found) {
+        throw new Exception("[$errorCode] Nenhuma variável de ambiente de IA configurada dentre: " . implode(', ', $envNames) . " (SAPI: " . PHP_SAPI . ")");
+    }
+    return $found;
+}
+
+/**
+ * Faz uma chamada mínima (sem enviar documentos) para validar conectividade,
+ * autenticação e disponibilidade do modelo de IA a partir do ambiente atual
+ * (web ou CLI). Usada pelas rotas de diagnóstico GET /api/sea/diagnosticos-ia
+ * e GET /api/chb/diagnosticos-ia — nunca é chamada durante uma análise real.
+ */
+function validateAiConnectivityAnthropic($key, $model) {
+    $diag = ['provider' => 'Anthropic', 'model' => $model, 'sapi' => PHP_SAPI];
+    if (!$key) return array_merge($diag, ['ok' => false, 'errorCode' => 'AI_CONFIG_MISSING']);
+
+    try {
+        $res = fetch('https://api.anthropic.com/v1/messages', [
+            'method' => 'POST',
+            'headers' => ['Content-Type' => 'application/json', 'x-api-key' => $key, 'anthropic-version' => '2023-06-01'],
+            'body' => json_encode(['model' => $model, 'max_tokens' => 8, 'messages' => [['role' => 'user', 'content' => 'ping']]]),
+            'connectTimeout' => 8,
+            'timeout' => 20,
+            'logCtx' => ['module' => 'diag', 'provider' => 'Anthropic'],
+        ]);
+        return array_merge($diag, classifyAiDiagResponse($res));
+    } catch (Throwable $e) {
+        return array_merge($diag, ['ok' => false, 'errorCode' => classifyAiDiagException($e), 'error' => $e->getMessage()]);
+    }
+}
+
+function validateAiConnectivityGemini($key, $model) {
+    $diag = ['provider' => 'Gemini', 'model' => $model, 'sapi' => PHP_SAPI];
+    if (!$key) return array_merge($diag, ['ok' => false, 'errorCode' => 'AI_CONFIG_MISSING']);
+
+    try {
+        $res = fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', [
+            'method' => 'POST',
+            'headers' => ['Authorization' => "Bearer $key", 'Content-Type' => 'application/json'],
+            'body' => json_encode(['model' => $model, 'messages' => [['role' => 'user', 'content' => 'ping']], 'max_tokens' => 8]),
+            'connectTimeout' => 8,
+            'timeout' => 20,
+            'logCtx' => ['module' => 'diag', 'provider' => 'Gemini'],
+        ]);
+        return array_merge($diag, classifyAiDiagResponse($res));
+    } catch (Throwable $e) {
+        return array_merge($diag, ['ok' => false, 'errorCode' => classifyAiDiagException($e), 'error' => $e->getMessage()]);
+    }
+}
+
+function classifyAiDiagResponse($res) {
+    if ($res['ok']) return ['ok' => true, 'httpCode' => $res['status']];
+    $codeMap = [401 => 'AI_UNAUTHORIZED', 403 => 'AI_FORBIDDEN', 404 => 'AI_MODEL_NOT_FOUND', 413 => 'AI_PAYLOAD_TOO_LARGE', 429 => 'AI_RATE_LIMITED', 500 => 'AI_PROVIDER_ERROR', 529 => 'AI_PROVIDER_OVERLOADED'];
+    $errorCode = $codeMap[$res['status']] ?? ('AI_HTTP_' . $res['status']);
+    return ['ok' => false, 'httpCode' => $res['status'], 'errorCode' => $errorCode, 'bodySnippet' => substr((string)$res['body'], 0, 200)];
+}
+
+function classifyAiDiagException($e) {
+    $msg = $e->getMessage();
+    if (strpos($msg, 'AI_CONNECTION_TIMEOUT') !== false) return 'AI_CONNECTION_TIMEOUT';
+    if (strpos($msg, 'AI_RESPONSE_TIMEOUT') !== false) return 'AI_RESPONSE_TIMEOUT';
+    return 'AI_CONNECTION_ERROR';
+}
+
 /**
  * Envia e-mail via API do Resend.
  */
@@ -71,6 +208,9 @@ function fetch($url, $options = []) {
 
     // Contexto de log (passado via options para rastreamento estruturado)
     $logCtx = isset($options['logCtx']) ? $options['logCtx'] : [];
+    // Prefixo do módulo chamador (sea/chb) — evita confundir logs entre módulos
+    // que compartilham esta função. Default 'AI' para chamadas não identificadas.
+    $module = isset($logCtx['module']) ? strtoupper($logCtx['module']) : 'AI';
 
     // Sanitiza URL para log (remove query strings com tokens)
     $urlSanitized = preg_replace('/([?&])(key|token|apikey|api_key)=[^&]*/i', '$1***', $url);
@@ -78,13 +218,14 @@ function fetch($url, $options = []) {
     $host = $urlParts['host'] ?? 'unknown';
     $payloadSize = $body !== null ? strlen($body) : 0;
 
-    error_log("[CHB_CURL_REQUEST_STARTED] " . json_encode(array_merge([
+    error_log("[{$module}_CURL_REQUEST_STARTED] " . json_encode(array_merge([
         'url' => $urlSanitized,
         'host' => $host,
         'method' => $method,
         'connectTimeoutMs' => $connectTimeout * 1000,
         'timeoutMs' => $responseTimeout * 1000,
         'payloadSize' => $payloadSize,
+        'backendVersion' => BACKEND_API_VERSION,
         'timestamp' => date('Y-m-d H:i:s'),
     ], $logCtx)));
 
@@ -119,7 +260,7 @@ function fetch($url, $options = []) {
     $bytesReceived   = curl_getinfo($ch, CURLINFO_SIZE_DOWNLOAD);
     curl_close($ch);
 
-    error_log("[CHB_CURL_REQUEST_FINISHED] " . json_encode(array_merge([
+    error_log("[{$module}_CURL_REQUEST_FINISHED] " . json_encode(array_merge([
         'url' => $urlSanitized,
         'host' => $host,
         'httpCode' => $httpCode,
@@ -130,17 +271,18 @@ function fetch($url, $options = []) {
         'startTransferTime' => round($startTransfer, 3),
         'primaryIp' => $primaryIp ?: null,
         'bytesReceived' => $bytesReceived,
+        'backendVersion' => BACKEND_API_VERSION,
         'timestamp' => date('Y-m-d H:i:s'),
     ], $logCtx)));
 
     if ($curlError) {
         // Classifica o tipo de falha para stage mais específico
         if ($curlErrno === CURLE_OPERATION_TIMEDOUT && $connectTime < 0.01) {
-            throw new Exception("[CHB_AI_CONNECTION_TIMEOUT] cURL: " . $curlError);
+            throw new Exception("[{$module}_AI_CONNECTION_TIMEOUT] cURL: " . $curlError);
         } elseif ($curlErrno === CURLE_OPERATION_TIMEDOUT) {
-            throw new Exception("[CHB_AI_RESPONSE_TIMEOUT] cURL: " . $curlError);
+            throw new Exception("[{$module}_AI_RESPONSE_TIMEOUT] cURL: " . $curlError);
         }
-        throw new Exception("[CHB_CURL_ERROR_" . $curlErrno . "] cURL: " . $curlError);
+        throw new Exception("[{$module}_CURL_ERROR_" . $curlErrno . "] cURL: " . $curlError);
     }
 
     return [
@@ -286,7 +428,9 @@ function parseXlsxSimple($xlsxBase64) {
  * Executa um script PHP em background.
  * Retorna array com 'success', 'method' e 'error' (se falhou).
  */
-function runPHPBackground($scriptPath, $args = []) {
+function runPHPBackground($scriptPath, $args = [], $logPrefix = 'WORKER') {
+    $dispatchStart = microtime(true);
+
     if (strncasecmp(PHP_OS, 'WIN', 3) === 0) {
         // Windows: dispara via start /B
         $phpBin = 'C:\\xampp\\php\\php.exe';
@@ -294,8 +438,9 @@ function runPHPBackground($scriptPath, $args = []) {
         $escapedArgs = array_map('escapeshellarg', $args);
         $argsStr = implode(' ', $escapedArgs);
         $cmd = "start /B \"\" " . escapeshellarg($phpBin) . " " . escapeshellarg($scriptPath) . " " . $argsStr . " > NUL 2>&1";
+        error_log("[{$logPrefix}_WORKER_DISPATCH_STARTED] " . json_encode(['method' => 'windows', 'phpBin' => $phpBin, 'scriptPath' => $scriptPath, 'cwd' => getcwd()]));
         pclose(popen($cmd, "r"));
-        error_log("[CHB_WORKER_DISPATCHED] method=windows cmd=" . $cmd);
+        error_log("[{$logPrefix}_WORKER_DISPATCH_SUCCEEDED] " . json_encode(['method' => 'windows', 'durationMs' => round((microtime(true) - $dispatchStart) * 1000)]));
         return ['success' => true, 'method' => 'windows'];
     }
 
@@ -304,19 +449,17 @@ function runPHPBackground($scriptPath, $args = []) {
     $execEnabled = function_exists('exec') && !in_array('exec', array_map('trim', explode(',', $disabled)));
 
     if ($execEnabled) {
-        // Determina binário PHP CLI adequado
+        // Determina binário PHP CLI adequado — nunca usa lsphp (SAPI web), apenas CLI real
         $phpBin = 'php';
         $candidates = [];
 
         if (defined('PHP_BINARY') && PHP_BINARY) {
             $binaryName = basename(PHP_BINARY);
-            // Exclui CGI/FPM — apenas CLI real
             if (in_array($binaryName, ['php', 'php-cli', 'php.exe'])) {
                 $candidates[] = PHP_BINARY;
             }
         }
 
-        // Candidatos genéricos de shared hosting
         $candidates = array_merge($candidates, [
             '/usr/bin/php',
             '/usr/local/bin/php',
@@ -335,27 +478,63 @@ function runPHPBackground($scriptPath, $args = []) {
 
         $escapedArgs = array_map('escapeshellarg', $args);
         $argsStr = implode(' ', $escapedArgs);
-        $logFile = sys_get_temp_dir() . '/dachser_worker_' . md5($argsStr) . '.log';
-        $cmd = escapeshellarg($phpBin) . ' ' . escapeshellarg($scriptPath) . ' ' . $argsStr . ' > ' . escapeshellarg($logFile) . ' 2>&1 &';
+        $jobKey = md5($argsStr . microtime(true));
+        $logFile = sys_get_temp_dir() . '/dachser_worker_' . $jobKey . '.log';
+        $pidFile = sys_get_temp_dir() . '/dachser_worker_' . $jobKey . '.pid';
+        // Subshell captura o PID real do processo em background ($!) para permitir
+        // confirmar via /proc que o worker realmente foi criado (não apenas que o
+        // shell aceitou o comando sem lançar exceção).
+        $cmd = escapeshellarg($phpBin) . ' ' . escapeshellarg($scriptPath) . ' ' . $argsStr
+             . ' > ' . escapeshellarg($logFile) . ' 2>&1 & echo $! > ' . escapeshellarg($pidFile);
 
-        error_log("[CHB_WORKER_DISPATCHED] method=cli phpBin=$phpBin scriptPath=$scriptPath cmd=$cmd");
+        error_log("[{$logPrefix}_WORKER_DISPATCH_STARTED] " . json_encode([
+            'method' => 'cli', 'phpBin' => $phpBin, 'scriptPath' => $scriptPath,
+            'cwd' => getcwd(), 'cmd' => $cmd, 'backendVersion' => BACKEND_API_VERSION,
+        ]));
+
         exec($cmd, $output, $exitCode);
 
-        // Pequena espera para verificar se o processo iniciou
-        usleep(200000); // 200ms
-        $started = file_exists($logFile);
+        // Poll curto (até ~1.2s) para confirmar que o processo realmente existe.
+        $pid = null;
+        $alive = false;
+        for ($i = 0; $i < 8; $i++) {
+            usleep(150000); // 150ms
+            if ($pid === null && file_exists($pidFile)) {
+                $pid = (int)trim((string)@file_get_contents($pidFile));
+            }
+            if ($pid && is_dir("/proc/$pid")) {
+                $alive = true;
+                break;
+            }
+            if (file_exists($logFile)) {
+                // Sem /proc (ambiente sem procfs) ou processo já finalizou rápido:
+                // ao menos confirmamos que o interpretador chegou a escrever saída.
+                $alive = true;
+            }
+        }
+        $durationMs = round((microtime(true) - $dispatchStart) * 1000);
+        @unlink($pidFile);
 
-        if ($exitCode === 0 || $started) {
-            error_log("[CHB_WORKER_STARTED] method=cli phpBin=$phpBin pid_check=started=$started");
-            return ['success' => true, 'method' => 'cli', 'phpBin' => $phpBin];
+        if ($exitCode === 0 && ($alive || $pid)) {
+            error_log("[{$logPrefix}_WORKER_DISPATCH_SUCCEEDED] " . json_encode([
+                'method' => 'cli', 'phpBin' => $phpBin, 'pid' => $pid, 'alive' => $alive,
+                'exitCode' => $exitCode, 'durationMs' => $durationMs, 'logFile' => $logFile,
+            ]));
+            return ['success' => true, 'method' => 'cli', 'phpBin' => $phpBin, 'pid' => $pid];
         }
 
-        error_log("[CHB_WORKER_DISPATCH_FAILED] method=cli phpBin=$phpBin exitCode=$exitCode");
+        error_log("[{$logPrefix}_WORKER_DISPATCH_FAILED] " . json_encode([
+            'method' => 'cli', 'phpBin' => $phpBin, 'pid' => $pid, 'alive' => $alive,
+            'exitCode' => $exitCode, 'durationMs' => $durationMs, 'stdout' => implode("\n", (array)$output),
+        ]));
+    } else {
+        error_log("[{$logPrefix}_WORKER_DISPATCH_FAILED] " . json_encode(['method' => 'cli', 'error' => 'exec() desabilitado', 'disable_functions' => $disabled]));
     }
 
     // ── ESTRATÉGIA 2: Loopback HTTP (apenas como disparo, NÃO aguarda resposta) ─
-    // Timeout mínimo de 2s: envia o job e abandona imediatamente.
+    // Timeout curto de 3s: envia o job e abandona imediatamente.
     // NUNCA use cURL loopback aguardando a resposta completa de um job demorado.
+    $loopbackStart = microtime(true);
     try {
         $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
             || ($_SERVER['SERVER_PORT'] == 443)
@@ -363,6 +542,8 @@ function runPHPBackground($scriptPath, $args = []) {
         $protocol = $isHttps ? 'https://' : 'http://';
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
         $url = $protocol . $host . '/api/background-worker';
+
+        error_log("[{$logPrefix}_WORKER_DISPATCH_STARTED] " . json_encode(['method' => 'loopback', 'url' => $url]));
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -377,18 +558,19 @@ function runPHPBackground($scriptPath, $args = []) {
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $loopErr = curl_error($ch);
         curl_close($ch);
-
-        error_log("[CHB_WORKER_DISPATCHED] method=loopback url=$url httpCode=$httpCode err=$loopErr");
+        $durationMs = round((microtime(true) - $loopbackStart) * 1000);
 
         if ($httpCode >= 200 && $httpCode < 300) {
+            error_log("[{$logPrefix}_WORKER_DISPATCH_SUCCEEDED] " . json_encode(['method' => 'loopback', 'httpCode' => $httpCode, 'durationMs' => $durationMs]));
             return ['success' => true, 'method' => 'loopback', 'httpCode' => $httpCode];
         }
+        error_log("[{$logPrefix}_WORKER_DISPATCH_FAILED] " . json_encode(['method' => 'loopback', 'httpCode' => $httpCode, 'error' => $loopErr, 'durationMs' => $durationMs]));
     } catch (Throwable $e) {
-        error_log("[CHB_WORKER_DISPATCH_FAILED] method=loopback error=" . $e->getMessage());
+        error_log("[{$logPrefix}_WORKER_DISPATCH_FAILED] " . json_encode(['method' => 'loopback', 'error' => $e->getMessage()]));
     }
 
     // ── FALHA TOTAL: nenhum método funcionou ─────────────────────────────────
-    error_log("[CHB_WORKER_DISPATCH_FAILED] All dispatch methods failed. scriptPath=$scriptPath");
+    error_log("[{$logPrefix}_WORKER_DISPATCH_FAILED] " . json_encode(['method' => 'none', 'scriptPath' => $scriptPath, 'error' => 'exec bloqueado e loopback falhou']));
     return ['success' => false, 'method' => 'none', 'error' => 'exec bloqueado e loopback falhou'];
 }
 

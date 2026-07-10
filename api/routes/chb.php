@@ -378,7 +378,7 @@ function chbCallAnthropic($prompt, $files, $logCtx = []) {
         'body' => $body,
         'connectTimeout' => 10,
         'timeout' => 300,
-        'logCtx' => array_merge($logCtx, ['stage' => 'CHB_AI_REQUEST', 'provider' => 'Anthropic', 'fileCount' => count($files)]),
+        'logCtx' => array_merge($logCtx, ['module' => 'chb', 'stage' => 'CHB_AI_REQUEST', 'provider' => 'Anthropic', 'fileCount' => count($files)]),
     ]);
 
     if (!$res['ok']) {
@@ -430,7 +430,7 @@ function chbCallGeminiVision($prompt, $files, $logCtx = []) {
         'body' => $body,
         'connectTimeout' => 10,
         'timeout' => 300,
-        'logCtx' => array_merge($logCtx, ['stage' => 'CHB_AI_REQUEST', 'provider' => 'Gemini', 'fileCount' => count($files)]),
+        'logCtx' => array_merge($logCtx, ['module' => 'chb', 'stage' => 'CHB_AI_REQUEST', 'provider' => 'Gemini', 'fileCount' => count($files)]),
     ]);
 
     if (!$res['ok']) {
@@ -498,11 +498,22 @@ function chbProcessAnalysis($runId, $stepId, $files, $clientConfig, $itemId) {
     $requestId = uniqid('chb_');
     $filesCount = is_array($files) ? count($files) : 0;
     
-    $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_REQUEST_PICKED_BY_WORKER', $startTime, $lastStepTime, [
-        'quantidade_arquivos' => $filesCount
+    $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_WORKER_STARTED', $startTime, $lastStepTime, [
+        'quantidade_arquivos' => $filesCount, 'backendVersion' => BACKEND_API_VERSION, 'sapi' => PHP_SAPI
     ]);
-    
+
     try {
+        // Falha rápido se nenhuma chave de IA estiver disponível neste ambiente (CLI/worker).
+        $anthropicKeyDiag = describeEnvKey('CHB_ANTHROPIC_API_KEY');
+        $anthropicFallbackDiag = describeEnvKey('ANTHROPIC_API_KEY');
+        $geminiKeyDiag = describeEnvKey('GEMINI_API_KEY');
+        $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_AI_CONFIG_VALIDATED', $startTime, $lastStepTime, [
+            'chb_anthropic' => $anthropicKeyDiag, 'anthropic_fallback' => $anthropicFallbackDiag, 'gemini' => $geminiKeyDiag,
+        ]);
+        if (!$anthropicKeyDiag['non_empty'] && !$anthropicFallbackDiag['non_empty'] && !$geminiKeyDiag['non_empty']) {
+            throw new Exception("[CHB_AI_CONFIG_MISSING] Nenhuma chave de IA configurada no ambiente (SAPI: " . PHP_SAPI . ")");
+        }
+
         $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_STATUS_PROCESSING', $startTime, $lastStepTime);
         opsQuery("UPDATE dados_dachser.t_chb_runs SET status = 'processing' WHERE id = ?", [$runId]);
         
@@ -645,7 +656,9 @@ function chbProcessAnalysis($runId, $stepId, $files, $clientConfig, $itemId) {
         // Determina errorCode a partir do prefixo da mensagem (set pela função fetch())
         $errMsg = $err->getMessage();
         $errorCode = 'CHB_PROCESSING_ERROR';
-        if (strpos($errMsg, '[CHB_AI_CONNECTION_TIMEOUT]') !== false) {
+        if (strpos($errMsg, '[CHB_AI_CONFIG_MISSING]') !== false) {
+            $errorCode = 'CHB_AI_CONFIG_MISSING';
+        } elseif (strpos($errMsg, '[CHB_AI_CONNECTION_TIMEOUT]') !== false) {
             $errorCode = 'CHB_AI_CONNECTION_TIMEOUT';
         } elseif (strpos($errMsg, '[CHB_AI_RESPONSE_TIMEOUT]') !== false) {
             $errorCode = 'CHB_AI_RESPONSE_TIMEOUT';
@@ -681,6 +694,31 @@ function chbProcessAnalysis($runId, $stepId, $files, $clientConfig, $itemId) {
 }
 
 // ── ROTAS CHB ────────────────────────────────────────────────────────────────
+
+// GET /api/chb/diagnosticos-ia
+// Diagnóstico de conectividade com os provedores de IA usados no CHB — NÃO envia
+// documentos, apenas valida chave/DNS/SSL/autenticação a partir do ambiente atual.
+$router->get('chb/diagnosticos-ia', function($params) {
+    $chbAnthropicDiag = describeEnvKey('CHB_ANTHROPIC_API_KEY');
+    $anthropicFallbackDiag = describeEnvKey('ANTHROPIC_API_KEY');
+    $geminiKeyDiag = describeEnvKey('GEMINI_API_KEY');
+    $chbOpenaiDiag = describeEnvKey('CHB_OPENAI_API_KEY');
+
+    $anthropicKey = $_ENV['CHB_ANTHROPIC_API_KEY'] ?? ($_ENV['ANTHROPIC_API_KEY'] ?? null);
+    $anthropicModel = isset($_ENV['CHB_ANTHROPIC_MODEL']) ? $_ENV['CHB_ANTHROPIC_MODEL'] : 'claude-sonnet-4-6';
+    $geminiModel = isset($_ENV['CHB_GEMINI_MODEL']) ? $_ENV['CHB_GEMINI_MODEL'] : 'gemini-2.5-pro';
+
+    sendJson([
+        'success' => true,
+        'backendVersion' => BACKEND_API_VERSION,
+        'sapi' => PHP_SAPI,
+        'keys' => ['chb_anthropic' => $chbAnthropicDiag, 'anthropic_fallback' => $anthropicFallbackDiag, 'gemini' => $geminiKeyDiag, 'chb_openai' => $chbOpenaiDiag],
+        'connectivity' => [
+            'anthropic' => validateAiConnectivityAnthropic($anthropicKey, $anthropicModel),
+            'gemini' => validateAiConnectivityGemini($_ENV['GEMINI_API_KEY'] ?? null, $geminiModel),
+        ],
+    ]);
+});
 
 // GET /api/chb/items
 $router->get('chb/items', function($params) {
@@ -1230,9 +1268,26 @@ $router->post('chb/analyze-documents', function($params) {
             $dbNow = strtotime($row['db_now']);
             $createdAt = strtotime($row['created_at']);
             $elapsedSeconds = $dbNow - $createdAt;
-            $timeoutSeconds = 600; // 10 minutes
+            $dispatchTimeoutSeconds = 45;    // worker deveria sair de 'pending' rapidamente
+            $processingTimeoutSeconds = 600; // 10 minutos de processamento com IA
 
-            if (($status === 'pending' || $status === 'processing') && $elapsedSeconds > $timeoutSeconds) {
+            if ($status === 'pending' && $elapsedSeconds > $dispatchTimeoutSeconds) {
+                $errorPayload = json_encode([
+                    'success' => false,
+                    'error' => 'O worker de processamento não assumiu a análise a tempo.',
+                    'errorCode' => 'CHB_WORKER_NOT_STARTED',
+                    'stage' => 'WORKER_DISPATCH',
+                    'requestId' => $body['requestId'],
+                    'elapsedMs' => $elapsedSeconds * 1000,
+                ]);
+                opsQuery(
+                    "UPDATE dados_dachser.t_chb_runs SET status = 'error', result_text = ? WHERE id = ?",
+                    [$errorPayload, $body['requestId']]
+                );
+                $status = 'error';
+                $row['result_text'] = $errorPayload;
+                error_log("[CHB_ANALYSIS_FAILED] " . json_encode(['requestId' => $body['requestId'], 'errorCode' => 'CHB_WORKER_NOT_STARTED', 'elapsedSeconds' => $elapsedSeconds]));
+            } elseif ($status === 'processing' && $elapsedSeconds > $processingTimeoutSeconds) {
                 $errorPayload = json_encode([
                     'success' => false,
                     'error' => 'A análise demorou mais que o esperado. O processamento foi interrompido.',
@@ -1247,6 +1302,7 @@ $router->post('chb/analyze-documents', function($params) {
                 );
                 $status = 'error';
                 $row['result_text'] = $errorPayload;
+                error_log("[CHB_ANALYSIS_FAILED] " . json_encode(['requestId' => $body['requestId'], 'errorCode' => 'CHB_AI_REQUEST_TIMEOUT', 'elapsedSeconds' => $elapsedSeconds]));
             }
 
             $result = null;
@@ -1254,7 +1310,29 @@ $router->post('chb/analyze-documents', function($params) {
                 $result = json_decode($row['result_html'], true);
                 if (!$result) $result = ['html' => $row['result_html']];
             }
-            sendJson(['status' => $status, 'result' => $result, 'error' => $status === 'error' ? $row['result_text'] : null]);
+
+            $errorMessage = null; $errorCode = null; $errorStage = null;
+            if ($status === 'error') {
+                $errJson = null;
+                try { $errJson = $row['result_text'] ? json_decode($row['result_text'], true) : null; } catch (Throwable $ex) {}
+                if (is_array($errJson) && isset($errJson['error'])) {
+                    $errorMessage = $errJson['error'];
+                    $errorCode = $errJson['errorCode'] ?? null;
+                    $errorStage = $errJson['stage'] ?? null;
+                } else {
+                    $errorMessage = $row['result_text'];
+                }
+            }
+
+            sendJson([
+                'status' => $status,
+                'result' => $result,
+                'error' => $errorMessage,
+                'errorCode' => $errorCode,
+                'stage' => $errorStage,
+                'elapsedSeconds' => $elapsedSeconds,
+                'backendVersion' => BACKEND_API_VERSION,
+            ]);
             return;
         }
 
@@ -1274,11 +1352,32 @@ $router->post('chb/analyze-documents', function($params) {
             sendJson(['error' => "Input muito grande ($estimatedTokens tokens estimados). Reduza o número ou tamanho dos arquivos."], 400);
         }
 
+        // Evita duplicidade: se já existe uma análise pending/processing recente (<15min)
+        // para este item+etapa, reaproveita em vez de disparar outro worker concorrente.
+        if ($itemId) {
+            $existing = opsQuery(
+                "SELECT id, status, created_at, TIMESTAMPDIFF(SECOND, created_at, NOW()) as age_seconds
+                 FROM dados_dachser.t_chb_runs
+                 WHERE item_id = ? AND etapa = ? AND status IN ('pending', 'processing')
+                 ORDER BY id DESC LIMIT 1",
+                [$itemId, (string)$stepId]
+            );
+            if (count($existing) > 0 && (int)$existing[0]['age_seconds'] < 900) {
+                error_log("[CHB_REQUEST_CREATED] " . json_encode(['reused' => true, 'analysis_request_id' => $existing[0]['id'], 'conference_id' => $itemId, 'status' => $existing[0]['status']]));
+                sendJson(['requestId' => (string)$existing[0]['id'], 'status' => $existing[0]['status'], 'message' => 'Análise já está em processamento', 'reused' => true]);
+                return;
+            }
+        }
+
         $insert = opsQuery(
             "INSERT INTO dados_dachser.t_chb_runs (item_id, etapa, status, result_text, used_as_ctx, created_by) VALUES (?, ?, 'pending', ?, 0, ?)",
             [$itemId ?: 0, (string)$stepId, json_encode(['filesCount' => count($files), 'fileNames' => array_map(function($f) { return $f['name'] ?? ''; }, $files), 'hasClientConfig' => (bool)$clientConfig]), null]
         );
         $requestId = (string)($insert['insertId'] ?? '');
+        error_log("[CHB_REQUEST_CREATED] " . json_encode([
+            'analysis_request_id' => $requestId, 'conference_id' => $itemId, 'etapa' => $stepId,
+            'status' => 'pending', 'filesCount' => count($files), 'backendVersion' => BACKEND_API_VERSION,
+        ]));
 
         $jobData = [
             'task' => 'chb_analysis',
@@ -1290,7 +1389,7 @@ $router->post('chb/analyze-documents', function($params) {
         ];
         $jobFile = sys_get_temp_dir() . '/dachser_chb_job_' . $requestId . '.json';
         file_put_contents($jobFile, json_encode($jobData));
-        $dispatchResult = runPHPBackground(dirname(__DIR__) . '/background_worker.php', [$jobFile]);
+        $dispatchResult = runPHPBackground(dirname(__DIR__) . '/background_worker.php', [$jobFile], 'CHB');
 
         if (!($dispatchResult['success'] ?? false)) {
             // Worker não iniciou — marca a análise como failed imediatamente
