@@ -2728,6 +2728,245 @@ $router->post('fin/regua/send-emails', function ($params) {
     }
 });
 
+// ── PATCH /api/fin/vouchers/:id/tipo-execucao ────────────────────────────────
+$router->patch('fin/vouchers/:id/tipo-execucao', function ($params) {
+    try {
+        $id = $params['id'];
+        $b = getRequestBody();
+        $tipo_execucao_pagamento = $b['tipo_execucao_pagamento'] ?? null;
+        $allowed = ['A_DEFINIR', 'MANUAL', 'REMESSA_10H', 'REMESSA_15H', 'PAGO_ADF'];
+
+        if (!$id || !$tipo_execucao_pagamento) {
+            sendJson(['success' => false, 'error' => 'id e tipo_execucao_pagamento são obrigatórios'], 400);
+        }
+        if (!in_array($tipo_execucao_pagamento, $allowed)) {
+            sendJson([
+                'success' => false,
+                'code' => 'INVALID_EXECUTION_TYPE',
+                'message' => 'Tipo de execução inválido.',
+                'allowedValues' => $allowed
+            ], 422);
+        }
+
+        // Verificar existência do voucher
+        $vouchers = finQuery("SELECT id, tipo_execucao_pagamento FROM dados_dachser.t_vouchers WHERE id = ? LIMIT 1", [$id]);
+        if (empty($vouchers)) {
+            sendJson([
+                'success' => false,
+                'code' => 'VOUCHER_NOT_FOUND',
+                'message' => 'Voucher/SPO não encontrado.'
+            ], 404);
+        }
+        $voucher = $vouchers[0];
+        $previousValue = $voucher['tipo_execucao_pagamento'];
+
+        if ($tipo_execucao_pagamento === 'PAGO_ADF') {
+            finQuery(
+                "UPDATE dados_dachser.t_vouchers SET tipo_execucao_pagamento = ?,
+                 etapa_atual = CASE WHEN etapa_atual = 'FINANCEIRO' THEN 'ROBO' ELSE etapa_atual END,
+                 updated_at = NOW() WHERE id = ?",
+                [$tipo_execucao_pagamento, $id]
+            );
+        } else {
+            finQuery(
+                "UPDATE dados_dachser.t_vouchers SET tipo_execucao_pagamento = ?, updated_at = NOW() WHERE id = ?",
+                [$tipo_execucao_pagamento, $id]
+            );
+        }
+
+        // Registro de auditoria/log estruturado
+        $requestId = uniqid('fin_');
+        $log = [
+            'requestId' => $requestId,
+            'voucherId' => $id,
+            'userId' => $_SESSION['user_id'] ?? null,
+            'previousValue' => $previousValue,
+            'newValue' => $tipo_execucao_pagamento,
+            'endpoint' => 'fin/vouchers/:id/tipo-execucao',
+            'method' => 'PATCH',
+            'status' => 'success',
+            'timestamp' => date('Y-m-d H:i:s')
+        ];
+        error_log("[FIN_VOUCHER_UPDATED] " . json_encode($log));
+
+        sendJson([
+            'success' => true,
+            'voucherId' => $id,
+            'tipoExecucao' => $tipo_execucao_pagamento,
+            'message' => 'Tipo de execução atualizado com sucesso.'
+        ]);
+    } catch (Exception $e) {
+        $requestId = uniqid('fin_');
+        error_log("[FIN_VOUCHER_UPDATE_FAILED] " . json_encode([
+            'requestId' => $requestId,
+            'voucherId' => $params['id'] ?? null,
+            'error' => $e->getMessage()
+        ]));
+        sendJson([
+            'success' => false,
+            'code' => 'VOUCHER_UPDATE_FAILED',
+            'message' => 'Não foi possível atualizar o voucher.',
+            'technicalMessage' => $e->getMessage(),
+            'requestId' => $requestId
+        ], 500);
+    }
+});
+
+// ── POST /api/fin/vouchers/batch-tipo-execucao ────────────────────────────────
+$router->post('fin/vouchers/batch-tipo-execucao', function ($params) {
+    try {
+        $b = getRequestBody();
+        $voucher_ids = $b['voucher_ids'] ?? [];
+        $tipo_execucao_pagamento = $b['tipo_execucao_pagamento'] ?? null;
+        $allowed = ['A_DEFINIR', 'MANUAL', 'REMESSA_10H', 'REMESSA_15H', 'PAGO_ADF'];
+
+        if (empty($voucher_ids) || !$tipo_execucao_pagamento) {
+            sendJson(['success' => false, 'error' => 'voucher_ids e tipo_execucao_pagamento são obrigatórios'], 400);
+        }
+        if (!in_array($tipo_execucao_pagamento, $allowed)) {
+            sendJson([
+                'success' => false,
+                'code' => 'INVALID_EXECUTION_TYPE',
+                'message' => 'Tipo de execução inválido.',
+                'allowedValues' => $allowed
+            ], 422);
+        }
+
+        $placeholders = implode(',', array_fill(0, count($voucher_ids), '?'));
+        $isAdf = ($tipo_execucao_pagamento === 'PAGO_ADF');
+        
+        $sql = "UPDATE dados_dachser.t_vouchers 
+                SET tipo_execucao_pagamento = ?,
+                    " . ($isAdf ? "etapa_atual = CASE WHEN etapa_atual = 'FINANCEIRO' THEN 'ROBO' ELSE etapa_atual END," : "") . "
+                    updated_at = NOW()
+                WHERE id IN ($placeholders)";
+        
+        $qpParams = array_merge([$tipo_execucao_pagamento], $voucher_ids);
+        finQuery($sql, $qpParams);
+
+        sendJson(['success' => true, 'updated' => count($voucher_ids)]);
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
+// ── PATCH /api/fin/vouchers/:id/pronto-robo ──────────────────────────────────
+$router->patch('fin/vouchers/:id/pronto-robo', function ($params) {
+    try {
+        $id = $params['id'];
+        $b = getRequestBody();
+        $is_pronto = isset($b['is_pronto']) ? (int)$b['is_pronto'] : null;
+
+        if (!$id) {
+            sendJson(['success' => false, 'error' => 'voucher_id é obrigatório'], 400);
+        }
+
+        $vouchers = finQuery(
+            "SELECT tipo_execucao_pagamento, forma_pagamento, status_comprovante FROM dados_dachser.t_vouchers WHERE id = ? LIMIT 1",
+            [$id]
+        );
+        if (empty($vouchers)) {
+            sendJson([
+                'success' => false,
+                'code' => 'VOUCHER_NOT_FOUND',
+                'message' => 'Voucher/SPO não encontrado.'
+            ], 404);
+        }
+        $voucher = $vouchers[0];
+        $tipoExec = $voucher['tipo_execucao_pagamento'];
+        $formaPag = strtoupper($voucher['forma_pagamento'] ?? '');
+        $statusComp = strtoupper($voucher['status_comprovante'] ?? '');
+        $isDebito = ($formaPag === 'DEBITO');
+        $isPagoAdf = ($tipoExec === 'PAGO_ADF');
+
+        if ($is_pronto && $isPagoAdf) {
+            if ($statusComp !== 'ANEXADO' && $statusComp !== 'VALIDADO') {
+                sendJson([
+                    'success' => false,
+                    'code' => 'COMPROVANTE_OBRIGATORIO',
+                    'message' => 'Anexe o comprovante antes de marcar como pronto.'
+                ], 409);
+            }
+            finQuery(
+                "UPDATE dados_dachser.t_vouchers SET is_pronto_para_robo = 1, status_pagamento = 'PAGO',
+                 status_baixa = 'BAIXA_MANUAL', status_financeiro = 'CONCLUIDO', etapa_atual = 'CONCLUIDO', updated_at = NOW()
+                 WHERE id = ?",
+                [$id]
+            );
+            
+            // Gerar UUID para log de voucher
+            $logUuid = bin2hex(random_bytes(16)); // UUID v4 format approximation (32 hex chars)
+            $logUuid = substr($logUuid, 0, 8) . '-' . substr($logUuid, 8, 4) . '-' . substr($logUuid, 12, 4) . '-' . substr($logUuid, 16, 4) . '-' . substr($logUuid, 20);
+            
+            finQuery(
+                "INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+                 VALUES (?, ?, NULL, 'Sistema', 'CONCLUIDO_PAGO_ADF', 'Voucher concluído via Pago em ADF — comprovante anexado, sem passar pelo robô', NOW())",
+                [$logUuid, $id]
+            );
+            sendJson(['success' => true, 'auto_concluded' => true, 'reason' => 'PAGO_ADF']);
+            return;
+        }
+
+        if ($is_pronto && $isDebito) {
+            finQuery(
+                "UPDATE dados_dachser.t_vouchers SET is_pronto_para_robo = 1, status_pagamento = 'PAGO',
+                 status_baixa = 'BAIXA_DEBITO', status_financeiro = 'CONCLUIDO', status_comprovante = 'NAO_APLICA',
+                 etapa_atual = 'CONCLUIDO', updated_at = NOW() WHERE id = ?",
+                [$id]
+            );
+            
+            $logUuid = bin2hex(random_bytes(16));
+            $logUuid = substr($logUuid, 0, 8) . '-' . substr($logUuid, 8, 4) . '-' . substr($logUuid, 12, 4) . '-' . substr($logUuid, 16, 4) . '-' . substr($logUuid, 20);
+            
+            finQuery(
+                "INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+                 VALUES (?, ?, NULL, 'Sistema', 'BAIXA_DEBITO_AUTOMATICA', 'Voucher concluído via débito automático — sem comprovante necessário', NOW())",
+                [$logUuid, $id]
+            );
+            sendJson(['success' => true, 'auto_concluded' => true, 'reason' => 'DEBITO']);
+            return;
+        }
+
+        $statusBaixa = (strpos($tipoExec ?? '', 'REMESSA') !== false) ? 'BAIXA_REMESSA' : 'BAIXA_MANUAL';
+        finQuery(
+            "UPDATE dados_dachser.t_vouchers
+             SET is_pronto_para_robo = ?,
+                 status_pagamento = CASE WHEN ? = 1 THEN 'PRONTO' ELSE status_pagamento END,
+                 status_baixa = CASE WHEN ? = 1 THEN ? ELSE status_baixa END,
+                 etapa_atual = CASE WHEN ? = 1 THEN 'ROBO' ELSE etapa_atual END,
+                 updated_at = NOW()
+             WHERE id = ?",
+            [$is_pronto ? 1 : 0, $is_pronto ? 1 : 0, $is_pronto ? 1 : 0, $statusBaixa, $is_pronto ? 1 : 0, $id]
+        );
+        sendJson(['success' => true]);
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
+// ── PATCH /api/fin/dados-rm/tipo-exec ────────────────────────────────────────
+$router->patch('fin/dados-rm/tipo-exec', function ($params) {
+    try {
+        $b = getRequestBody();
+        $id_rm = $b['id_rm'] ?? null;
+        $numero_spo = $b['numero_spo'] ?? null;
+        $tipo_exec = $b['tipo_exec'] ?? null;
+        $updateKey = $id_rm ?: $numero_spo;
+
+        if (!$updateKey) {
+            sendJson(['success' => false, 'error' => 'id_rm ou numero_spo é obrigatório'], 400);
+        }
+        
+        finQuery(
+            "UPDATE dados_dachser.t_dados_rm SET tipo_exec = ? WHERE id_rm = ? OR nd = ?",
+            [$tipo_exec ?: null, $updateKey, $numero_spo ?: $updateKey]
+        );
+        sendJson(['success' => true]);
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
 // ── EXCEL HELPERS ────────────────────────────────────────────────────────────
 function generateSimpleXlsx($sheets)
 {
