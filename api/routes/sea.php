@@ -1002,13 +1002,14 @@ $router->post('sea/maritimo/submit-analysis', function($params) {
             'files' => count($allFiles),
             'requestId' => $requestId
         ]);
-    } catch (Exception $e) {
+    } catch (Throwable $e) {
         error_log("[ANALYSIS_FAILED] [RequestId: $requestId] [Step: $step] Error: " . $e->getMessage());
         sendJson([
             'success' => false,
             'code' => 'SEA_AI_REQUEST_FAILED',
+            'error' => 'Não foi possível processar os documentos. Erro: ' . $e->getMessage() . ' (Etapa: ' . $step . ')',
             'message' => 'Não foi possível processar os documentos.',
-            'technicalMessage' => $e->getMessage(),
+            'technicalMessage' => $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine(),
             'requestId' => $requestId,
             'step' => $step
         ], 500);
