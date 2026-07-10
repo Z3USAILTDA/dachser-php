@@ -432,16 +432,28 @@ function runPHPBackground($scriptPath, $args = [], $logPrefix = 'WORKER') {
     $dispatchStart = microtime(true);
 
     if (strncasecmp(PHP_OS, 'WIN', 3) === 0) {
-        // Windows: dispara via start /B
+        // Windows (apenas ambiente de desenvolvimento local — produção é Linux):
+        // usa proc_open com array de argumentos (evita problemas de escaping de
+        // shell em caminhos com espaços/parênteses) e redireciona saída a um log.
         $phpBin = 'C:\\xampp\\php\\php.exe';
         if (!file_exists($phpBin)) $phpBin = 'php';
-        $escapedArgs = array_map('escapeshellarg', $args);
-        $argsStr = implode(' ', $escapedArgs);
-        $cmd = "start /B \"\" " . escapeshellarg($phpBin) . " " . escapeshellarg($scriptPath) . " " . $argsStr . " > NUL 2>&1";
-        error_log("[{$logPrefix}_WORKER_DISPATCH_STARTED] " . json_encode(['method' => 'windows', 'phpBin' => $phpBin, 'scriptPath' => $scriptPath, 'cwd' => getcwd()]));
-        pclose(popen($cmd, "r"));
-        error_log("[{$logPrefix}_WORKER_DISPATCH_SUCCEEDED] " . json_encode(['method' => 'windows', 'durationMs' => round((microtime(true) - $dispatchStart) * 1000)]));
-        return ['success' => true, 'method' => 'windows'];
+        $winLogFile = sys_get_temp_dir() . '\\dachser_worker_win_' . md5(implode('|', $args) . microtime(true)) . '.log';
+        $cmdArray = array_merge([$phpBin, $scriptPath], $args);
+
+        error_log("[{$logPrefix}_WORKER_DISPATCH_STARTED] " . json_encode(['method' => 'windows', 'phpBin' => $phpBin, 'scriptPath' => $scriptPath, 'cwd' => getcwd(), 'cmdArray' => $cmdArray, 'logFile' => $winLogFile]));
+
+        $descriptorSpec = [0 => ['pipe', 'r'], 1 => ['file', $winLogFile, 'w'], 2 => ['file', $winLogFile, 'a']];
+        $process = proc_open($cmdArray, $descriptorSpec, $pipes, null, null, ['bypass_shell' => true]);
+
+        if (is_resource($process)) {
+            fclose($pipes[0]);
+            $status = proc_get_status($process);
+            error_log("[{$logPrefix}_WORKER_DISPATCH_SUCCEEDED] " . json_encode(['method' => 'windows', 'pid' => $status['pid'] ?? null, 'durationMs' => round((microtime(true) - $dispatchStart) * 1000), 'logFile' => $winLogFile]));
+            return ['success' => true, 'method' => 'windows', 'pid' => $status['pid'] ?? null, 'logFile' => $winLogFile];
+        }
+
+        error_log("[{$logPrefix}_WORKER_DISPATCH_FAILED] " . json_encode(['method' => 'windows', 'error' => 'proc_open falhou']));
+        return ['success' => false, 'method' => 'windows', 'error' => 'proc_open falhou'];
     }
 
     // ── ESTRATÉGIA 1: PHP CLI via exec (preferida em shared hosting) ──────────
