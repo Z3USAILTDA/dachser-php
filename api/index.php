@@ -107,6 +107,19 @@ $path_parts = explode('?', $path);
 $route = trim($path_parts[0], '/');
 $method = $_SERVER['REQUEST_METHOD'];
 
+// Rota de teste de deploy
+if ($route === 'test-deploy' && $method === 'GET') {
+    $seaFile = __DIR__ . '/routes/sea.php';
+    sendJson([
+        'success' => true,
+        'sea_file_exists' => file_exists($seaFile),
+        'sea_file_size' => file_exists($seaFile) ? filesize($seaFile) : 0,
+        'sea_file_md5' => file_exists($seaFile) ? md5_file($seaFile) : '',
+        'sea_file_mtime' => file_exists($seaFile) ? date('c', filemtime($seaFile)) : '',
+    ]);
+    return;
+}
+
 // Rota de Health-check padrão
 if ($route === 'health' && $method === 'GET') {
     sendJson([
