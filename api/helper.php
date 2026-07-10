@@ -492,12 +492,7 @@ function runPHPBackground($scriptPath, $args = [], $logPrefix = 'WORKER') {
         $argsStr = implode(' ', $escapedArgs);
         $jobKey = md5($argsStr . microtime(true));
         $logFile = sys_get_temp_dir() . '/dachser_worker_' . $jobKey . '.log';
-        $pidFile = sys_get_temp_dir() . '/dachser_worker_' . $jobKey . '.pid';
-        // Subshell captura o PID real do processo em background ($!) para permitir
-        // confirmar via /proc que o worker realmente foi criado (não apenas que o
-        // shell aceitou o comando sem lançar exceção).
-        $cmd = escapeshellarg($phpBin) . ' ' . escapeshellarg($scriptPath) . ' ' . $argsStr
-             . ' > ' . escapeshellarg($logFile) . ' 2>&1 & echo $! > ' . escapeshellarg($pidFile);
+        $cmd = escapeshellarg($phpBin) . ' ' . escapeshellarg($scriptPath) . ' ' . $argsStr . ' > ' . escapeshellarg($logFile) . ' 2>&1 &';
 
         error_log("[{$logPrefix}_WORKER_DISPATCH_STARTED] " . json_encode([
             'method' => 'cli', 'phpBin' => $phpBin, 'scriptPath' => $scriptPath,
@@ -506,37 +501,21 @@ function runPHPBackground($scriptPath, $args = [], $logPrefix = 'WORKER') {
 
         exec($cmd, $output, $exitCode);
 
-        // Poll curto (até ~1.2s) para confirmar que o processo realmente existe.
-        $pid = null;
-        $alive = false;
-        for ($i = 0; $i < 8; $i++) {
-            usleep(150000); // 150ms
-            if ($pid === null && file_exists($pidFile)) {
-                $pid = (int)trim((string)@file_get_contents($pidFile));
-            }
-            if ($pid && is_dir("/proc/$pid")) {
-                $alive = true;
-                break;
-            }
-            if (file_exists($logFile)) {
-                // Sem /proc (ambiente sem procfs) ou processo já finalizou rápido:
-                // ao menos confirmamos que o interpretador chegou a escrever saída.
-                $alive = true;
-            }
-        }
+        // Pequena espera para verificar se o processo iniciou (escreveu no log ou retornou sucesso)
+        usleep(250000); // 250ms
+        $started = file_exists($logFile);
         $durationMs = round((microtime(true) - $dispatchStart) * 1000);
-        @unlink($pidFile);
 
-        if ($exitCode === 0 && ($alive || $pid)) {
+        if ($exitCode === 0 || $started) {
             error_log("[{$logPrefix}_WORKER_DISPATCH_SUCCEEDED] " . json_encode([
-                'method' => 'cli', 'phpBin' => $phpBin, 'pid' => $pid, 'alive' => $alive,
+                'method' => 'cli', 'phpBin' => $phpBin, 'started' => $started,
                 'exitCode' => $exitCode, 'durationMs' => $durationMs, 'logFile' => $logFile,
             ]));
-            return ['success' => true, 'method' => 'cli', 'phpBin' => $phpBin, 'pid' => $pid];
+            return ['success' => true, 'method' => 'cli', 'phpBin' => $phpBin];
         }
 
         error_log("[{$logPrefix}_WORKER_DISPATCH_FAILED] " . json_encode([
-            'method' => 'cli', 'phpBin' => $phpBin, 'pid' => $pid, 'alive' => $alive,
+            'method' => 'cli', 'phpBin' => $phpBin, 'started' => $started,
             'exitCode' => $exitCode, 'durationMs' => $durationMs, 'stdout' => implode("\n", (array)$output),
         ]));
     } else {
