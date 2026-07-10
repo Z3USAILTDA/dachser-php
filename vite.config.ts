@@ -24,6 +24,8 @@ export default defineConfig(() => ({
   },
   define: {
     __APP_VERSION__: JSON.stringify(Date.now().toString()),
+    "import.meta.env.VITE_APP_VERSION": JSON.stringify("1.1." + Date.now().toString().slice(-6)),
+    "import.meta.env.VITE_BUILD_DATE": JSON.stringify(new Date().toLocaleString("pt-BR")),
   },
   server: {
     host: "::",
