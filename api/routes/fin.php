@@ -2967,6 +2967,227 @@ $router->patch('fin/dados-rm/tipo-exec', function ($params) {
     }
 });
 
+// ── POST /api/fin/vouchers/:id/cancelar ──────────────────────────────────────
+$router->post('fin/vouchers/:id/cancelar', function ($params) {
+    try {
+        $id = $params['id'];
+        $b = getRequestBody();
+        $motivo = $b['motivo'] ?? null;
+        $voucher_credito = $b['voucher_credito'] ?? null;
+        $user_id = $b['user_id'] ?? null;
+        $user_name = $b['user_name'] ?? 'Sistema';
+
+        if (!$motivo || !$voucher_credito) {
+            sendJson(['success' => false, 'error' => 'motivo e voucher_credito são obrigatórios'], 400);
+        }
+
+        finQuery(
+            "UPDATE dados_dachser.t_vouchers
+             SET etapa_atual = 'CANCELADO',
+                 cancelamento_motivo = ?,
+                 cancelamento_voucher_credito = ?,
+                 cancelado_por_user_id = ?,
+                 cancelado_por_user_name = ?,
+                 cancelado_em = NOW(),
+                 updated_at = NOW()
+             WHERE id = ?",
+            [$motivo, $voucher_credito, $user_id, $user_name, $id]
+        );
+
+        try {
+            finQuery(
+                "INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+                 VALUES (UUID(), ?, ?, ?, 'VOUCHER_CANCELADO', ?, NOW())",
+                [$id, $user_id, $user_name, "Voucher cancelado. Motivo: $motivo. Crédito em: $voucher_credito"]
+            );
+        } catch (Exception $logEx) {
+            // log silencioso
+        }
+
+        sendJson(['success' => true]);
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
+// ── GET /api/fin/vouchers/rm-ready ───────────────────────────────────────────
+$router->get('fin/vouchers/rm-ready', function ($params) {
+    try {
+        $numero_spo = trim($_GET['numero_spo'] ?? '');
+        if (empty($numero_spo)) {
+            sendJson(['ready' => false, 'found' => false, 'missingFields' => ['numero_spo']]);
+        }
+
+        $rows = finQuery("
+            SELECT documento, nd, numero_nf, numero_processo, modal, tipo_pag,
+                   forma_pag, data_emissao, data_vencimento, valor_nf, cnpj, razao_social
+            FROM dados_dachser.t_dados_financeiro_voucher
+            WHERE SUBSTRING_INDEX(TRIM(nd), ' ', 1) COLLATE utf8mb4_unicode_ci
+                = SUBSTRING_INDEX(TRIM(?), ' ', 1) COLLATE utf8mb4_unicode_ci
+            LIMIT 1
+        ", [$numero_spo]);
+
+        if (empty($rows)) {
+            sendJson([
+                'ready' => false,
+                'found' => false,
+                'isManual' => true,
+                'missingFields' => ['registro inexistente em t_dados_financeiro_voucher']
+            ]);
+        }
+
+        $row = $rows[0];
+        $required = ['documento', 'nd', 'numero_nf', 'numero_processo', 'modal', 'tipo_pag', 'forma_pag', 'data_emissao', 'data_vencimento', 'valor_nf', 'cnpj', 'razao_social'];
+        $informational = [];
+        foreach ($required as $f) {
+            $v = $row[$f] ?? null;
+            if ($v === null || $v === '') { $informational[] = $f; continue; }
+            if ($f === 'valor_nf' && (float)$v === 0.0) { $informational[] = $f; continue; }
+        }
+
+        sendJson([
+            'ready' => true,
+            'found' => true,
+            'isManual' => false,
+            'missingFields' => [],
+            'informationalEmptyFields' => $informational
+        ]);
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
+// ── POST /api/fin/vouchers/dados-rm ──────────────────────────────────────────
+$router->post('fin/vouchers/dados-rm', function ($params) {
+    try {
+        $b = getRequestBody();
+        $id_rm = $b['id_rm'] ?? null;
+        $numero_spo = $b['numero_spo'] ?? null;
+        $voucher_boleto = !empty($b['voucher_boleto']) ? trim($b['voucher_boleto']) : null;
+        $chave_pix = !empty($b['chave_pix']) ? trim($b['chave_pix']) : null;
+        $pix_tipo_chave = $b['pix_tipo_chave'] ?? null;
+        $forma_pag = $b['forma_pag'] ?? null;
+        $fornecedor = $b['fornecedor'] ?? null;
+        $cnpj_fornecedor = $b['cnpj_fornecedor'] ?? null;
+        $tipo_exec = $b['tipo_exec'] ?? 'A_DEFINIR';
+
+        $finalIdRm = (!empty($id_rm) && trim($id_rm)) ? $id_rm : ($numero_spo ?? 'DESCONHECIDO');
+
+        $regrasFormaPagFinal = 'DOC (Compe)';
+        $isBoletoPag = $forma_pag && stripos($forma_pag, 'BOL') !== false;
+
+        if ($isBoletoPag) {
+            $regrasFormaPagFinal = 'Boleto';
+        } elseif ($cnpj_fornecedor) {
+            try {
+                $cnpjClean = preg_replace('/\D/', '', $cnpj_fornecedor);
+                $dadosBancarios = finQuery(
+                    "SELECT banco FROM dados_dachser.t_dados_financeiro_pag
+                     WHERE REPLACE(REPLACE(REPLACE(cnpj, '.', ''), '/', ''), '-', '') = ? LIMIT 1",
+                    [$cnpjClean]
+                );
+                if (!empty($dadosBancarios)) {
+                    $bancoUpper = strtoupper($dadosBancarios[0]['banco'] ?? '');
+                    if (strpos($bancoUpper, 'ITAU') !== false || strpos($bancoUpper, 'ITAÚ') !== false || strpos($bancoUpper, '341') !== false) {
+                        $regrasFormaPagFinal = 'Crédito em Conta Corrente da Mesma Titularidade';
+                    }
+                }
+            } catch (Exception $ex) {}
+        }
+
+        // Lookup de boleto/pix se necessário
+        $needsBoletoLookup = !$voucher_boleto && $isBoletoPag;
+        $needsPixLookup = !$chave_pix && $forma_pag && stripos($forma_pag, 'PIX') !== false;
+
+        if ($needsBoletoLookup || $needsPixLookup) {
+            try {
+                $lookupRows = finQuery(
+                    "SELECT linha_digitavel, codigo_barras, chave_pix FROM dados_dachser.t_vouchers
+                     WHERE (id_rm COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                         OR numero_spo COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci)
+                     ORDER BY created_at DESC LIMIT 1",
+                    [$finalIdRm, $numero_spo ?? $finalIdRm]
+                );
+                if (!empty($lookupRows)) {
+                    $dbRow = $lookupRows[0];
+                    if ($needsBoletoLookup) $voucher_boleto = $dbRow['linha_digitavel'] ?? $dbRow['codigo_barras'] ?? null;
+                    if ($needsPixLookup && !empty($dbRow['chave_pix'])) $chave_pix = $dbRow['chave_pix'];
+                }
+            } catch (Exception $ex) {}
+        }
+
+        finQuery(
+            "INSERT INTO dados_dachser.t_dados_rm
+             (id_rm, nd, nf_disputa, voucher_boleto, chave_pix, pix_tipo_chave, forma_pag, fornecedor, regras_forma_pag, tipo_exec)
+             VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?)",
+            [$finalIdRm, $numero_spo, $voucher_boleto, $chave_pix, $pix_tipo_chave, $forma_pag, $fornecedor, $regrasFormaPagFinal, $tipo_exec]
+        );
+
+        sendJson(['success' => true]);
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
+// ── PATCH /api/fin/vouchers/:id/status-integracao-rm ─────────────────────────
+$router->patch('fin/vouchers/:id/status-integracao-rm', function ($params) {
+    try {
+        $id = $params['id'];
+        $b = getRequestBody();
+        $status_integracao_rm = $b['status_integracao_rm'] ?? null;
+
+        if (!$status_integracao_rm) {
+            sendJson(['success' => false, 'error' => 'status_integracao_rm é obrigatório'], 400);
+        }
+
+        finQuery(
+            "UPDATE dados_dachser.t_vouchers SET status_integracao_rm = ?, updated_at = NOW() WHERE id = ?",
+            [$status_integracao_rm, $id]
+        );
+
+        sendJson(['success' => true]);
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
+// ── PATCH /api/fin/vouchers/:id/numero-spo ───────────────────────────────────
+$router->patch('fin/vouchers/:id/numero-spo', function ($params) {
+    try {
+        $id = $params['id'];
+        $b = getRequestBody();
+        $novo_numero_spo = $b['novo_numero_spo'] ?? null;
+        $user_id = $b['user_id'] ?? null;
+        $user_name = $b['user_name'] ?? 'Sistema';
+
+        if (!$novo_numero_spo) {
+            sendJson(['success' => false, 'error' => 'novo_numero_spo é obrigatório'], 400);
+        }
+
+        $oldRows = finQuery("SELECT numero_spo FROM dados_dachser.t_vouchers WHERE id = ? LIMIT 1", [$id]);
+        $oldNumero = $oldRows[0]['numero_spo'] ?? 'N/A';
+
+        finQuery(
+            "UPDATE dados_dachser.t_vouchers SET numero_spo = ?, updated_at = NOW() WHERE id = ?",
+            [$novo_numero_spo, $id]
+        );
+
+        try {
+            finQuery(
+                "INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+                 VALUES (UUID(), ?, ?, ?, 'NUMERO_SPO_ALTERADO', ?, NOW())",
+                [$id, $user_id, $user_name, "Número SPO alterado de $oldNumero para $novo_numero_spo"]
+            );
+        } catch (Exception $logEx) {
+            // log silencioso
+        }
+
+        sendJson(['success' => true]);
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
 // ── EXCEL HELPERS ────────────────────────────────────────────────────────────
 function generateSimpleXlsx($sheets)
 {
