@@ -164,7 +164,10 @@ app.get('/api/fin/vouchers/search', async (req, res) => {
             (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci AND lc.acao = 'VOUCHER_CRIADO' ORDER BY lc.data_hora ASC LIMIT 1),
             v.criado_por_user_id)
           END as dfv_created_by,
-          (SELECT l.user_name FROM dados_dachser.t_voucher_logs l WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci AND l.user_name IS NOT NULL AND l.user_name <> '' ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
+          COALESCE((SELECT username FROM dados_dachser.t_users_dachser WHERE id = v.criado_por_user_id LIMIT 1), (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('VOUCHER_CRIADO', 'MASTER_CRIADO', 'VOUCHER_CRIADO_LOTE', 'VOUCHER_CRIADO_BATCH', 'IMPORTADO_RM', 'MASTER_CRIADO_LOTE', 'VOUCHER_MASTER_CRIADO', 'LOTE_FINALIZADO') ORDER BY data_hora ASC LIMIT 1)) AS criado_por_nome,
+          COALESCE((SELECT username FROM dados_dachser.t_users_dachser WHERE id = v.criado_por_user_id LIMIT 1), (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('VOUCHER_CRIADO', 'MASTER_CRIADO', 'VOUCHER_CRIADO_LOTE', 'VOUCHER_CRIADO_BATCH', 'IMPORTADO_RM', 'MASTER_CRIADO_LOTE', 'VOUCHER_MASTER_CRIADO', 'LOTE_FINALIZADO') ORDER BY data_hora ASC LIMIT 1)) AS criado_por_user_name,
+          (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('ENVIADO_OPERACAO','APROVADO_FISCAL','APROVADO_SUPERVISOR','REENVIO_APOS_AJUSTE','APROVADO_URGENTE') ORDER BY data_hora DESC LIMIT 1) AS enviado_por_nome,
+          (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('ENVIADO_OPERACAO','APROVADO_FISCAL','APROVADO_SUPERVISOR','REENVIO_APOS_AJUSTE','APROVADO_URGENTE') ORDER BY data_hora DESC LIMIT 1) AS enviado_por_user_name
         FROM dados_dachser.t_vouchers v
         LEFT JOIN (
           SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by, MAX(data_emissao) as data_emissao,
@@ -288,7 +291,10 @@ app.get('/api/fin/vouchers/combined', async (req, res) => {
           (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci AND lc.acao = 'VOUCHER_CRIADO' ORDER BY lc.data_hora ASC LIMIT 1),
           v.criado_por_user_id)
         END as dfv_created_by,
-        (SELECT l.user_name FROM dados_dachser.t_voucher_logs l WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci AND l.user_name IS NOT NULL AND l.user_name <> '' ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
+        COALESCE((SELECT username FROM dados_dachser.t_users_dachser WHERE id = v.criado_por_user_id LIMIT 1), (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('VOUCHER_CRIADO', 'MASTER_CRIADO', 'VOUCHER_CRIADO_LOTE', 'VOUCHER_CRIADO_BATCH', 'IMPORTADO_RM', 'MASTER_CRIADO_LOTE', 'VOUCHER_MASTER_CRIADO', 'LOTE_FINALIZADO') ORDER BY data_hora ASC LIMIT 1)) AS criado_por_nome,
+        COALESCE((SELECT username FROM dados_dachser.t_users_dachser WHERE id = v.criado_por_user_id LIMIT 1), (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('VOUCHER_CRIADO', 'MASTER_CRIADO', 'VOUCHER_CRIADO_LOTE', 'VOUCHER_CRIADO_BATCH', 'IMPORTADO_RM', 'MASTER_CRIADO_LOTE', 'VOUCHER_MASTER_CRIADO', 'LOTE_FINALIZADO') ORDER BY data_hora ASC LIMIT 1)) AS criado_por_user_name,
+        (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('ENVIADO_OPERACAO','APROVADO_FISCAL','APROVADO_SUPERVISOR','REENVIO_APOS_AJUSTE','APROVADO_URGENTE') ORDER BY data_hora DESC LIMIT 1) AS enviado_por_nome,
+        (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('ENVIADO_OPERACAO','APROVADO_FISCAL','APROVADO_SUPERVISOR','REENVIO_APOS_AJUSTE','APROVADO_URGENTE') ORDER BY data_hora DESC LIMIT 1) AS enviado_por_user_name
       FROM dados_dachser.t_vouchers v
       LEFT JOIN (
         SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by, MAX(data_emissao) as data_emissao,
@@ -354,7 +360,6 @@ app.get('/api/fin/vouchers/esteira', async (req, res) => {
     const vouchers = await finQuery(`
       SELECT v.*, dfv.id_rm as dfv_id_rm, dfv.numero_processo as dfv_numero_processo,
         dfv.razao_social as dfv_razao_social, dfv.nome_beneficiario as dfv_nome_beneficiario, dfv.valor_nf as dfv_valor_nf,
-        (SELECT username FROM dados_dachser.t_users_dachser WHERE id = v.criado_por_user_id LIMIT 1) AS criado_por_user_name,
         CASE WHEN v.is_master = 1 THEN COALESCE(
           (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci AND lc.acao = 'MASTER_CRIADO' ORDER BY lc.data_hora ASC LIMIT 1),
           v.criado_por_user_id)
@@ -362,7 +367,10 @@ app.get('/api/fin/vouchers/esteira', async (req, res) => {
           (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci AND lc.acao = 'VOUCHER_CRIADO' ORDER BY lc.data_hora ASC LIMIT 1),
           v.criado_por_user_id)
         END as dfv_created_by,
-        (SELECT l.user_name FROM dados_dachser.t_voucher_logs l WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci AND l.acao IN ('ENVIADO_OPERACAO','APROVADO_FISCAL','APROVADO_SUPERVISOR','REENVIO_APOS_AJUSTE','APROVADO_URGENTE','BAIXA_MANUAL','VOUCHER_CRIADO','RASCUNHO_ENVIADO','MASTER_APROVADO_OPERACAO') ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
+        COALESCE((SELECT username FROM dados_dachser.t_users_dachser WHERE id = v.criado_por_user_id LIMIT 1), (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('VOUCHER_CRIADO', 'MASTER_CRIADO', 'VOUCHER_CRIADO_LOTE', 'VOUCHER_CRIADO_BATCH', 'IMPORTADO_RM', 'MASTER_CRIADO_LOTE', 'VOUCHER_MASTER_CRIADO', 'LOTE_FINALIZADO') ORDER BY data_hora ASC LIMIT 1)) AS criado_por_nome,
+        COALESCE((SELECT username FROM dados_dachser.t_users_dachser WHERE id = v.criado_por_user_id LIMIT 1), (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('VOUCHER_CRIADO', 'MASTER_CRIADO', 'VOUCHER_CRIADO_LOTE', 'VOUCHER_CRIADO_BATCH', 'IMPORTADO_RM', 'MASTER_CRIADO_LOTE', 'VOUCHER_MASTER_CRIADO', 'LOTE_FINALIZADO') ORDER BY data_hora ASC LIMIT 1)) AS criado_por_user_name,
+        (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('ENVIADO_OPERACAO','APROVADO_FISCAL','APROVADO_SUPERVISOR','REENVIO_APOS_AJUSTE','APROVADO_URGENTE') ORDER BY data_hora DESC LIMIT 1) AS enviado_por_nome,
+        (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('ENVIADO_OPERACAO','APROVADO_FISCAL','APROVADO_SUPERVISOR','REENVIO_APOS_AJUSTE','APROVADO_URGENTE') ORDER BY data_hora DESC LIMIT 1) AS enviado_por_user_name
       FROM dados_dachser.t_vouchers v
       LEFT JOIN (
         SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by, MIN(numero_processo) as numero_processo,
@@ -585,7 +593,11 @@ app.get('/api/fin/vouchers/:id', async (req, res) => {
         COALESCE(v.data_emissao_documento, dfv.data_emissao) AS data_emissao_documento,
         dfv.id_rm AS dfv_id_rm, dfv.numero_processo AS dfv_numero_processo,
         dfv.razao_social AS dfv_razao_social, dfv.nome_beneficiario AS dfv_nome_beneficiario,
-        dfv.valor_nf AS dfv_valor_nf, dfv.moeda AS dfv_moeda, dfv.cnpj AS dfv_cnpj, dfv.nome_cobranca AS dfv_nome_cobranca
+        dfv.valor_nf AS dfv_valor_nf, dfv.moeda AS dfv_moeda, dfv.cnpj AS dfv_cnpj, dfv.nome_cobranca AS dfv_nome_cobranca,
+        COALESCE((SELECT username FROM dados_dachser.t_users_dachser WHERE id = v.criado_por_user_id LIMIT 1), (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('VOUCHER_CRIADO', 'MASTER_CRIADO', 'VOUCHER_CRIADO_LOTE', 'VOUCHER_CRIADO_BATCH', 'IMPORTADO_RM', 'MASTER_CRIADO_LOTE', 'VOUCHER_MASTER_CRIADO', 'LOTE_FINALIZADO') ORDER BY data_hora ASC LIMIT 1)) AS criado_por_nome,
+        COALESCE((SELECT username FROM dados_dachser.t_users_dachser WHERE id = v.criado_por_user_id LIMIT 1), (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('VOUCHER_CRIADO', 'MASTER_CRIADO', 'VOUCHER_CRIADO_LOTE', 'VOUCHER_CRIADO_BATCH', 'IMPORTADO_RM', 'MASTER_CRIADO_LOTE', 'VOUCHER_MASTER_CRIADO', 'LOTE_FINALIZADO') ORDER BY data_hora ASC LIMIT 1)) AS criado_por_user_name,
+        (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('ENVIADO_OPERACAO','APROVADO_FISCAL','APROVADO_SUPERVISOR','REENVIO_APOS_AJUSTE','APROVADO_URGENTE') ORDER BY data_hora DESC LIMIT 1) AS enviado_por_nome,
+        (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('ENVIADO_OPERACAO','APROVADO_FISCAL','APROVADO_SUPERVISOR','REENVIO_APOS_AJUSTE','APROVADO_URGENTE') ORDER BY data_hora DESC LIMIT 1) AS enviado_por_user_name
       FROM dados_dachser.t_vouchers v
       LEFT JOIN (
         SELECT nd, MIN(id_rm) AS id_rm, MAX(data_emissao) AS data_emissao, MIN(numero_processo) AS numero_processo,
@@ -1250,7 +1262,10 @@ app.get('/api/fin/vouchers/report', async (req, res) => {
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
     const vouchers = await finQuery(`
       SELECT v.*,
-        u_criado.username AS criado_por_username,
+        COALESCE(u_criado.username, (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('VOUCHER_CRIADO', 'MASTER_CRIADO', 'VOUCHER_CRIADO_LOTE', 'VOUCHER_CRIADO_BATCH', 'IMPORTADO_RM', 'MASTER_CRIADO_LOTE', 'VOUCHER_MASTER_CRIADO', 'LOTE_FINALIZADO') ORDER BY data_hora ASC LIMIT 1)) AS criado_por_nome,
+        COALESCE(u_criado.username, (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('VOUCHER_CRIADO', 'MASTER_CRIADO', 'VOUCHER_CRIADO_LOTE', 'VOUCHER_CRIADO_BATCH', 'IMPORTADO_RM', 'MASTER_CRIADO_LOTE', 'VOUCHER_MASTER_CRIADO', 'LOTE_FINALIZADO') ORDER BY data_hora ASC LIMIT 1)) AS criado_por_username,
+        (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('ENVIADO_OPERACAO','APROVADO_FISCAL','APROVADO_SUPERVISOR','REENVIO_APOS_AJUSTE','APROVADO_URGENTE') ORDER BY data_hora DESC LIMIT 1) AS enviado_por_nome,
+        (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('ENVIADO_OPERACAO','APROVADO_FISCAL','APROVADO_SUPERVISOR','REENVIO_APOS_AJUSTE','APROVADO_URGENTE') ORDER BY data_hora DESC LIMIT 1) AS enviado_por_user_name,
         u_operacao.username AS responsavel_operacao_username,
         u_fiscal.username AS responsavel_fiscal_username,
         u_financeiro.username AS responsavel_financeiro_username,
@@ -1337,16 +1352,17 @@ app.post('/api/fin/vouchers/master', async (req, res) => {
     const nextNum = Number(seqRows?.[0]?.next_num || 1);
     const numeroSpoMaster = nome_master || `MASTER-${String(nextNum).padStart(5, '0')}`;
 
+    const criadoPorUserId = criado_por_user_id || req.body?.userId || req.body?.user_id || null;
     await finQuery(
       `INSERT INTO dados_dachser.t_vouchers
        (id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda, vencimento, forma_pagamento,
         tipo_documento, cobranca_em_nome_de, filial, comentarios_operacao,
-        etapa_atual, is_master, origem_criacao, criado_por_user_id, criado_por_user_name, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 1, 'MASTER', ?, ?, NOW(), NOW())`,
+        etapa_atual, is_master, origem_criacao, criado_por_user_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 1, 'MASTER', ?, NOW(), NOW())`,
       [masterId, numeroSpoMaster, fornecedor || null, cnpj_fornecedor || null,
        valor_total || null, moeda || 'BRL', vencimento || null, forma_pagamento || null,
        tipo_documento || null, cobranca_em_nome_de || 'DACHSER', filial || null,
-       comentarios_operacao || null, criado_por_user_id || null, criado_por_user_name || 'Sistema']
+       comentarios_operacao || null, criadoPorUserId]
     );
 
     const placeholders = voucher_ids.map(() => '?').join(',');
@@ -1554,7 +1570,7 @@ app.post('/api/fin/vouchers', async (req, res) => {
         emptyToNull(d.comentarios_financeiro),
         emptyToNull(d.ajuste_operacao),
         emptyToNull(d.ajuste_fiscal),
-        emptyToNull(d.criado_por_user_id),
+        emptyToNull(d.criado_por_user_id || d.userId || d.user_id || d.created_by_user_id),
         emptyToNull(d.processo_id),
         emptyToNull(d.origem_processo),
         emptyToNull(d.chave_pix),
