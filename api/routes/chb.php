@@ -433,37 +433,93 @@ function chbCallGeminiVision($prompt, $files) {
     return $data['choices'][0]['message']['content'] ?? '';
 }
 
-function chbProcessAnalysis($runId, $stepId, $files, $clientConfig, $itemId) {
-    try {
-        opsQuery("UPDATE dados_dachser.t_chb_runs SET status = 'processing' WHERE id = ?", [$runId]);
-        $prompt = chbBuildPrompt($stepId, $files, $clientConfig, $itemId);
+function logChbStep($runId, $itemId, $requestId, $stage, $extra = []) {
+    $log = array_merge([
+        'analysis_request_id' => $runId,
+        'conference_id' => $itemId,
+        'request_id' => $requestId,
+        'etapa_logs' => $stage,
+        'timestamp' => date('Y-m-d H:i:s'),
+        'microtime' => microtime(true),
+    ], $extra);
+    error_log("[CHB_LOG] " . json_encode($log));
+}
 
+function chbProcessAnalysis($runId, $stepId, $files, $clientConfig, $itemId) {
+    $startTime = microtime(true);
+    $requestId = uniqid('chb_');
+    $filesCount = is_array($files) ? count($files) : 0;
+    
+    logChbStep($runId, $itemId, $requestId, 'CHB_REQUEST_PICKED_BY_WORKER', [
+        'quantidade_arquivos' => $filesCount
+    ]);
+    
+    try {
+        logChbStep($runId, $itemId, $requestId, 'CHB_STATUS_PROCESSING');
+        opsQuery("UPDATE dados_dachser.t_chb_runs SET status = 'processing' WHERE id = ?", [$runId]);
+        
+        logChbStep($runId, $itemId, $requestId, 'CHB_FILES_LOADING');
+        logChbStep($runId, $itemId, $requestId, 'CHB_FILES_LOADED', [
+            'quantidade_arquivos' => $filesCount
+        ]);
+        
+        logChbStep($runId, $itemId, $requestId, 'CHB_DOCUMENT_EXTRACTION_STARTED');
+        $prompt = chbBuildPrompt($stepId, $files, $clientConfig, $itemId);
+        logChbStep($runId, $itemId, $requestId, 'CHB_DOCUMENT_EXTRACTION_COMPLETED');
+        
+        logChbStep($runId, $itemId, $requestId, 'CHB_AI_REQUEST_STARTED');
         $responseText = '';
         $usedFallback = false;
+        $aiStartTime = microtime(true);
         try {
             $responseText = chbCallAnthropic($prompt, $files);
-        } catch (Exception $anthropicErr) {
+            logChbStep($runId, $itemId, $requestId, 'CHB_AI_RESPONSE_RECEIVED', [
+                'provider' => 'Anthropic',
+                'duracao' => round(microtime(true) - $aiStartTime, 2)
+            ]);
+        } catch (Throwable $anthropicErr) {
             error_log('[chb analyze] Anthropic failed, trying Gemini: ' . $anthropicErr->getMessage());
             $usedFallback = true;
             $responseText = chbCallGeminiVision($prompt, $files);
+            logChbStep($runId, $itemId, $requestId, 'CHB_AI_RESPONSE_RECEIVED', [
+                'provider' => 'Gemini (Fallback)',
+                'duracao' => round(microtime(true) - $aiStartTime, 2)
+            ]);
         }
 
-        $parsed     = chbExtractHtmlAndTags($responseText, (int)$stepId);
+        logChbStep($runId, $itemId, $requestId, 'CHB_AI_RESPONSE_PARSED');
+        $parsed = chbExtractHtmlAndTags($responseText, (int)$stepId);
+        
         $resultData = array_merge(['id' => "chb-$runId", 'stepId' => $stepId], $parsed, [
             'generatedAt'   => date('d/m/Y H:i:s'),
             'filesAnalyzed' => array_map(function($f) { return $f['name'] ?? ''; }, $files),
             'usedFallback'  => $usedFallback,
         ]);
 
+        logChbStep($runId, $itemId, $requestId, 'CHB_RESULT_SAVED');
         opsQuery(
             "UPDATE dados_dachser.t_chb_runs SET status = 'completed', result_html = ?, result_json = ? WHERE id = ?",
             [json_encode($resultData), json_encode($resultData), $runId]
         );
-    } catch (Exception $err) {
-        error_log('[chb analyze] background error: ' . $err->getMessage());
+        
+        logChbStep($runId, $itemId, $requestId, 'CHB_STATUS_COMPLETED', [
+            'duracao_total' => round(microtime(true) - $startTime, 2)
+        ]);
+    } catch (Throwable $err) {
+        logChbStep($runId, $itemId, $requestId, 'CHB_ANALYSIS_FAILED', [
+            'codigo_erro' => 'CHB_PROCESSING_ERROR',
+            'mensagem_tecnica' => $err->getMessage() . " in " . $err->getFile() . " on line " . $err->getLine(),
+            'duracao' => round(microtime(true) - $startTime, 2)
+        ]);
         try {
-            opsQuery("UPDATE dados_dachser.t_chb_runs SET status = 'error', result_text = ? WHERE id = ?", [$err->getMessage(), $runId]);
-        } catch (Exception $updateErr) {}
+            $errorPayload = json_encode([
+                'success' => false,
+                'error' => 'Erro no processamento da conferência: ' . $err->getMessage(),
+                'technicalMessage' => $err->getMessage() . " in " . $err->getFile() . " on line " . $err->getLine(),
+                'requestId' => $requestId
+            ]);
+            opsQuery("UPDATE dados_dachser.t_chb_runs SET status = 'error', result_text = ? WHERE id = ?", [$errorPayload, $runId]);
+        } catch (Throwable $updateErr) {}
     }
 }
 

@@ -236,22 +236,61 @@ function parseXlsxSimple($xlsxBase64) {
  * Executa um script PHP em background.
  */
 function runPHPBackground($scriptPath, $args = []) {
-    $phpBin = 'php'; // Fallback
-    if (file_exists('C:\\xampp\\php\\php.exe')) {
-        $phpBin = 'C:\\xampp\\php\\php.exe';
-    }
-    
-    $escapedArgs = array_map('escapeshellarg', $args);
-    $argsStr = implode(' ', $escapedArgs);
-    
     if (strncasecmp(PHP_OS, 'WIN', 3) === 0) {
         // Windows background
+        $phpBin = 'C:\\xampp\\php\\php.exe';
+        if (!file_exists($phpBin)) {
+            $phpBin = 'php';
+        }
+        $escapedArgs = array_map('escapeshellarg', $args);
+        $argsStr = implode(' ', $escapedArgs);
         $cmd = "start /B \"\" " . escapeshellarg($phpBin) . " " . escapeshellarg($scriptPath) . " " . $argsStr . " > NUL 2>&1";
         pclose(popen($cmd, "r"));
-    } else {
-        // Linux/Unix background
-        $cmd = escapeshellarg($phpBin) . " " . escapeshellarg($scriptPath) . " " . $argsStr . " > /dev/null 2>&1 &";
-        exec($cmd);
+        return;
+    }
+
+    // Linux/Unix background: tenta primeiro o loopback HTTP por ser mais compatível com shared hostings
+    $loopbackSuccess = false;
+    try {
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $url = $protocol . $host . "/api/background-worker";
+        
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['jobFile' => $args[0]]));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 2); 
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        $res = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($httpCode >= 200 && $httpCode < 300) {
+            $loopbackSuccess = true;
+        }
+    } catch (Throwable $e) {
+        error_log("[runPHPBackground] Loopback HTTP failed: " . $e->getMessage());
+    }
+
+    // Se o loopback HTTP falhar, recorre ao CLI clássico via exec
+    if (!$loopbackSuccess) {
+        $disabled = ini_get('disable_functions');
+        $execEnabled = function_exists('exec') && !in_array('exec', array_map('trim', explode(',', $disabled)));
+        if ($execEnabled) {
+            $phpBin = 'php';
+            if (defined('PHP_BINARY') && PHP_BINARY && strpos(PHP_BINARY, 'php') !== false) {
+                $phpBin = PHP_BINARY;
+            }
+            $escapedArgs = array_map('escapeshellarg', $args);
+            $argsStr = implode(' ', $escapedArgs);
+            $cmd = escapeshellarg($phpBin) . " " . escapeshellarg($scriptPath) . " " . $argsStr . " > /dev/null 2>&1 &";
+            exec($cmd);
+        } else {
+            error_log("[runPHPBackground] CLI execution is blocked and HTTP Loopback failed.");
+        }
     }
 }
 

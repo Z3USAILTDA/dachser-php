@@ -507,9 +507,9 @@ export default function ConferenciaChb() {
       console.log(`Analysis request submitted: ${requestId}`);
       setAnalysisProgress('Analisando documentos...');
 
-      // Step 2: Poll for result (max 10 minutes)
-      const maxPollTime = 10 * 60 * 1000; // 10 minutes
-      const pollInterval = 3000; // 3 seconds
+      // Step 2: Poll for result (max 120 seconds)
+      const maxPollTime = 120 * 1000; // 120 seconds (2 minutes)
+      const pollInterval = 4000; // 4 seconds
       const startTime = Date.now();
       let data: any = null;
 
@@ -522,7 +522,7 @@ export default function ConferenciaChb() {
         }
 
         const elapsedSecs = Math.floor((Date.now() - startTime) / 1000);
-        setAnalysisProgress(`Analisando documentos... (${elapsedSecs}s)`);
+        setAnalysisProgress(`Analisando documentos... (${elapsedSecs}s / 120s)`);
 
         const pollResponse = await fetch(apiUrl('/api/chb/analyze-documents'), {
           method: 'POST',
@@ -558,7 +558,7 @@ export default function ConferenciaChb() {
       }
 
       if (!data) {
-        throw new Error(`A análise não foi concluída dentro do tempo esperado. Identificador da solicitação: ${requestId}. Verifique o processamento ou tente novamente.`);
+        throw new Error(`A análise não foi concluída dentro do tempo esperado. Solicitação: ${requestId}. O processamento pode estar indisponível. Tente novamente ou consulte os logs.`);
       }
 
       setAnalysisProgress('');

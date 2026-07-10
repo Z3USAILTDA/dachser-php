@@ -120,6 +120,100 @@ if ($route === 'test-deploy' && $method === 'GET') {
     return;
 }
 
+// Rota de diagnóstico de ambiente
+if ($route === 'chb/diagnosticos' && $method === 'GET') {
+    $disabled = ini_get('disable_functions');
+    $execEnabled = function_exists('exec') && !in_array('exec', array_map('trim', explode(',', $disabled)));
+    $popenEnabled = function_exists('popen') && !in_array('popen', array_map('trim', explode(',', $disabled)));
+    
+    $testExec = 'Not run';
+    if ($execEnabled) {
+        try {
+            $testOutput = [];
+            exec('php -v 2>&1', $testOutput, $code);
+            $testExec = [
+                'output' => implode("\n", $testOutput),
+                'exit_code' => $code
+            ];
+        } catch (Throwable $e) {
+            $testExec = 'Exception: ' . $e->getMessage();
+        }
+    }
+
+    sendJson([
+        'success' => true,
+        'php_os' => PHP_OS,
+        'php_version' => PHP_VERSION,
+        'php_binary' => defined('PHP_BINARY') ? PHP_BINARY : 'Not defined',
+        'disable_functions' => $disabled,
+        'exec_enabled' => $execEnabled,
+        'popen_enabled' => $popenEnabled,
+        'test_php_cli' => $testExec,
+        'server_software' => $_SERVER['SERVER_SOFTWARE'] ?? 'Unknown',
+        'document_root' => $_SERVER['DOCUMENT_ROOT'] ?? 'Unknown',
+        'current_file' => __FILE__,
+    ]);
+    return;
+}
+
+// Rota para execução de background tasks por Loopback HTTP
+if ($route === 'background-worker' && $method === 'POST') {
+    $body = getRequestBody();
+    $jobFile = $body['jobFile'] ?? null;
+    
+    if (!$jobFile || !file_exists($jobFile)) {
+        sendJson(['success' => false, 'error' => 'Arquivo de job inválido'], 400);
+    }
+    
+    // Libera a requisição HTTP imediatamente
+    if (function_exists('fastcgi_finish_request')) {
+        sendJson(['success' => true, 'message' => 'Executando em background via FastCGI']);
+        fastcgi_finish_request();
+    } else {
+        ignore_user_abort(true);
+        set_time_limit(600);
+        ob_start();
+        echo json_encode(['success' => true, 'message' => 'Executando em background via loopback']);
+        $size = ob_get_length();
+        header("Content-Length: $size");
+        header("Connection: close");
+        ob_end_flush();
+        flush();
+    }
+    
+    // Processa a tarefa após a liberação da conexão
+    try {
+        $jobData = json_decode(file_get_contents($jobFile), true);
+        if ($jobData) {
+            $task = $jobData['task'] ?? '';
+            if ($task === 'sea_analysis') {
+                require_once __DIR__ . '/routes/sea.php';
+                processSeaAnalysisRunPHP(
+                    $jobData['runId'],
+                    $jobData['itemId'],
+                    $jobData['analysisType'],
+                    $jobData['files'],
+                    $jobData['context']
+                );
+            } else if ($task === 'chb_analysis') {
+                require_once __DIR__ . '/routes/chb.php';
+                chbProcessAnalysis(
+                    $jobData['runId'],
+                    $jobData['stepId'],
+                    $jobData['files'],
+                    $jobData['clientConfig'],
+                    $jobData['itemId']
+                );
+            }
+        }
+    } catch (Throwable $e) {
+        error_log("[background-worker] Loopback execution error: " . $e->getMessage());
+    } finally {
+        @unlink($jobFile);
+    }
+    exit(0);
+}
+
 // Rota de Health-check padrão
 if ($route === 'health' && $method === 'GET') {
     sendJson([
