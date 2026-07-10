@@ -92,7 +92,7 @@ export const DatasAntigasBell = () => {
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-3xl bg-[rgba(5,6,18,.97)] border-[rgba(255,255,255,.12)] text-[#f5f5f5]">
+        <DialogContent aria-describedby={undefined} className="max-w-3xl bg-[rgba(5,6,18,.97)] border-[rgba(255,255,255,.12)] text-[#f5f5f5]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-[#ffc800]">
               <AlertTriangle className="h-5 w-5" />

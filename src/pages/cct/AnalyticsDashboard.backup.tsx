@@ -35,7 +35,7 @@ import {
   RefreshCw,
   Loader2,
 } from "lucide-react";
-import { format, subDays, isAfter, startOfDay } from "date-fns";
+import { format, subDays, isAfter } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 const COLORS = {
@@ -49,215 +49,65 @@ const COLORS = {
 
 const PIE_COLORS = [COLORS.primary, COLORS.success, COLORS.warning, COLORS.danger, COLORS.info];
 
-// ═══════════════════════════════════════════════════════════════════════════════════════════════
-// ☆ HELPER FUNCTIONS — Estrutura normalizada do useCCTData (item.shipment / item.status_atual)
-// ═══════════════════════════════════════════════════════════════════════════════════════════════
-
-/** Extrai data a partir da estrutura normalizada */
-function getDate(item: any): Date | null {
-  const shipment = item?.shipment || {};
-  const statusAtual = item?.status_atual || {};
-  const cacheMeta = item?.cache_meta || {};
-  const eventos = Array.isArray(item?.eventos) ? item.eventos : [];
-
-  const candidates = [
-    statusAtual.updated_at,
-    statusAtual.created_at,
-    shipment.updated_at,
-    shipment.created_at,
-    cacheMeta.data_ultima_atualizacao_atual,
-    cacheMeta.consulted_at_ultima_consulta,
-    cacheMeta.refreshed_at,
-  ];
-
-  for (const ev of eventos) {
-    if (ev?.data_hora_evento) {
-      candidates.push(ev.data_hora_evento);
-      break;
-    }
-  }
-
-  for (const val of candidates) {
-    if (val) {
-      const parsed = new Date(val);
-      if (!isNaN(parsed.getTime())) {
-        return parsed;
-      }
-    }
-  }
-  return null;
-}
-
-/** Extrai status a partir da estrutura normalizada */
-function getStatus(item: any): string {
-  const statusAtual = item?.status_atual || {};
-  const official = statusAtual.status_cct_oficial || statusAtual.sla_status;
-  return official && typeof official === "string" ? official.trim() : "SEM_STATUS";
-}
-
-/** Extrai cliente a partir da estrutura normalizada */
-function getCliente(item: any): string {
-  const shipment = item?.shipment || {};
-  const val = shipment.cliente;
-
-  if (val && typeof val === "string" && val.trim()) {
-    const trimmed = val.trim();
-    return trimmed.length > 20 ? trimmed.slice(0, 20) + "..." : trimmed;
-  }
-  return "Sem cliente";
-}
-
-/** Extrai rota a partir da estrutura normalizada */
-function getRota(item: any): string {
-  const shipment = item?.shipment || {};
-  const origem = shipment.aeroporto_origem || "N/A";
-  const destino = shipment.aeroporto_destino || "N/A";
-  return `${origem} → ${destino}`;
-}
-
-/** Extrai analista a partir da estrutura normalizada */
-function getAnalista(item: any): string {
-  const shipment = item?.shipment || {};
-
-  const candidates = [
-    shipment.analista?.nome,
-    shipment.nome_analista_legado,
-  ];
-
-  for (const val of candidates) {
-    if (val && typeof val === "string") {
-      return val.trim();
-    }
-  }
-  return "Sem analista";
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════════════════════
-
 export default function AnalyticsDashboard() {
   const { data: processos = [], isLoading, refetch, isRefetching } = useProcessosCCT();
   const [periodo, setPeriodo] = useState("30");
 
-  // Debug: Log extensivo dos dados
+  console.log("[Analytics] Component rendered, processos.length:", processos.length);
+
+  // Debug: log dos dados
   useEffect(() => {
-    if (processos.length === 0) {
-      console.log("[Analytics] ❌ Total de processos: 0");
-      return;
+    console.log(`[Analytics] Total processos: ${processos.length}`);
+    if (processos.length > 0) {
+      console.log(`[Analytics] Primeira amostra completa:`, processos[0]);
+      console.log(`[Analytics] shipment.cliente:`, processos[0].shipment?.cliente);
+      console.log(`[Analytics] shipment.aeroporto_origem:`, processos[0].shipment?.aeroporto_origem);
+      console.log(`[Analytics] shipment.aeroporto_destino:`, processos[0].shipment?.aeroporto_destino);
+      console.log(`[Analytics] shipment.nome_analista_legado:`, processos[0].shipment?.nome_analista_legado);
+      console.log(`[Analytics] status_atual.status_cct_oficial:`, processos[0].status_atual?.status_cct_oficial);
     }
-
-    console.log("[Analytics] ✅ Total de processos:", processos.length);
-    console.log("[Analytics] 📦 Primeiro item completo:", processos[0]);
-    console.log("[Analytics] 🔑 Object.keys do primeiro item:", Object.keys(processos[0] || {}));
-    console.table(processos.slice(0, 5).map((p: any) => ({
-      cliente: getCliente(p),
-      rota: getRota(p),
-      status: getStatus(p),
-      data: getDate(p)?.toLocaleDateString(),
-      analista: getAnalista(p),
-    })));
-
-    const validDates = processos.map((p: any) => getDate(p)).filter(Boolean);
-    console.log("[Analytics] 📅 Datas válidas encontradas:", validDates.length);
-    
-    const statusG = processos.map((p: any) => getStatus(p));
-    console.log("[Analytics] 🏷️ Status agrupados:", [...new Set(statusG)]);
-    
-    const clientesG = processos.map((p: any) => getCliente(p));
-    console.log("[Analytics] 👥 Clientes agrupados:", [...new Set(clientesG)]);
-
-    const rotasG = processos.map((p: any) => getRota(p));
-    console.log("[Analytics] ✈️ Rotas agrupadas:", [...new Set(rotasG)]);
   }, [processos]);
 
-  // Calcula período real dos dados
-  const { minDate, maxDate, periodoDias } = useMemo(() => {
-    if (processos.length === 0) {
-      return { minDate: null, maxDate: null, periodoDias: 0 };
-    }
-
-    let min: Date | null = null;
-    let max: Date | null = null;
-
-    processos.forEach((p: any) => {
-      const d = getDate(p);
-      if (d) {
-        if (!min || d < min) min = d;
-        if (!max || d > max) max = d;
-      }
-    });
-
-    const dias = min && max ? Math.ceil((max.getTime() - min.getTime()) / (1000 * 60 * 60 * 24)) : 0;
-    return { minDate: min, maxDate: max, periodoDias: dias };
-  }, [processos]);
-
-  // Filtra processos por período
   const filteredProcessos = useMemo(() => {
-    if (processos.length === 0) return [];
-
     const days = parseInt(periodo);
-    if (days >= 9999) return processos;
-
-    let maxDate: Date | null = null;
-    processos.forEach((p: any) => {
-      const d = getDate(p);
-      if (d && (!maxDate || d > maxDate)) maxDate = d;
+    const cutoffDate = subDays(new Date(), days);
+    
+    const filtered = processos.filter(p => {
+      // Fallback para hoje se data não estiver disponível
+      const createdAt = p.shipment.created_at 
+        ? new Date(p.shipment.created_at)
+        : new Date();
+      
+      // Se a data for inválida, inclua de qualquer forma
+      if (isNaN(createdAt.getTime())) {
+        return true;
+      }
+      
+      return isAfter(createdAt, cutoffDate);
     });
-
-    const baseDate = maxDate || new Date();
-    const cutoffDate = startOfDay(subDays(baseDate, days));
-
-    return processos.filter((p: any) => {
-      const date = getDate(p);
-      if (!date) return true; // Inclui dados sem data
-      return isAfter(date, cutoffDate);
-    });
+    
+    console.log(`[Analytics] Período: ${periodo} dias, Filtrados: ${filtered.length}/${processos.length}`);
+    return filtered;
   }, [processos, periodo]);
 
-  // KPIs — usa sla_status e status_cct_oficial diretamente
+  // KPIs
   const kpis = useMemo(() => {
-    if (filteredProcessos.length === 0) {
-      return { total: 0, emAlerta: 0, criticos: 0, taxaSlaOk: 0, tempoMedio: "0" };
-    }
-
     const total = filteredProcessos.length;
-
-    // sla_status possíveis: "OK", "ATRASADO", "CRITICO", "PENDENTE"
-    const emAlerta = filteredProcessos.filter((p: any) => {
-      const sla = (p?.status_atual?.sla_status || "").toUpperCase();
-      return sla === "ATRASADO" || sla.includes("ALERTA");
-    }).length;
-
-    const criticos = filteredProcessos.filter((p: any) => {
-      const sla = (p?.status_atual?.sla_status || "").toUpperCase();
-      return sla === "CRITICO" || sla.includes("CRÍTICO") || sla.includes("CRITICO");
-    }).length;
-
-    const slaOk = filteredProcessos.filter((p: any) => {
-      const sla = (p?.status_atual?.sla_status || "").toUpperCase();
-      return sla === "OK";
-    }).length;
-
+    const emAlerta = filteredProcessos.filter(p => p.status_atual?.sla_status === "ALERTA").length;
+    const criticos = filteredProcessos.filter(p => p.status_atual?.sla_status === "CRITICO").length;
+    const slaOk = filteredProcessos.filter(p => p.status_atual?.sla_status === "OK").length;
     const taxaSlaOk = total > 0 ? Math.round((slaOk / total) * 100) : 0;
+    
+    // Tempo médio em dias (simulado)
     const tempoMedio = total > 0 ? (Math.random() * 3 + 1).toFixed(1) : "0";
 
     return { total, emAlerta, criticos, taxaSlaOk, tempoMedio };
   }, [filteredProcessos]);
 
-  // Volume por dia — últimos 7 dias
+  // Volume por dia (últimos 7 dias)
   const volumePorDia = useMemo(() => {
-    if (filteredProcessos.length === 0) return [];
-
-    let maxDate: Date | null = null;
-    filteredProcessos.forEach((p: any) => {
-      const d = getDate(p);
-      if (d && (!maxDate || d > maxDate)) maxDate = d;
-    });
-
-    const baseDate = maxDate || new Date();
-    const fallbackDateStr = format(baseDate, "yyyy-MM-dd");
-
     const last7Days = Array.from({ length: 7 }, (_, i) => {
-      const date = subDays(baseDate, 6 - i);
+      const date = subDays(new Date(), 6 - i);
       return {
         date: format(date, "dd/MM", { locale: ptBR }),
         fullDate: format(date, "yyyy-MM-dd"),
@@ -265,10 +115,9 @@ export default function AnalyticsDashboard() {
       };
     });
 
-    filteredProcessos.forEach((p: any) => {
-      const date = getDate(p);
-      const dateStr = date ? format(date, "yyyy-MM-dd") : fallbackDateStr;
-      const dayEntry = last7Days.find((d) => d.fullDate === dateStr);
+    filteredProcessos.forEach(p => {
+      const createdAt = p.shipment.created_at ? format(new Date(p.shipment.created_at), "yyyy-MM-dd") : null;
+      const dayEntry = last7Days.find(d => d.fullDate === createdAt);
       if (dayEntry) dayEntry.count++;
     });
 
@@ -278,79 +127,75 @@ export default function AnalyticsDashboard() {
   // Top rotas
   const topRotas = useMemo(() => {
     const rotaMap: Record<string, number> = {};
-    filteredProcessos.forEach((p: any) => {
-      const rota = getRota(p);
-      if (rota !== "N/A") {
-        rotaMap[rota] = (rotaMap[rota] || 0) + 1;
-      }
+    filteredProcessos.forEach(p => {
+      const rota = `${p.shipment.aeroporto_origem} → ${p.shipment.aeroporto_destino}`;
+      rotaMap[rota] = (rotaMap[rota] || 0) + 1;
     });
-
-    return Object.entries(rotaMap)
+    const result = Object.entries(rotaMap)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([rota, count]) => ({ rota, count }));
+    console.log(`[Analytics] Top Rotas count: ${result.length}, mapa: `, rotaMap);
+    return result;
   }, [filteredProcessos]);
 
   // Top clientes
   const topClientes = useMemo(() => {
     const clienteMap: Record<string, number> = {};
-    filteredProcessos.forEach((p: any) => {
-      const cliente = getCliente(p);
+    filteredProcessos.forEach(p => {
+      const cliente = p.shipment.cliente || "N/A";
       clienteMap[cliente] = (clienteMap[cliente] || 0) + 1;
     });
-
-    return Object.entries(clienteMap)
+    const result = Object.entries(clienteMap)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
-      .map(([cliente, count]) => ({ cliente, count }));
+      .map(([cliente, count]) => ({ cliente: cliente.length > 15 ? cliente.slice(0, 15) + "..." : cliente, count }));
+    console.log(`[Analytics] Top Clientes count: ${result.length}, mapa: `, clienteMap);
+    return result;
   }, [filteredProcessos]);
 
   // Processos por analista
   const porAnalista = useMemo(() => {
     const analistaMap: Record<string, number> = {};
-    filteredProcessos.forEach((p: any) => {
-      const analista = getAnalista(p);
+    filteredProcessos.forEach(p => {
+      const analista = p.shipment.analista?.nome || p.shipment.nome_analista_legado || "Não atribuído";
       analistaMap[analista] = (analistaMap[analista] || 0) + 1;
     });
-
-    return Object.entries(analistaMap)
+    const result = Object.entries(analistaMap)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6)
-      .map(([name, value]) => ({
-        name: name.length > 12 ? name.slice(0, 12) + "..." : name,
-        value,
-      }));
+      .map(([name, value]) => ({ name: name.length > 12 ? name.slice(0, 12) + "..." : name, value }));
+    console.log(`[Analytics] Por Analista count: ${result.length}, mapa: `, analistaMap);
+    return result;
   }, [filteredProcessos]);
 
-  // Distribuição por status — usa status_cct_oficial diretamente
+  // Distribuição por status
   const distribuicaoStatus = useMemo(() => {
-    const statusMap: Record<string, number> = {};
-
-    filteredProcessos.forEach((p: any) => {
-      const raw = (p?.status_atual?.status_cct_oficial || "DESCONHECIDO").toUpperCase();
-
-      let label: string;
-      if (raw === "INFORMADA")                   label = "Informada";
-      else if (raw === "MANIFESTADA")             label = "Manifestada";
-      else if (raw === "EM_AREA_TRANSFERENCIA")   label = "Em Transferência";
-      else if (raw === "EM_TRANSITO_TERRESTRE")   label = "Em Trânsito";
-      else if (raw === "EM_TROCA_RECINTOS")       label = "Troca Recintos";
-      else if (raw === "RECEPCIONADA")            label = "Recepcionada";
-      else if (raw === "ENTREGUE")                label = "Entregue";
-      else if (raw === "BLOQUEIO")                label = "Bloqueio";
-      else                                        label = "Outro";
-
-      statusMap[label] = (statusMap[label] || 0) + 1;
+    const statusMap: Record<string, number> = {
+      "Informada": 0,
+      "Manifestada": 0,
+      "Em área de Transferência": 0,
+      "Recepcionada": 0,
+      "Entregue": 0,
+    };
+    filteredProcessos.forEach(p => {
+      const status = p.status_atual?.status_cct_oficial || "INFORMADA";
+      if (status === "INFORMADA") statusMap["Informada"]++;
+      else if (status === "MANIFESTADA") statusMap["Manifestada"]++;
+      else if (status === "EM_AREA_TRANSFERENCIA") statusMap["Em área de Transferência"]++;
+      else if (status === "RECEPCIONADA") statusMap["Recepcionada"]++;
+      else if (status === "ENTREGUE") statusMap["Entregue"]++;
     });
-
-    return Object.entries(statusMap)
+    const result = Object.entries(statusMap)
       .filter(([_, value]) => value > 0)
       .map(([name, value]) => ({ name, value }));
+    console.log(`[Analytics] Distribuição Status count: ${result.length}, mapa: `, statusMap);
+    return result;
   }, [filteredProcessos]);
 
   return (
-    <PageLayout
-      title="DACHSER"
+    <PageLayout 
+      title="DACHSER" 
       subtitle="Analytics CCT — Indicadores e Performance"
       pageIcon={BarChart3}
       headerActions={
@@ -363,7 +208,6 @@ export default function AnalyticsDashboard() {
               <SelectItem value="7">Últimos 7 dias</SelectItem>
               <SelectItem value="15">Últimos 15 dias</SelectItem>
               <SelectItem value="30">Últimos 30 dias</SelectItem>
-              <SelectItem value="9999">Todos os dados</SelectItem>
             </SelectContent>
           </Select>
           <button
@@ -384,8 +228,9 @@ export default function AnalyticsDashboard() {
         <div className="flex items-center justify-center py-20 text-[#888]">
           <div className="text-center">
             <p className="text-lg mb-2">❌ Nenhum dado carregado</p>
-            <button
-              onClick={() => refetch()}
+            <p className="text-sm">Total: {processos.length} processos</p>
+            <button 
+              onClick={() => refetch()} 
               className="mt-4 px-4 py-2 bg-[#ffc800] text-black rounded"
             >
               Tentar Novamente
@@ -403,7 +248,7 @@ export default function AnalyticsDashboard() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-white">{kpis.total}</p>
-                  <p className="text-xs text-[#888]">Processos</p>
+                  <p className="text-xs text-[#888]">Processos Ativos</p>
                 </div>
               </div>
             </div>

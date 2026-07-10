@@ -21,12 +21,9 @@ const MetricsUsage         = lazy(() => import("./pages/admin/MetricsUsage"));
 const Register             = lazy(() => import("./pages/admin/Register"));
 const Logs                 = lazy(() => import("./pages/admin/Logs"));
 const SystemLogs           = lazy(() => import("./pages/admin/SystemLogs"));
-const AdminUserManagement  = lazy(() => import("./pages/admin/UserManagement"));
 const DatabaseMonitor      = lazy(() => import("./pages/admin/DatabaseMonitor"));
 const UploadMaster         = lazy(() => import("./pages/admin/UploadMaster"));
 const ManualAdmin          = lazy(() => import("./pages/admin/ManualAdmin"));
-const ApiKeyTest           = lazy(() => import("./pages/admin/ApiKeyTest"));
-const CronManager          = lazy(() => import("./pages/admin/CronManager"));
 
 // ── AIR ───────────────────────────────────────────────────────────────────
 const Index              = lazy(() => import("./pages/air/Index"));
@@ -157,14 +154,14 @@ const App = () => (
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/admin/metrics" element={<MetricsUsage />} />
             <Route path="/admin/register" element={<Register />} />
-            <Route path="/admin/users" element={<AdminUserManagement />} />
+            <Route path="/admin/users" element={<Navigate to="/dashboard" replace />} />
             <Route path="/admin/database" element={<DatabaseMonitor />} />
             <Route path="/admin/z3us/upload-master" element={<UploadMaster />} />
             <Route path="/admin/logs" element={<Logs />} />
             <Route path="/admin/system-logs" element={<SystemLogs />} />
             <Route path="/admin/manual" element={<ManualAdmin />} />
-            <Route path="/admin/api-test" element={<ApiKeyTest />} />
-            <Route path="/admin/cron-manager" element={<CronManager />} />
+            <Route path="/admin/api-test" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/admin/cron-manager" element={<Navigate to="/dashboard" replace />} />
 
             {/* AIR */}
             <Route path="/air/tracking" element={<Index />} />

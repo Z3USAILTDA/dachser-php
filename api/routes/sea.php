@@ -462,6 +462,9 @@ function extractSeaShippingData($resultText = '') {
 function processSeaAnalysisRunPHP($runId, $itemId, $analysisType, $files, $context) {
   try {
     seaQuery("UPDATE dados_dachser.t_sea_runs SET status = 'analisando' WHERE id = ?", [$runId]);
+    if ($itemId) seaQuery("UPDATE dados_dachser.t_sea_items SET status = 'analisando' WHERE id = ?", [$itemId]);
+
+    error_log("[AI_REQUEST_STARTED] [RunID: $runId] Calling AI models (Anthropic/Gemini) for Sea Analysis");
 
     $claudeText = '';
     try {
@@ -481,7 +484,11 @@ function processSeaAnalysisRunPHP($runId, $itemId, $analysisType, $files, $conte
       throw new Exception("Falha nas duas análises de IA.");
     }
 
+    error_log("[AI_RESPONSE_RECEIVED] [RunID: $runId] AI response received. Proceeding to arbitration with OpenAI");
+
     $finalText    = seaArbitrateWithOpenAIPHP($analysisType, $claudeText, $geminiText);
+    
+    error_log("[RESULT_PARSED] [RunID: $runId] OpenAI arbitration response received. Extracting shipping data...");
     $shippingData = extractSeaShippingData($finalText);
     
     $jsonResult   = [
@@ -491,6 +498,7 @@ function processSeaAnalysisRunPHP($runId, $itemId, $analysisType, $files, $conte
       'hblShippingData' => $shippingData,
     ];
 
+    error_log("[RESULT_SAVED] [RunID: $runId] Saving analysis results to database");
     seaQuery(
       "UPDATE dados_dachser.t_sea_runs SET status = 'realizado', result_text = ?, result_json = ? WHERE id = ?",
       [$finalText, json_encode($jsonResult), $runId]
@@ -509,8 +517,9 @@ function processSeaAnalysisRunPHP($runId, $itemId, $analysisType, $files, $conte
       $sql = "UPDATE dados_dachser.t_sea_items SET " . (count($updateFields) > 0 ? implode(', ', $updateFields) . ", " : '') . "status = 'analisado' WHERE id = ?";
       seaQuery($sql, $updateValues);
     }
+    error_log("[ANALYSIS_COMPLETED] [RunID: $runId] Sea analysis run successfully completed");
   } catch (Exception $err) {
-    error_log("[sea background worker error] " . $err->getMessage());
+    error_log("[ANALYSIS_FAILED] [RunID: $runId] Sea analysis failed: " . $err->getMessage());
     seaQuery("UPDATE dados_dachser.t_sea_runs SET status = 'erro', result_text = ? WHERE id = ?", [$err->getMessage(), $runId]);
     if ($itemId) seaQuery("UPDATE dados_dachser.t_sea_items SET status = 'erro' WHERE id = ?", [$itemId]);
   }
@@ -814,6 +823,10 @@ $router->delete('sea/maritimo/items/:id', function($params) {
 
 // POST /api/sea/maritimo/submit-analysis
 $router->post('sea/maritimo/submit-analysis', function($params) {
+    $requestId = uniqid('sea_');
+    error_log("[REQUEST_RECEIVED] [RequestId: $requestId] POST sea/maritimo/submit-analysis initiated");
+    $step = 'REQUEST_RECEIVED';
+
     try {
         $body = getRequestBody();
         $itemId = isset($body['itemId']) ? $body['itemId'] : null;
@@ -822,11 +835,56 @@ $router->post('sea/maritimo/submit-analysis', function($params) {
         $fileUrls = isset($body['fileUrls']) ? $body['fileUrls'] : [];
         $linkData = isset($body['linkData']) ? $body['linkData'] : null;
 
-        if (!$analysisType) sendJson(['error' => 'analysisType é obrigatório'], 400);
-        if ($analysisType === 'manifest_hbl' && count($files) === 0) sendJson(['error' => 'At least 1 HBL file is required'], 400);
-        if ($analysisType === 'hbl_mbl' && count($files) !== 1) sendJson(['error' => 'Exactly 1 MBL file is required'], 400);
-        if ($analysisType === 'invoices_hbl' && count($files) === 0 && count($fileUrls) === 0) sendJson(['error' => 'At least 1 file is required for analysis'], 400);
+        $step = 'FILES_VALIDATED';
+        if (!$analysisType) {
+            error_log("[FILES_VALIDATED] [RequestId: $requestId] Missing analysisType");
+            sendJson([
+                'success' => false,
+                'code' => 'SEA_MISSING_ANALYSIS_TYPE',
+                'message' => 'analysisType é obrigatório',
+                'requestId' => $requestId,
+                'step' => $step
+            ], 400);
+            return;
+        }
 
+        if ($analysisType === 'manifest_hbl' && count($files) === 0) {
+            error_log("[FILES_VALIDATED] [RequestId: $requestId] Missing HBL files");
+            sendJson([
+                'success' => false,
+                'code' => 'SEA_MISSING_HBL_FILES',
+                'message' => 'At least 1 HBL file is required',
+                'requestId' => $requestId,
+                'step' => $step
+            ], 400);
+            return;
+        }
+
+        if ($analysisType === 'hbl_mbl' && count($files) !== 1) {
+            error_log("[FILES_VALIDATED] [RequestId: $requestId] Invalid MBL count");
+            sendJson([
+                'success' => false,
+                'code' => 'SEA_INVALID_MBL_COUNT',
+                'message' => 'Exactly 1 MBL file is required',
+                'requestId' => $requestId,
+                'step' => $step
+            ], 400);
+            return;
+        }
+
+        if ($analysisType === 'invoices_hbl' && count($files) === 0 && count($fileUrls) === 0) {
+            error_log("[FILES_VALIDATED] [RequestId: $requestId] No files provided");
+            sendJson([
+                'success' => false,
+                'code' => 'SEA_NO_FILES_PROVIDED',
+                'message' => 'At least 1 file is required for analysis',
+                'requestId' => $requestId,
+                'step' => $step
+            ], 400);
+            return;
+        }
+
+        $step = 'MANIFEST_LOADED';
         $actualItemId = $itemId ? (int)$itemId : null;
         if ($analysisType === 'invoices_hbl' && !$actualItemId) {
             $base = null;
@@ -854,7 +912,31 @@ $router->post('sea/maritimo/submit-analysis', function($params) {
             }
         }
 
+        $step = 'HBL_FILES_LOADED';
+        // Prevent duplicating active runs: check if there's already an active (queued/analisando) run for this itemId and mode
         $modeValue = $analysisType === 'invoices_hbl' ? 'hbl_mbl' : $analysisType;
+        if ($actualItemId) {
+            $existingRuns = seaQuery("
+                SELECT id, status FROM dados_dachser.t_sea_runs 
+                WHERE item_id = ? AND mode = ? AND status IN ('pendente', 'analisando') 
+                LIMIT 1
+            ", [$actualItemId, $modeValue]);
+            if (count($existingRuns) > 0) {
+                $existingRun = $existingRuns[0];
+                error_log("[HBL_FILES_LOADED] [RequestId: $requestId] Analysis already in progress: Run ID " . $existingRun['id']);
+                sendJson([
+                    'success' => true,
+                    'analysisId' => (string)$existingRun['id'],
+                    'runId' => (int)$existingRun['id'],
+                    'itemId' => $actualItemId,
+                    'status' => $existingRun['status'],
+                    'message' => 'Análise já está em processamento',
+                    'files' => count($files) + count($fileUrls)
+                ]);
+                return;
+            }
+        }
+
         $runRes = seaQuery("INSERT INTO dados_dachser.t_sea_runs (item_id, mode, status, created_at) VALUES (?, ?, 'pendente', NOW())", [$actualItemId, $modeValue]);
         $runId = (int)$runRes['insertId'];
 
@@ -891,14 +973,16 @@ $router->post('sea/maritimo/submit-analysis', function($params) {
         foreach ($files as $f) { $allFiles[] = array_merge($f, ['mimeType' => isset($f['mimeType']) ? $f['mimeType'] : (isset($f['type']) ? $f['type'] : 'application/octet-stream')]); }
         foreach ($fileUrls as $f) { $allFiles[] = array_merge($f, ['mimeType' => isset($f['type']) ? $f['type'] : 'application/octet-stream']); }
 
-        // Agendamento do job no worker de background usando arquivo temporário (para evitar estouro de comando no Windows CMD)
+        $step = 'AI_REQUEST_STARTED';
+        // Agendamento do job no worker de background usando arquivo temporário
         $jobData = [
             'task' => 'sea_analysis',
             'runId' => $runId,
             'itemId' => $actualItemId,
             'analysisType' => $analysisType,
             'files' => $allFiles,
-            'context' => ['linkData' => $linkData]
+            'context' => ['linkData' => $linkData],
+            'requestId' => $requestId
         ];
         
         $jobFile = sys_get_temp_dir() . '/dachser_analysis_job_' . $runId . '.json';
@@ -906,17 +990,28 @@ $router->post('sea/maritimo/submit-analysis', function($params) {
         
         runPHPBackground(dirname(__DIR__) . '/background_worker.php', [$jobFile]);
 
+        error_log("[AI_REQUEST_STARTED] [RequestId: $requestId] Background job scheduled. RunID: $runId, ItemID: $actualItemId");
+
         sendJson([
             'success' => true,
-            'analysisId' => String($runId),
+            'analysisId' => (string)$runId,
             'runId' => $runId,
             'itemId' => $actualItemId,
             'status' => 'queued',
             'message' => 'Análise iniciada em background',
-            'files' => count($allFiles)
+            'files' => count($allFiles),
+            'requestId' => $requestId
         ]);
     } catch (Exception $e) {
-        sendJson(['error' => $e->getMessage()], 500);
+        error_log("[ANALYSIS_FAILED] [RequestId: $requestId] [Step: $step] Error: " . $e->getMessage());
+        sendJson([
+            'success' => false,
+            'code' => 'SEA_AI_REQUEST_FAILED',
+            'message' => 'Não foi possível processar os documentos.',
+            'technicalMessage' => $e->getMessage(),
+            'requestId' => $requestId,
+            'step' => $step
+        ], 500);
     }
 });
 

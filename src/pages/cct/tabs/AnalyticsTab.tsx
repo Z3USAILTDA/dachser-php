@@ -2,9 +2,88 @@ import { useState, useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Package, Clock, AlertTriangle, CheckCircle, TrendingUp, Users, Plane, BarChart3, Loader2 } from "lucide-react";
-import { format, subDays, isAfter } from "date-fns";
+import { format, subDays, isAfter, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ProcessoCCT } from "@/types/cct";
+
+/** Extrai data a partir da estrutura normalizada */
+function getDate(item: any): Date | null {
+  const shipment = item?.shipment || {};
+  const statusAtual = item?.status_atual || {};
+  const cacheMeta = item?.cache_meta || {};
+  const eventos = Array.isArray(item?.eventos) ? item.eventos : [];
+
+  const candidates = [
+    statusAtual.updated_at,
+    statusAtual.created_at,
+    shipment.updated_at,
+    shipment.created_at,
+    cacheMeta.data_ultima_atualizacao_atual,
+    cacheMeta.consulted_at_ultima_consulta,
+    cacheMeta.refreshed_at,
+  ];
+
+  for (const ev of eventos) {
+    if (ev?.data_hora_evento) {
+      candidates.push(ev.data_hora_evento);
+      break;
+    }
+  }
+
+  for (const val of candidates) {
+    if (val) {
+      const parsed = new Date(val);
+      if (!isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+  }
+  return null;
+}
+
+/** Extrai status a partir da estrutura normalizada */
+function getStatus(item: any): string {
+  const statusAtual = item?.status_atual || {};
+  const official = statusAtual.status_cct_oficial || statusAtual.sla_status;
+  return official && typeof official === "string" ? official.trim() : "SEM_STATUS";
+}
+
+/** Extrai cliente a partir da estrutura normalizada */
+function getCliente(item: any): string {
+  const shipment = item?.shipment || {};
+  const val = shipment.cliente;
+
+  if (val && typeof val === "string" && val.trim()) {
+    const trimmed = val.trim();
+    return trimmed.length > 20 ? trimmed.slice(0, 20) + "..." : trimmed;
+  }
+  return "Sem cliente";
+}
+
+/** Extrai rota a partir da estrutura normalizada */
+function getRota(item: any): string {
+  const shipment = item?.shipment || {};
+  const origem = shipment.aeroporto_origem || "N/A";
+  const destino = shipment.aeroporto_destino || "N/A";
+  return `${origem} → ${destino}`;
+}
+
+/** Extrai analista a partir da estrutura normalizada */
+function getAnalista(item: any): string {
+  const shipment = item?.shipment || {};
+
+  const candidates = [
+    shipment.analista?.nome,
+    shipment.nome_analista_legado,
+  ];
+
+  for (const val of candidates) {
+    if (val && typeof val === "string") {
+      return val.trim();
+    }
+  }
+  return "Sem analista";
+}
 const COLORS = {
   primary: "#ffc800",
   success: "#10b981",
@@ -26,11 +105,24 @@ export default function AnalyticsContent({
 }: AnalyticsContentProps) {
   const [periodo, setPeriodo] = useState("30");
   const filteredProcessos = useMemo(() => {
+    if (processos.length === 0) return [];
+
     const days = parseInt(periodo);
-    const cutoffDate = subDays(new Date(), days);
-    return processos.filter(p => {
-      const createdAt = p.shipment.created_at ? new Date(p.shipment.created_at) : new Date();
-      return isAfter(createdAt, cutoffDate);
+    if (days >= 9999) return processos;
+
+    let maxDate: Date | null = null;
+    processos.forEach((p: any) => {
+      const d = getDate(p);
+      if (d && (!maxDate || d > maxDate)) maxDate = d;
+    });
+
+    const baseDate = maxDate || new Date();
+    const cutoffDate = startOfDay(subDays(baseDate, days));
+
+    return processos.filter((p: any) => {
+      const date = getDate(p);
+      if (!date) return true; // Inclui dados sem data
+      return isAfter(date, cutoffDate);
     });
   }, [processos, periodo]);
 
@@ -53,21 +145,29 @@ export default function AnalyticsContent({
 
   // Volume por dia
   const volumePorDia = useMemo(() => {
-    const last7Days = Array.from({
-      length: 7
-    }, (_, i) => {
-      const date = subDays(new Date(), 6 - i);
+    if (filteredProcessos.length === 0) return [];
+
+    let maxDate: Date | null = null;
+    filteredProcessos.forEach((p: any) => {
+      const d = getDate(p);
+      if (d && (!maxDate || d > maxDate)) maxDate = d;
+    });
+
+    const baseDate = maxDate || new Date();
+    const fallbackDateStr = format(baseDate, "yyyy-MM-dd");
+
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const date = subDays(baseDate, 6 - i);
       return {
-        date: format(date, "dd/MM", {
-          locale: ptBR
-        }),
+        date: format(date, "dd/MM", { locale: ptBR }),
         fullDate: format(date, "yyyy-MM-dd"),
         count: 0
       };
     });
-    filteredProcessos.forEach(p => {
-      const createdAt = p.shipment.created_at ? format(new Date(p.shipment.created_at), "yyyy-MM-dd") : null;
-      const dayEntry = last7Days.find(d => d.fullDate === createdAt);
+    filteredProcessos.forEach((p: any) => {
+      const date = getDate(p);
+      const dateStr = date ? format(date, "yyyy-MM-dd") : fallbackDateStr;
+      const dayEntry = last7Days.find(d => d.fullDate === dateStr);
       if (dayEntry) dayEntry.count++;
     });
     return last7Days;
@@ -77,8 +177,10 @@ export default function AnalyticsContent({
   const topRotas = useMemo(() => {
     const rotaMap: Record<string, number> = {};
     filteredProcessos.forEach(p => {
-      const rota = `${p.shipment.aeroporto_origem} → ${p.shipment.aeroporto_destino}`;
-      rotaMap[rota] = (rotaMap[rota] || 0) + 1;
+      const rota = getRota(p);
+      if (rota !== "N/A") {
+        rotaMap[rota] = (rotaMap[rota] || 0) + 1;
+      }
     });
     return Object.entries(rotaMap).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([rota, count]) => ({
       rota,
@@ -90,11 +192,11 @@ export default function AnalyticsContent({
   const topClientes = useMemo(() => {
     const clienteMap: Record<string, number> = {};
     filteredProcessos.forEach(p => {
-      const cliente = p.shipment.cliente || "N/A";
+      const cliente = getCliente(p);
       clienteMap[cliente] = (clienteMap[cliente] || 0) + 1;
     });
     return Object.entries(clienteMap).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([cliente, count]) => ({
-      cliente: cliente.length > 15 ? cliente.slice(0, 15) + "..." : cliente,
+      cliente,
       count
     }));
   }, [filteredProcessos]);
@@ -103,7 +205,7 @@ export default function AnalyticsContent({
   const porAnalista = useMemo(() => {
     const analistaMap: Record<string, number> = {};
     filteredProcessos.forEach(p => {
-      const analista = p.shipment.analista?.nome || p.shipment.nome_analista_legado || "Não atribuído";
+      const analista = getAnalista(p);
       analistaMap[analista] = (analistaMap[analista] || 0) + 1;
     });
     return Object.entries(analistaMap).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name, value]) => ({
@@ -114,22 +216,21 @@ export default function AnalyticsContent({
 
   // Distribuição por status
   const distribuicaoStatus = useMemo(() => {
-    const statusMap: Record<string, number> = {
-      "Aguard. Manif.": 0,
-      "Manifestado": 0,
-      "Informada": 0,
-      "Manifestada": 0,
-      "Em área de Transferência": 0,
-      "Recepcionada": 0,
-      "Entregue": 0
-    };
+    const statusMap: Record<string, number> = {};
     filteredProcessos.forEach(p => {
-      const status = p.status_atual?.status_cct_oficial || "INFORMADA";
-      if (status === "INFORMADA") statusMap["Informada"]++;
-      else if (status === "MANIFESTADA") statusMap["Manifestada"]++;
-      else if (status === "EM_AREA_TRANSFERENCIA") statusMap["Em área de Transferência"]++;
-      else if (status === "RECEPCIONADA") statusMap["Recepcionada"]++;
-      else if (status === "ENTREGUE") statusMap["Entregue"]++;
+      const raw = getStatus(p).toUpperCase();
+      let label: string;
+      if (raw === "INFORMADA")                   label = "Informada";
+      else if (raw === "MANIFESTADA")             label = "Manifestada";
+      else if (raw === "EM_AREA_TRANSFERENCIA")   label = "Em Transferência";
+      else if (raw === "EM_TRANSITO_TERRESTRE")   label = "Em Trânsito";
+      else if (raw === "EM_TROCA_RECINTOS")       label = "Troca Recintos";
+      else if (raw === "RECEPCIONADA")            label = "Recepcionada";
+      else if (raw === "ENTREGUE")                label = "Entregue";
+      else if (raw === "BLOQUEIO")                label = "Bloqueio";
+      else                                        label = "Outro";
+
+      statusMap[label] = (statusMap[label] || 0) + 1;
     });
     return Object.entries(statusMap).filter(([_, value]) => value > 0).map(([name, value]) => ({
       name,
@@ -155,6 +256,8 @@ export default function AnalyticsContent({
       {/* Main Card with all analytics content */}
       <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-6 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
         <div className="space-y-6">
+
+
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

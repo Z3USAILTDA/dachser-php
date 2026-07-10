@@ -1,4 +1,4 @@
-﻿/**
+/**
  * server/routes/air.js
  * Rotas do módulo AIR: /api/air/*, /api/cct/*, /api/parsers/*
  * Pool: MARIADB_AIR_* — database padrão: dados_dachser
@@ -65,11 +65,23 @@ function extractIATA(loc) {
 
 // ─── Core: computeTrackingData ────────────────────────────────────────────────
 async function computeTrackingData() {
-  // Serve do cache se ainda estiver dentro do TTL
-  if (trackingResultCache && (Date.now() - trackingResultCache.at) < TRACKING_RESULT_TTL) {
-    return trackingResultCache.data;
+  // Se existir cache, avaliamos se ele está fresco ou vencido (stale)
+  if (trackingResultCache) {
+    const age = Date.now() - trackingResultCache.at;
+    if (age < TRACKING_RESULT_TTL) {
+      return trackingResultCache.data; // Fresco
+    }
+    // Stale: Retorna os dados IMEDIATAMENTE (Stale-While-Revalidate) para evitar 504 Gateway Timeout.
+    // Enquanto isso, dispara a atualização pesada em background (se já não estiver rodando).
+    if (!trackingInflight) {
+      trackingInflight = doCompute().catch(err => {
+        console.error('[tracking-aereo-bg] Falha ao atualizar cache em background:', err);
+      }).finally(() => { trackingInflight = null; });
+    }
+    return trackingResultCache.data; 
   }
-  // Deduplicação: se já existe uma computação em andamento, aguarda a mesma promise
+
+  // Se for o primeiro request desde o boot do servidor (sem cache nenhum), tem que aguardar.
   if (trackingInflight) return trackingInflight;
 
   async function doCompute() {
@@ -132,7 +144,7 @@ async function computeTrackingData() {
           json_unquote(json_extract(tdaf.timeline_json,'$[5].status_code')) as code5_native
       from dados_dachser.t_dados_aereo tda
       left join dados_dachser.t_fato_aereo tdaf
-          on tdaf.awb collate utf8mb4_unicode_ci = tda.awb_number collate utf8mb4_unicode_ci
+          on tdaf.awb = tda.awb_number
       where tda.etd >= ?
     ),
     event_time as (
@@ -199,16 +211,15 @@ async function computeTrackingData() {
   } else {
     try {
       const activeAwbs = [...new Set((rows||[]).map(r => (r.AWB||'').toString().trim()).filter(a => a.length > 0))];
-      const awbInClause = activeAwbs.length > 0 ? `AND tda.awb_number IN (${activeAwbs.map(a=>`'${a.replace(/'/g,"''")}'`).join(',')})` : 'AND 1=0';
+      const awbInClause = activeAwbs.length > 0 ? activeAwbs.map(a=>`'${a.replace(/'/g,"''")}'`).join(',') : "'0'";
       const discSql = `
         WITH base_disc AS (
-          SELECT tda.awb_number AS awb, tda.hawb_number AS hawb, tdaf.timeline_json
-          FROM dados_dachser.t_dados_aereo tda
-          INNER JOIN dados_dachser.t_fato_aereo tdaf ON tdaf.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci AND JSON_VALID(tdaf.hawbs_json) AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
-          WHERE tda.etd >= '${ETD_CUTOFF}' ${awbInClause} AND tdaf.timeline_json IS NOT NULL AND JSON_VALID(tdaf.timeline_json)
+          SELECT tdaf.awb, tdaf.timeline_json
+          FROM dados_dachser.t_fato_aereo tdaf
+          WHERE tdaf.awb IN (${awbInClause}) AND tdaf.timeline_json IS NOT NULL AND JSON_VALID(tdaf.timeline_json)
         ),
         eventos_disc AS (
-          SELECT b.awb, b.hawb, jt.ordem, jt.description,
+          SELECT b.awb, jt.ordem, jt.description,
             CASE WHEN UPPER(COALESCE(jt.description,'')) REGEXP '(^|[^A-Z])(BOOKED|BOOKING)([^A-Z]|$)' THEN NULL
                  WHEN UPPER(COALESCE(jt.description,'')) REGEXP 'OFFLOADED|OFLD' AND (UPPER(jt.description) REGEXP '(^|[^0-9])0[[:space:]]+PIECES?([^A-Z]|$)' OR UPPER(jt.description) REGEXP 'QTY:[[:space:]]*0([^0-9]|$)') THEN NULL
                  WHEN UPPER(jt.description) REGEXP 'QTY:[[:space:]]*[1-9][0-9]*' THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description),'QTY:[[:space:]]*[1-9][0-9]*'),'[1-9][0-9]*') AS UNSIGNED)
@@ -220,27 +231,33 @@ async function computeTrackingData() {
           JOIN JSON_TABLE(b.timeline_json,'$[*]' COLUMNS(ordem FOR ORDINALITY, description VARCHAR(1000) PATH '$.description')) jt
         ),
         baseline_pieces AS (
-          SELECT awb,hawb,pieces_extraidas AS baseline_pecas FROM (SELECT e.*,ROW_NUMBER() OVER(PARTITION BY e.awb,e.hawb ORDER BY e.ordem) AS rn FROM eventos_disc e WHERE e.pieces_extraidas IS NOT NULL AND e.pieces_extraidas>0) x WHERE x.rn=1
+          SELECT awb, pieces_extraidas AS baseline_pecas FROM (SELECT e.*, ROW_NUMBER() OVER(PARTITION BY e.awb ORDER BY e.ordem) AS rn FROM eventos_disc e WHERE e.pieces_extraidas IS NOT NULL AND e.pieces_extraidas>0) x WHERE x.rn=1
         ),
         ultimo_evento_absoluto AS (
-          SELECT awb,hawb,is_dis_event AS ultimo_is_dis_event FROM (SELECT e.*,ROW_NUMBER() OVER(PARTITION BY e.awb,e.hawb ORDER BY e.ordem DESC) AS rn FROM eventos_disc e) x WHERE x.rn=1
+          SELECT awb, is_dis_event AS ultimo_is_dis_event FROM (SELECT e.*, ROW_NUMBER() OVER(PARTITION BY e.awb ORDER BY e.ordem DESC) AS rn FROM eventos_disc e) x WHERE x.rn=1
         ),
         eventos_validos_pecas AS (
-          SELECT e.awb,e.hawb,e.ordem,e.pieces_extraidas,ROW_NUMBER() OVER(PARTITION BY e.awb,e.hawb ORDER BY e.ordem DESC) AS rn_desc,SUM(e.pieces_extraidas) OVER(PARTITION BY e.awb,e.hawb ORDER BY e.ordem DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS soma_pecas_desc
+          SELECT e.awb, e.ordem, e.pieces_extraidas, ROW_NUMBER() OVER(PARTITION BY e.awb ORDER BY e.ordem DESC) AS rn_desc, SUM(e.pieces_extraidas) OVER(PARTITION BY e.awb ORDER BY e.ordem DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS soma_pecas_desc
           FROM eventos_disc e WHERE e.pieces_extraidas IS NOT NULL AND e.pieces_extraidas>0
         ),
-        ultimo_evento_pecas AS (SELECT awb,hawb,pieces_extraidas AS ultimo_evento_pecas FROM eventos_validos_pecas WHERE rn_desc=1),
-        normalizado_por_soma_final AS (SELECT v.awb,v.hawb,MAX(CASE WHEN bp.baseline_pecas IS NOT NULL AND v.rn_desc>=2 AND v.soma_pecas_desc=bp.baseline_pecas THEN 1 ELSE 0 END) AS normalizado_soma_final FROM eventos_validos_pecas v LEFT JOIN baseline_pieces bp ON bp.awb=v.awb AND bp.hawb=v.hawb GROUP BY v.awb,v.hawb),
-        agregado_disc AS (SELECT ev.awb,ev.hawb,MIN(CASE WHEN ev.pieces_extraidas IS NOT NULL AND ev.pieces_extraidas>0 THEN ev.pieces_extraidas END) AS min_pieces,MAX(CASE WHEN ev.pieces_extraidas IS NOT NULL AND ev.pieces_extraidas>0 THEN ev.pieces_extraidas END) AS max_pieces FROM eventos_disc ev GROUP BY ev.awb,ev.hawb),
+        ultimo_evento_pecas AS (SELECT awb, pieces_extraidas AS ultimo_evento_pecas FROM eventos_validos_pecas WHERE rn_desc=1),
+        normalizado_por_soma_final AS (SELECT v.awb, MAX(CASE WHEN bp.baseline_pecas IS NOT NULL AND v.rn_desc>=2 AND v.soma_pecas_desc=bp.baseline_pecas THEN 1 ELSE 0 END) AS normalizado_soma_final FROM eventos_validos_pecas v LEFT JOIN baseline_pieces bp ON bp.awb=v.awb GROUP BY v.awb),
+        agregado_disc AS (SELECT ev.awb, MIN(CASE WHEN ev.pieces_extraidas IS NOT NULL AND ev.pieces_extraidas>0 THEN ev.pieces_extraidas END) AS min_pieces, MAX(CASE WHEN ev.pieces_extraidas IS NOT NULL AND ev.pieces_extraidas>0 THEN ev.pieces_extraidas END) AS max_pieces FROM eventos_disc ev GROUP BY ev.awb),
         final_classificacao AS (
-          SELECT a.awb,a.hawb,bp.baseline_pecas,up.ultimo_evento_pecas,
+          SELECT a.awb, bp.baseline_pecas, up.ultimo_evento_pecas,
             CASE WHEN bp.baseline_pecas IS NOT NULL AND a.min_pieces IS NOT NULL AND a.max_pieces IS NOT NULL AND a.min_pieces<>a.max_pieces AND NOT(up.ultimo_evento_pecas IS NOT NULL AND up.ultimo_evento_pecas=bp.baseline_pecas) AND COALESCE(ns.normalizado_soma_final,0)=0 THEN 1 ELSE 0 END AS pieces_discrepancy,
             CASE WHEN ua.ultimo_is_dis_event=1 THEN 1 ELSE 0 END AS has_dis_event,
             CASE WHEN ua.ultimo_is_dis_event=1 THEN 'DIS_ULTIMO_EVENTO' WHEN bp.baseline_pecas IS NOT NULL AND a.min_pieces IS NOT NULL AND a.max_pieces IS NOT NULL AND a.min_pieces<>a.max_pieces AND NOT(up.ultimo_evento_pecas IS NOT NULL AND up.ultimo_evento_pecas=bp.baseline_pecas) AND COALESCE(ns.normalizado_soma_final,0)=0 THEN 'DISCREPANCIA_REAL' ELSE 'SEM_DISCREPANCIA' END AS status_final
-          FROM agregado_disc a LEFT JOIN baseline_pieces bp ON bp.awb=a.awb AND bp.hawb=a.hawb LEFT JOIN ultimo_evento_pecas up ON up.awb=a.awb AND up.hawb=a.hawb LEFT JOIN ultimo_evento_absoluto ua ON ua.awb=a.awb AND ua.hawb=a.hawb LEFT JOIN normalizado_por_soma_final ns ON ns.awb=a.awb AND ns.hawb=a.hawb
+          FROM agregado_disc a LEFT JOIN baseline_pieces bp ON bp.awb=a.awb LEFT JOIN ultimo_evento_pecas up ON up.awb=a.awb LEFT JOIN ultimo_evento_absoluto ua ON ua.awb=a.awb LEFT JOIN normalizado_por_soma_final ns ON ns.awb=a.awb
         )
-        SELECT awb AS AWB,hawb AS HAWB,baseline_pecas AS BASELINE_PECAS,ultimo_evento_pecas AS ULTIMO_EVENTO_PECAS,pieces_discrepancy AS PIECES_DISCREPANCY,has_dis_event AS HAS_DIS_EVENT,status_final AS STATUS_FINAL
-        FROM final_classificacao WHERE status_final IN ('DIS_ULTIMO_EVENTO','DISCREPANCIA_REAL')
+        SELECT DISTINCT tda.awb_number AS AWB, tda.hawb_number AS HAWB, fc.baseline_pecas AS BASELINE_PECAS, fc.ultimo_evento_pecas AS ULTIMO_EVENTO_PECAS, fc.pieces_discrepancy AS PIECES_DISCREPANCY, fc.has_dis_event AS HAS_DIS_EVENT, fc.status_final AS STATUS_FINAL
+        FROM final_classificacao fc
+        INNER JOIN dados_dachser.t_dados_aereo tda ON tda.awb_number = fc.awb
+        INNER JOIN dados_dachser.t_fato_aereo tdaf ON tdaf.awb = fc.awb
+        WHERE fc.status_final IN ('DIS_ULTIMO_EVENTO','DISCREPANCIA_REAL') 
+          AND tda.etd >= '${ETD_CUTOFF}'
+          AND JSON_VALID(tdaf.hawbs_json)
+          AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
       `;
       const discRows = await queryWithRetry(discSql);
       for (const dr of discRows || []) {
@@ -259,16 +276,15 @@ async function computeTrackingData() {
 
   if (routeCacheStale) {
     const activeAwbsRoute = [...new Set((rows||[]).map(r=>(r.AWB||'').toString().trim()).filter(a=>a.length>0))];
-    const awbInClauseRoute = activeAwbsRoute.length > 0 ? `AND tda.awb_number IN (${activeAwbsRoute.map(a=>`'${a.replace(/'/g,"''")}'`).join(',')})` : 'AND 1=0';
+    const awbInClauseRoute = activeAwbsRoute.length > 0 ? activeAwbsRoute.map(a=>`'${a.replace(/'/g,"''")}'`).join(',') : "'0'";
     const routeSql = `
       WITH base_rota AS (
-        SELECT tda.awb_number AS awb,tda.hawb_number AS hawb,tdaf.timeline_json,TRIM(COALESCE(tdaf.origin,'')) AS origin_raw,TRIM(COALESCE(tdaf.destination,'')) AS destination_raw
-        FROM dados_dachser.t_dados_aereo tda
-        INNER JOIN dados_dachser.t_fato_aereo tdaf ON tdaf.awb COLLATE utf8mb4_unicode_ci=tda.awb_number COLLATE utf8mb4_unicode_ci AND JSON_VALID(tdaf.hawbs_json) AND JSON_CONTAINS(tdaf.hawbs_json,JSON_ARRAY(tda.hawb_number))
-        WHERE tdaf.timeline_json IS NOT NULL AND JSON_VALID(tdaf.timeline_json) ${awbInClauseRoute}
+        SELECT tdaf.awb, tdaf.timeline_json, TRIM(COALESCE(tdaf.origin,'')) AS origin_raw, TRIM(COALESCE(tdaf.destination,'')) AS destination_raw
+        FROM dados_dachser.t_fato_aereo tdaf
+        WHERE tdaf.awb IN (${awbInClauseRoute}) AND tdaf.timeline_json IS NOT NULL AND JSON_VALID(tdaf.timeline_json)
       ),
       base_parse AS (
-        SELECT b.awb,b.hawb,b.timeline_json,b.origin_raw,b.destination_raw,
+        SELECT b.awb, b.timeline_json, b.origin_raw, b.destination_raw,
           CASE WHEN b.origin_raw REGEXP '\\\\([A-Za-z]{3}\\\\)' THEN UPPER(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(b.origin_raw,'(',-1),')',1))) WHEN b.origin_raw REGEXP '^[A-Za-z]{3}$' THEN UPPER(TRIM(b.origin_raw)) ELSE NULL END COLLATE utf8mb4_unicode_ci AS origin_candidate_code,
           CASE WHEN b.destination_raw REGEXP '\\\\([A-Za-z]{3}\\\\)' THEN UPPER(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(b.destination_raw,'(',-1),')',1))) WHEN b.destination_raw REGEXP '^[A-Za-z]{3}$' THEN UPPER(TRIM(b.destination_raw)) ELSE NULL END COLLATE utf8mb4_unicode_ci AS destination_candidate_code,
           UPPER(TRIM(b.origin_raw)) COLLATE utf8mb4_unicode_ci AS origin_alias_key,
@@ -276,64 +292,70 @@ async function computeTrackingData() {
         FROM base_rota b
       ),
       base_resolvida AS (
-        SELECT b.awb,b.hawb,b.timeline_json,
-          COALESCE(ai_origin.iata_code,an_origin.iata_code,ac_origin.iata_code) AS origin_code,
-          COALESCE(ai_dest.iata_code,an_dest.iata_code,ac_dest.iata_code) AS destination_code
+        SELECT b.awb, b.timeline_json,
+          COALESCE(ai_origin.iata_code, an_origin.iata_code, ac_origin.iata_code) AS origin_code,
+          COALESCE(ai_dest.iata_code, an_dest.iata_code, ac_dest.iata_code) AS destination_code
         FROM base_parse b
-        LEFT JOIN dados_dachser.t_iata_airports ai_origin ON ai_origin.iata_code COLLATE utf8mb4_unicode_ci=b.origin_candidate_code COLLATE utf8mb4_unicode_ci AND ai_origin.is_active=1
-        LEFT JOIN dados_dachser.t_iata_airports an_origin ON UPPER(TRIM(an_origin.airport_name)) COLLATE utf8mb4_unicode_ci=b.origin_alias_key COLLATE utf8mb4_unicode_ci AND an_origin.is_active=1
-        LEFT JOIN dados_dachser.t_iata_airports ac_origin ON UPPER(TRIM(ac_origin.city_name)) COLLATE utf8mb4_unicode_ci=b.origin_alias_key COLLATE utf8mb4_unicode_ci AND ac_origin.is_active=1
-        LEFT JOIN dados_dachser.t_iata_airports ai_dest ON ai_dest.iata_code COLLATE utf8mb4_unicode_ci=b.destination_candidate_code COLLATE utf8mb4_unicode_ci AND ai_dest.is_active=1
-        LEFT JOIN dados_dachser.t_iata_airports an_dest ON UPPER(TRIM(an_dest.airport_name)) COLLATE utf8mb4_unicode_ci=b.destination_alias_key COLLATE utf8mb4_unicode_ci AND an_dest.is_active=1
-        LEFT JOIN dados_dachser.t_iata_airports ac_dest ON UPPER(TRIM(ac_dest.city_name)) COLLATE utf8mb4_unicode_ci=b.destination_alias_key COLLATE utf8mb4_unicode_ci AND ac_dest.is_active=1
+        LEFT JOIN dados_dachser.t_iata_airports ai_origin ON ai_origin.iata_code COLLATE utf8mb4_unicode_ci = b.origin_candidate_code COLLATE utf8mb4_unicode_ci AND ai_origin.is_active=1
+        LEFT JOIN dados_dachser.t_iata_airports an_origin ON UPPER(TRIM(an_origin.airport_name)) COLLATE utf8mb4_unicode_ci = b.origin_alias_key COLLATE utf8mb4_unicode_ci AND an_origin.is_active=1
+        LEFT JOIN dados_dachser.t_iata_airports ac_origin ON UPPER(TRIM(ac_origin.city_name)) COLLATE utf8mb4_unicode_ci = b.origin_alias_key COLLATE utf8mb4_unicode_ci AND ac_origin.is_active=1
+        LEFT JOIN dados_dachser.t_iata_airports ai_dest ON ai_dest.iata_code COLLATE utf8mb4_unicode_ci = b.destination_candidate_code COLLATE utf8mb4_unicode_ci AND ai_dest.is_active=1
+        LEFT JOIN dados_dachser.t_iata_airports an_dest ON UPPER(TRIM(an_dest.airport_name)) COLLATE utf8mb4_unicode_ci = b.destination_alias_key COLLATE utf8mb4_unicode_ci AND an_dest.is_active=1
+        LEFT JOIN dados_dachser.t_iata_airports ac_dest ON UPPER(TRIM(ac_dest.city_name)) COLLATE utf8mb4_unicode_ci = b.destination_alias_key COLLATE utf8mb4_unicode_ci AND ac_dest.is_active=1
       ),
-      eventos_raw AS (SELECT b.awb,b.hawb,jt.ordem,TRIM(COALESCE(jt.location,'')) AS location_raw FROM base_resolvida b JOIN JSON_TABLE(b.timeline_json,'$[*]' COLUMNS(ordem FOR ORDINALITY,location VARCHAR(255) PATH '$.location')) jt WHERE jt.location IS NOT NULL AND TRIM(jt.location)<>''),
+      eventos_raw AS (SELECT b.awb, jt.ordem, TRIM(COALESCE(jt.location,'')) AS location_raw FROM base_resolvida b JOIN JSON_TABLE(b.timeline_json,'$[*]' COLUMNS(ordem FOR ORDINALITY, location VARCHAR(255) PATH '$.location')) jt WHERE jt.location IS NOT NULL AND TRIM(jt.location)<>''),
       eventos_parse AS (
-        SELECT e.awb,e.hawb,e.ordem,e.location_raw,
+        SELECT e.awb, e.ordem, e.location_raw,
           CASE WHEN e.location_raw REGEXP '\\\\([A-Za-z]{3}\\\\)' THEN UPPER(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(e.location_raw,'(',-1),')',1))) WHEN e.location_raw REGEXP '^[A-Za-z]{3}$' THEN UPPER(TRIM(e.location_raw)) ELSE NULL END COLLATE utf8mb4_unicode_ci AS location_candidate_code,
           UPPER(TRIM(e.location_raw)) COLLATE utf8mb4_unicode_ci AS location_alias_key
         FROM eventos_raw e
       ),
       eventos_resolvidos AS (
-        SELECT e.awb,e.hawb,e.ordem,COALESCE(ai.iata_code,an.iata_code,ac.iata_code) AS location_code
+        SELECT e.awb, e.ordem, COALESCE(ai.iata_code, an.iata_code, ac.iata_code) AS location_code
         FROM eventos_parse e
-        LEFT JOIN dados_dachser.t_iata_airports ai ON ai.iata_code COLLATE utf8mb4_unicode_ci=e.location_candidate_code COLLATE utf8mb4_unicode_ci AND ai.is_active=1
-        LEFT JOIN dados_dachser.t_iata_airports an ON UPPER(TRIM(an.airport_name)) COLLATE utf8mb4_unicode_ci=e.location_alias_key COLLATE utf8mb4_unicode_ci AND an.is_active=1
-        LEFT JOIN dados_dachser.t_iata_airports ac ON UPPER(TRIM(ac.city_name)) COLLATE utf8mb4_unicode_ci=e.location_alias_key COLLATE utf8mb4_unicode_ci AND ac.is_active=1
+        LEFT JOIN dados_dachser.t_iata_airports ai ON ai.iata_code COLLATE utf8mb4_unicode_ci = e.location_candidate_code COLLATE utf8mb4_unicode_ci AND ai.is_active=1
+        LEFT JOIN dados_dachser.t_iata_airports an ON UPPER(TRIM(an.airport_name)) COLLATE utf8mb4_unicode_ci = e.location_alias_key COLLATE utf8mb4_unicode_ci AND an.is_active=1
+        LEFT JOIN dados_dachser.t_iata_airports ac ON UPPER(TRIM(ac.city_name)) COLLATE utf8mb4_unicode_ci = e.location_alias_key COLLATE utf8mb4_unicode_ci AND ac.is_active=1
       ),
-      eventos_validos AS (SELECT awb,hawb,ordem,location_code FROM eventos_resolvidos WHERE location_code IS NOT NULL AND TRIM(location_code)<>''),
-      eventos_sem_rep AS (SELECT e.awb,e.hawb,e.ordem,e.location_code,LAG(e.location_code) OVER(PARTITION BY e.awb,e.hawb ORDER BY e.ordem) AS prev FROM eventos_validos e),
-      rota_timeline_limpa AS (SELECT awb,hawb,ordem,location_code FROM eventos_sem_rep WHERE prev IS NULL OR location_code COLLATE utf8mb4_unicode_ci<>prev COLLATE utf8mb4_unicode_ci),
-      timeline_stats AS (SELECT awb,hawb,COUNT(*) AS qtd_pontos,COUNT(DISTINCT location_code) AS qtd_distintos FROM rota_timeline_limpa GROUP BY awb,hawb),
+      eventos_validos AS (SELECT awb, ordem, location_code FROM eventos_resolvidos WHERE location_code IS NOT NULL AND TRIM(location_code)<>''),
+      eventos_sem_rep AS (SELECT e.awb, e.ordem, e.location_code, LAG(e.location_code) OVER(PARTITION BY e.awb ORDER BY e.ordem) AS prev FROM eventos_validos e),
+      rota_timeline_limpa AS (SELECT awb, ordem, location_code FROM eventos_sem_rep WHERE prev IS NULL OR location_code COLLATE utf8mb4_unicode_ci<>prev COLLATE utf8mb4_unicode_ci),
+      timeline_stats AS (SELECT awb, COUNT(*) AS qtd_pontos, COUNT(DISTINCT location_code) AS qtd_distintos FROM rota_timeline_limpa GROUP BY awb),
       primeiro_ultimo AS (
-        SELECT x.awb,x.hawb,MAX(CASE WHEN x.rn_asc=1 THEN x.location_code END) AS first_code,MAX(CASE WHEN x.rn_desc=1 THEN x.location_code END) AS last_code
-        FROM (SELECT r.awb,r.hawb,r.location_code,ROW_NUMBER() OVER(PARTITION BY r.awb,r.hawb ORDER BY r.ordem ASC) AS rn_asc,ROW_NUMBER() OVER(PARTITION BY r.awb,r.hawb ORDER BY r.ordem DESC) AS rn_desc FROM rota_timeline_limpa r) x
-        GROUP BY x.awb,x.hawb
+        SELECT x.awb, MAX(CASE WHEN x.rn_asc=1 THEN x.location_code END) AS first_code, MAX(CASE WHEN x.rn_desc=1 THEN x.location_code END) AS last_code
+        FROM (SELECT r.awb, r.location_code, ROW_NUMBER() OVER(PARTITION BY r.awb ORDER BY r.ordem ASC) AS rn_asc, ROW_NUMBER() OVER(PARTITION BY r.awb ORDER BY r.ordem DESC) AS rn_desc FROM rota_timeline_limpa r) x
+        GROUP BY x.awb
       ),
       rota_base_final AS (
-        SELECT b.awb,b.hawb,
+        SELECT b.awb,
           CASE WHEN b.origin_code IS NOT NULL AND (b.destination_code IS NULL OR b.origin_code COLLATE utf8mb4_unicode_ci<>b.destination_code COLLATE utf8mb4_unicode_ci) THEN b.origin_code
                WHEN b.origin_code IS NULL AND b.destination_code IS NULL AND ts.qtd_distintos>=2 AND p.first_code IS NOT NULL AND p.last_code IS NOT NULL AND p.first_code COLLATE utf8mb4_unicode_ci<>p.last_code COLLATE utf8mb4_unicode_ci THEN p.first_code
                ELSE NULL END AS origin_final,
           CASE WHEN b.destination_code IS NOT NULL AND (b.origin_code IS NULL OR b.destination_code COLLATE utf8mb4_unicode_ci<>b.origin_code COLLATE utf8mb4_unicode_ci) THEN b.destination_code
                WHEN b.origin_code IS NULL AND b.destination_code IS NULL AND ts.qtd_distintos>=2 AND p.first_code IS NOT NULL AND p.last_code IS NOT NULL AND p.first_code COLLATE utf8mb4_unicode_ci<>p.last_code COLLATE utf8mb4_unicode_ci THEN p.last_code
                ELSE NULL END AS destination_final,
-          ts.qtd_pontos,ts.qtd_distintos,p.first_code,p.last_code
-        FROM base_resolvida b LEFT JOIN timeline_stats ts ON ts.awb=b.awb AND ts.hawb=b.hawb LEFT JOIN primeiro_ultimo p ON p.awb=b.awb AND p.hawb=b.hawb
+          ts.qtd_pontos, ts.qtd_distintos, p.first_code, p.last_code
+        FROM base_resolvida b LEFT JOIN timeline_stats ts ON ts.awb=b.awb LEFT JOIN primeiro_ultimo p ON p.awb=b.awb
       ),
       conexoes_inter AS (
-        SELECT r.awb,r.hawb,GROUP_CONCAT(r.location_code ORDER BY r.ordem SEPARATOR ',') AS conexoes
-        FROM rota_timeline_limpa r INNER JOIN rota_base_final f ON f.awb=r.awb AND f.hawb=r.hawb
+        SELECT r.awb, GROUP_CONCAT(r.location_code ORDER BY r.ordem SEPARATOR ',') AS conexoes
+        FROM rota_timeline_limpa r INNER JOIN rota_base_final f ON f.awb=r.awb
         WHERE (f.origin_final IS NULL OR r.location_code COLLATE utf8mb4_unicode_ci<>f.origin_final COLLATE utf8mb4_unicode_ci)
           AND (f.destination_final IS NULL OR r.location_code COLLATE utf8mb4_unicode_ci<>f.destination_final COLLATE utf8mb4_unicode_ci)
-        GROUP BY r.awb,r.hawb
+        GROUP BY r.awb
       )
-      SELECT f.awb AS AWB,f.hawb AS HAWB,f.origin_final AS ORIGEM_FINAL,f.destination_final AS DESTINO_FINAL,ci.conexoes AS CONEXOES,
+      SELECT DISTINCT tda.awb_number AS AWB, tda.hawb_number AS HAWB, f.origin_final AS ORIGEM_FINAL, f.destination_final AS DESTINO_FINAL, ci.conexoes AS CONEXOES,
         CASE WHEN f.origin_final IS NULL AND f.destination_final IS NULL THEN 'SEM_ORIGEM_DESTINO_CONFIAVEIS'
              WHEN f.origin_final IS NULL OR f.destination_final IS NULL THEN 'ROTA_INCOMPLETA'
              WHEN f.origin_final COLLATE utf8mb4_unicode_ci=f.destination_final COLLATE utf8mb4_unicode_ci THEN 'ORIGEM_DESTINO_IGUAIS'
              ELSE 'OK' END AS STATUS_ROTA
-      FROM rota_base_final f LEFT JOIN conexoes_inter ci ON ci.awb=f.awb AND ci.hawb=f.hawb
+      FROM rota_base_final f 
+      LEFT JOIN conexoes_inter ci ON ci.awb=f.awb
+      INNER JOIN dados_dachser.t_dados_aereo tda ON tda.awb_number = f.awb
+      INNER JOIN dados_dachser.t_fato_aereo tdaf ON tdaf.awb = f.awb
+      WHERE tda.etd >= '${ETD_CUTOFF}'
+        AND JSON_VALID(tdaf.hawbs_json)
+        AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
     `;
     queryWithRetry(routeSql).then(routeRows => {
       const fresh = {};
@@ -1212,7 +1234,7 @@ Retorne APENAS JSON válido.`;
           'content-type': 'application/json',
         },
         body: JSON.stringify({
-          model: process.env.PARSER_ANTHROPIC_MODEL || 'claude-sonnet-4-6',
+          model: process.env.PARSER_ANTHROPIC_MODEL || 'claude-sonnet-4-5',
           max_tokens: 4096,
           system: systemPrompt,
           messages: [{ role: 'user', content: [contentBlock, { type: 'text', text: userPrompt }] }],
@@ -1222,19 +1244,33 @@ Retorne APENAS JSON válido.`;
       if (!claudeRes.ok) {
         const errText = await claudeRes.text();
         console.error('[check-awb/parse] Claude API error:', claudeRes.status, errText);
-        return res.status(502).json({ success: false, error: 'Erro ao chamar API de extração.' });
+        const errorData = JSON.parse(errText || '{}');
+        return res.status(502).json({ 
+          success: false, 
+          error: `API de extração indisponível: ${errorData.error?.message || 'Erro desconhecido'}` 
+        });
       }
 
       const claudeData = await claudeRes.json();
       const rawText = claudeData.content?.[0]?.text || '';
+      if (!rawText) {
+        console.error('[check-awb/parse] Resposta vazia da API:', claudeData);
+        return res.status(500).json({ success: false, error: 'Resposta vazia da API de extração.' });
+      }
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        return res.status(500).json({ success: false, error: 'Resposta inválida da API de extração.' });
+        console.error('[check-awb/parse] JSON não encontrado:', rawText);
+        return res.status(500).json({ success: false, error: 'Formato de resposta inválido da API.' });
       }
-      const parsed = JSON.parse(jsonMatch[0]);
-      res.json({ success: true, ...parsed });
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        res.json({ success: true, ...parsed });
+      } catch (parseErr) {
+        console.error('[check-awb/parse] Erro ao parsear JSON:', parseErr.message, jsonMatch[0]);
+        res.status(500).json({ success: false, error: 'Erro ao processar resposta da API.' });
+      }
     } catch (err) {
-      console.error('[check-awb/parse]', err.message);
+      console.error('[check-awb/parse]', err.message, err.stack);
       res.status(500).json({ success: false, error: 'Erro ao extrair dados do documento.' });
     }
   });
@@ -2357,7 +2393,13 @@ Extract the MAWB and all HAWB entries. Return ONLY valid JSON with:
       console.error('[POST /api/air/olimpo/force-swap-log]', err.message);
       res.status(500).json({ error: err.message });
     }
+    }
   });
-}
 
+  // Warm up the tracking cache on startup
+  setTimeout(() => {
+    console.log('[tracking-aereo] Pre-warming cache on server start...');
+    computeTrackingData().catch(e => console.error('[tracking-aereo] Failed to warm cache:', e));
+  }, 2000);
+}
 

@@ -397,6 +397,7 @@ export function useProcessosCCT(options: { enabled?: boolean } = {}) {
       console.log("CCT: Fetching shipments from Express API...");
 
       const data = await apiGet('/api/sea/cct/shipments');
+      console.log("CCT: Raw response data:", data);
 
       if (!data?.success) {
         console.error("CCT: Error in response:", data?.error);
@@ -405,9 +406,24 @@ export function useProcessosCCT(options: { enabled?: boolean } = {}) {
 
       // O endpoint já aplica a regra de retenção
       // (oculta entregues após 5 dias do evento via dados_dachser.t_cct_hidden_hawbs).
-      const processos: ProcessoCCT[] = (data.data || []).map(mapRowToProcessoCCT);
-      console.log(`CCT: Loaded ${processos.length} processos`);
-      return processos;
+      try {
+        const processos: ProcessoCCT[] = (data.data || []).map((row: any, idx: number) => {
+          try {
+            return mapRowToProcessoCCT(row);
+          } catch (e) {
+            console.error(`CCT: Error mapping row ${idx}:`, e, row);
+            throw e;
+          }
+        });
+        console.log(`CCT: Loaded ${processos.length} processos`);
+        if (processos.length > 0) {
+          console.log("CCT: First processo:", processos[0]);
+        }
+        return processos;
+      } catch (e) {
+        console.error("CCT: Error during mapping:", e);
+        throw e;
+      }
     },
     enabled,
     staleTime: 60_000,

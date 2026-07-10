@@ -118,6 +118,28 @@ function getCache($key, $ttlSeconds) {
 }
 
 /**
+ * Retorna cache validando Stale-While-Revalidate.
+ * Se estiver vencido mas dentro da janela stale, retorna junto com flag is_stale.
+ */
+function getCacheStale($key, $ttlSeconds, $staleTtlSeconds = 86400) {
+    $file = sys_get_temp_dir() . '/dachser_cache_' . md5($key) . '.json';
+    if (file_exists($file)) {
+        $data = json_decode(file_get_contents($file), true);
+        if (isset($data['expiry'])) {
+            $isFresh = $data['expiry'] > time();
+            $isStaleValid = ($data['expiry'] + $staleTtlSeconds) > time();
+            if ($isFresh || $isStaleValid) {
+                return [
+                    'value' => $data['value'],
+                    'is_stale' => !$isFresh
+                ];
+            }
+        }
+    }
+    return null;
+}
+
+/**
  * Armazena valor em cache com TTL.
  */
 function setCache($key, $value, $ttlSeconds) {
@@ -224,7 +246,7 @@ function runPHPBackground($scriptPath, $args = []) {
     
     if (strncasecmp(PHP_OS, 'WIN', 3) === 0) {
         // Windows background
-        $cmd = "start /B " . escapeshellarg($phpBin) . " " . escapeshellarg($scriptPath) . " " . $argsStr . " > NUL 2>&1";
+        $cmd = "start /B \"\" " . escapeshellarg($phpBin) . " " . escapeshellarg($scriptPath) . " " . $argsStr . " > NUL 2>&1";
         pclose(popen($cmd, "r"));
     } else {
         // Linux/Unix background

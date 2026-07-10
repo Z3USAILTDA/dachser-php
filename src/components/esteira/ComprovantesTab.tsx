@@ -20,8 +20,8 @@ const fmtDate = (d: string | null | undefined) => {
 };
 
 interface ComprovanteItem {
-  id: number;
-  voucher_id: number;
+  id: string;
+  voucher_id: string;
   numero_spo: string;
   file_name: string;
   file_url: string;
@@ -35,7 +35,7 @@ interface ComprovanteItem {
 }
 
 interface VoucherGroup {
-  voucher_id: number;
+  voucher_id: string;
   numero_spo: string;
   fornecedor?: string;
   tipo_documento?: string;
@@ -59,8 +59,16 @@ export function ComprovantesTab() {
       const resp = await fetch('/api/fin/vouchers/comprovantes');
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
-      if (data?.comprovantes) {
+      console.log('[ComprovantesTab] API response:', data);
+      if (data?.comprovantes && Array.isArray(data.comprovantes)) {
+        console.log(`[ComprovantesTab] ${data.comprovantes.length} comprovantes carregados`);
+        if (data.comprovantes.length > 0) {
+          console.log('[ComprovantesTab] Primeiro item:', data.comprovantes[0]);
+        }
         setComprovantes(data.comprovantes);
+      } else {
+        console.warn('[ComprovantesTab] Resposta sem campo comprovantes:', data);
+        setComprovantes([]);
       }
     } catch (err: any) {
       console.error("Erro ao carregar comprovantes:", err);
@@ -73,14 +81,15 @@ export function ComprovantesTab() {
   useEffect(() => { loadComprovantes(); }, []);
 
   const grouped = useMemo<VoucherGroup[]>(() => {
-    const map = new Map<number, VoucherGroup>();
+    const map = new Map<string, VoucherGroup>();
     for (const c of comprovantes) {
-      const existing = map.get(c.voucher_id);
+      const key = String(c.voucher_id);
+      const existing = map.get(key);
       if (existing) {
         existing.docs.push(c);
         if (c.created_at > existing.lastUpload) existing.lastUpload = c.created_at;
       } else {
-        map.set(c.voucher_id, {
+        map.set(key, {
           voucher_id: c.voucher_id,
           numero_spo: c.numero_spo,
           fornecedor: c.fornecedor,
@@ -96,13 +105,13 @@ export function ComprovantesTab() {
   }, [comprovantes]);
 
   const filteredGroups = grouped.filter((g) => {
-    // Ocultar linhas sem SPO válido
-    if (!g.numero_spo || g.numero_spo.trim() === "") return false;
+    // Mostrar mesmo vouchers sem SPO (mostrar como "-")
     const term = searchTerm.toLowerCase();
+    if (!term) return true;
     return (
-      g.numero_spo?.toLowerCase().includes(term) ||
-      g.fornecedor?.toLowerCase().includes(term) ||
-      g.docs.some(d => d.file_name?.toLowerCase().includes(term))
+      (g.numero_spo?.toLowerCase() || "").includes(term) ||
+      (g.fornecedor?.toLowerCase() || "").includes(term) ||
+      g.docs.some(d => (d.file_name?.toLowerCase() || "").includes(term))
     );
   });
 
@@ -198,8 +207,8 @@ export function ComprovantesTab() {
                         ) : "-"}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {group.valor
-                          ? `R$ ${group.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                        {group.valor != null
+                          ? `R$ ${parseFloat(String(group.valor)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
                           : "-"}
                       </TableCell>
                       <TableCell>

@@ -1899,7 +1899,7 @@ const ContainerTracking = () => {
 
   // Filter MBL list (aplica filtros de usuário sobre a lista já filtrada por armador)
   const filteredMbls = useMemo(() => {
-    let mbls = filteredMblListByCarrier.filter(m => {
+    const mbls = filteredMblListByCarrier.filter(m => {
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm || m.mbl_id.toLowerCase().includes(searchLower) || m.consignee && m.consignee.toLowerCase().includes(searchLower) || m.shipping_line && m.shipping_line.toLowerCase().includes(searchLower) || m.navio && m.navio.toLowerCase().includes(searchLower) || m.coloader && m.coloader.toLowerCase().includes(searchLower);
 

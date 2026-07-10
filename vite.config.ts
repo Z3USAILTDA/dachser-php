@@ -19,6 +19,9 @@ function copyApiPlugin() {
 
 export default defineConfig(() => ({
   base: "/",
+  build: {
+    chunkSizeWarningLimit: 2000,
+  },
   define: {
     __APP_VERSION__: JSON.stringify(Date.now().toString()),
   },

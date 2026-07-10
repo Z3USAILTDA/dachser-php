@@ -27,6 +27,57 @@ function formatDateForMariaDB(d) {
 
 export function registerFinRoutes(app, { resend }) {
 
+// GET /api/fin/pagamentos
+app.get('/api/fin/pagamentos', async (req, res) => {
+  res.json({ success: true, pagamentos: [], total: 0 });
+});
+
+// GET /api/fin/baixas/historico
+app.get('/api/fin/baixas/historico', async (req, res) => {
+  res.json({ success: true, historico: [], total: 0 });
+});
+
+// GET /api/fin/users/:id/esteira-role
+app.get('/api/fin/users/:id/esteira-role', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const authUsersTable = process.env.AUTH_USERS_TABLE || 'dados_dachser.t_users_dachser';
+    const rows = await finQuery(`SELECT is_admin, esteira_role FROM ${authUsersTable} WHERE id = ?`, [id]);
+    let role = 'user';
+    if (rows && rows.length > 0) {
+      if (rows[0].esteira_role) role = rows[0].esteira_role;
+      else if (rows[0].is_admin) role = 'admin';
+    }
+    res.json({
+      success: true,
+      data: {
+        user_id: Number(id) || id,
+        role: role,
+        can_approve: true,
+        can_pay: true,
+        can_upload: true,
+        can_view_all: true
+      }
+    });
+  } catch (err) {
+    console.error('[GET /api/fin/users/:id/esteira-role]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/fin/vouchers/filhos-batch
+app.post('/api/fin/vouchers/filhos-batch', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: {}
+    });
+  } catch (err) {
+    console.error('[POST /api/fin/vouchers/filhos-batch]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET /api/fin/stats
 app.get('/api/fin/stats', async (req, res) => {
   try {

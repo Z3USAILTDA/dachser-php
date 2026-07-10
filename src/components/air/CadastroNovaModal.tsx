@@ -304,17 +304,14 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
     setFileName(file.name);
     setIsExtracting(true);
     try {
-      const fileBase64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      const formData = new FormData();
+      formData.append("file", file);
+      
       const res = await fetch("/api/parsers/hawb-cadastro", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName: file.name, mimeType: file.type || "application/pdf", fileBase64 }),
+        body: formData,
       });
+      
       const result = await res.json();
       if (!res.ok || !result.success) throw new Error(result.error || "Erro na extração");
       const d = result.data;
@@ -362,8 +359,9 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
       toast.success(`Dados extraídos de ${file.name}`, { description: `${result.processingTimeMs}ms` });
     } catch (e: any) {
       toast.error("Erro na extração", { description: e.message });
+    } finally {
+      setIsExtracting(false);
     }
-    setIsExtracting(false);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -476,17 +474,14 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
     setSwapHawbs([]);
     setSwapMawb("");
     try {
-      const fileBase64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      const formData = new FormData();
+      formData.append("file", file);
+
       const res = await fetch("/api/parsers/manifest-swap", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName: file.name, mimeType: file.type || "application/pdf", fileBase64 }),
+        body: formData,
       });
+      
       const result = await res.json();
       if (!res.ok || !result.success) throw new Error(result.error || "Erro na extração");
 
@@ -506,8 +501,9 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
       toast.success(`Manifesto extraído: ${hawbList.length} HAWBs`, { description: `MAWB: ${data.mawb} (${result.processingTimeMs}ms)` });
     } catch (e: any) {
       toast.error("Erro ao extrair manifesto", { description: e.message });
+    } finally {
+      setIsExtractingSwap(false);
     }
-    setIsExtractingSwap(false);
   };
 
   const handleConfirmSwap = async () => {

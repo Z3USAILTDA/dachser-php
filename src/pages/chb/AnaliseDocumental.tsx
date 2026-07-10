@@ -9,6 +9,7 @@ import { FilterBar, filterPresets } from "@/components/layout/FilterBar";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { BadgeStatus } from "@/components/sea/BadgeStatus";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,7 +33,7 @@ interface AnaliseProcess {
   total_items: number;
   created_at: string;
   created_by_user_id?: string;
-  analysis?: any;
+  analysis?: unknown;
 }
 
 const AnaliseDocumental = () => {
@@ -54,10 +55,13 @@ const AnaliseDocumental = () => {
   const fetchHistory = useCallback(async () => {
     try {
       setIsLoading(true);
-      const res = await fetch('/api/fin/analise-documental');
-      if (!res.ok) throw new Error(await res.text());
-      const data: AnaliseProcess[] = await res.json();
-      setProcesses(data || []);
+      const { data, error } = await supabase
+        .from("analise_documental_historico")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setProcesses((data as AnaliseProcess[]) || []);
     } catch (error) {
       console.error("Error fetching history:", error);
       toast.error("Erro ao carregar histórico");
@@ -152,8 +156,12 @@ const AnaliseDocumental = () => {
     if (!itemToDelete) return;
 
     try {
-      const res = await fetch(`/api/fin/analise-documental/${itemToDelete.id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error(await res.text());
+      const { error } = await supabase
+        .from("analise_documental_historico")
+        .delete()
+        .eq("id", itemToDelete.id);
+
+      if (error) throw error;
 
       setProcesses((prev) => prev.filter((p) => p.id !== itemToDelete.id));
       toast.success("Análise excluída com sucesso");

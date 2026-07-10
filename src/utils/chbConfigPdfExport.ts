@@ -133,7 +133,7 @@ export const exportChbConfigToPDF = (
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    let fieldY = yPos + 24;
+    const fieldY = yPos + 24;
     const camposLabels = generalConfig.camposObrigatoriosDefault.map(
       (c) => CAMPOS_LABELS[c] || c
     );

@@ -6,6 +6,7 @@ import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { supabase } from "@/integrations/supabase/client";
 
 // Types for LLM analysis response
 export interface LLMAnalysisResult {
@@ -147,22 +148,18 @@ const AnaliseDocumentalComparar = () => {
       const excelContent = await extractExcelContent(excelFile);
       console.log(`Excel extracted: ${excelContent.length} characters`);
 
-      // Convert PDF to base64
-      const pdfBase64 = await fileToBase64(pdfFile);
-      console.log(`PDF converted: ${pdfBase64.length} characters`);
-
       toast.info("Analisando com IA (pode levar até 60s)...", { duration: 10000 });
+
+      // Build FormData - send PDF as file, excel as text field
+      const formData = new FormData();
+      formData.append('pdfFile', pdfFile);
+      formData.append('excelContent', excelContent);
+      formData.append('excelFileName', excelFile.name);
 
       // Call backend compare-documents endpoint
       const compareRes = await fetch('/api/chb/compare-documents', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pdfBase64,
-          pdfFileName: pdfFile.name,
-          excelContent,
-          excelFileName: excelFile.name,
-        }),
+        body: formData,
       });
 
       const data = await compareRes.json();
@@ -177,6 +174,43 @@ const AnaliseDocumentalComparar = () => {
 
       console.log("Analysis result:", data);
       setAnalysisResult(data);
+
+      // Salva a análise finalizada no histórico do Supabase
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const userId = session?.user?.id || null;
+
+        const matched = data.comparison?.matchedItems || [];
+        const pdfOnly = data.comparison?.pdfOnlyItems || [];
+        const excelOnly = data.comparison?.excelOnlyItems || [];
+
+        const { error: insertError } = await supabase
+          .from("analise_documental_historico")
+          .insert({
+            pdf_file_name: pdfFile.name,
+            excel_file_name: excelFile.name,
+            pdf_summary: data.pdfSummary || null,
+            excel_summary: data.excelSummary || null,
+            comparison: data.comparison || null,
+            analysis: data.analysis || null,
+            metadata: data.metadata || null,
+            overall_status: data.analysis?.overallStatus || "warning",
+            success_count: matched.filter((i: any) => i.status === "success").length,
+            warning_count: matched.filter((i: any) => i.status === "warning").length,
+            error_count: matched.filter((i: any) => i.status === "error").length,
+            total_items: matched.length + pdfOnly.length + excelOnly.length,
+            created_by_user_id: userId,
+          });
+
+        if (insertError) {
+          console.error("Erro ao gravar histórico no Supabase:", insertError);
+          toast.error("Não foi possível salvar o histórico da análise no banco.");
+        } else {
+          console.log("Análise cadastrada com sucesso no histórico.");
+        }
+      } catch (dbErr) {
+        console.error("Erro geral de banco ao salvar histórico:", dbErr);
+      }
 
       // Show result toast based on overall status
       const status = data.analysis?.overallStatus;

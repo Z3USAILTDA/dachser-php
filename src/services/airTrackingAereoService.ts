@@ -17,6 +17,12 @@ import { apiGet, apiPost } from "./apiClient";
 export interface AirTrackingResponse {
   success: boolean;
   data?: any[];
+  items?: any[];
+  count?: number;
+  next_cursor?: {
+    cursor_data: string;
+    cursor_id: number;
+  } | null;
   failed_count?: number;
   error?: string;
 }
@@ -24,6 +30,12 @@ export interface AirTrackingResponse {
 export interface AirTrackingParams {
   /** Força bypass de cache HTTP no refresh manual. */
   force?: boolean;
+  /** Limite de itens por requisição. */
+  limit?: number;
+  /** Data do cursor para paginação progressiva. */
+  cursor_data?: string | null;
+  /** ID do cursor para paginação progressiva. */
+  cursor_id?: number | null;
   /** Aborta a requisição (timeout/cancelamento). */
   signal?: AbortSignal;
 }
@@ -32,6 +44,10 @@ export interface AirTrackingParams {
 export async function getAirTrackingAereo(params: AirTrackingParams = {}): Promise<AirTrackingResponse> {
   const query = new URLSearchParams();
   if (params.force) query.set("force", "1");
+  if (params.limit !== undefined && params.limit !== null) query.set("limit", String(params.limit));
+  if (params.cursor_data) query.set("cursor_data", params.cursor_data);
+  if (params.cursor_id !== undefined && params.cursor_id !== null) query.set("cursor_id", String(params.cursor_id));
+  
   const qs = query.toString();
   return apiGet(`/api/air/tracking-aereo${qs ? `?${qs}` : ""}`, {
     noCache: params.force,

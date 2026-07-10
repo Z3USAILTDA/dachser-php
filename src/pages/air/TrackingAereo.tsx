@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { usePageVisibility } from "@/hooks/usePageVisibility";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAirPageView, trackEvent } from "@/services/airTelemetry";
 import {
   getAirTrackingAereo,
@@ -537,6 +537,7 @@ interface SessionUser {
 const TrackingAereo = () => {
   useAirPageView("/air/tracking-aereo");
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [regrasOpen, setRegrasOpen] = useState(false);
@@ -575,6 +576,9 @@ const TrackingAereo = () => {
   const itemsPerPage = 10;
   const isFetchingRef = useRef(false);
   const awbsDataRef  = useRef<AWBData[]>([]);
+  const [isProgressiveLoading, setIsProgressiveLoading] = useState(false);
+  const [loadedCount, setLoadedCount] = useState(0);
+  const progressiveLoadIdRef = useRef(0);
 
   // Usuário logado (localStorage) — sem Supabase Auth.
   useEffect(() => {
@@ -676,58 +680,172 @@ const TrackingAereo = () => {
     }, []);
   }, []);
 
-  // Busca os dados na API interna (/api/air/tracking-aereo) — banco próprio, sem Supabase.
-  const fetchData = useCallback(async (force = false) => {
-    if (isFetchingRef.current && !force) return;
-    isFetchingRef.current = true;
-    setIsLoadingData(true);
+  // Progressive load background loop
+  const progressiveLoadLoop = useCallback(async (force: boolean, initialCursor: { cursor_data: string; cursor_id: number }) => {
+    const loadId = ++progressiveLoadIdRef.current;
+    let cursor: typeof initialCursor | null = initialCursor;
+    
+    while (cursor) {
+      if (loadId !== progressiveLoadIdRef.current) {
+        console.log(`[tracking-aereo] progressiveLoad cancelled for ID ${loadId}`);
+        return;
+      }
+      
+      try {
+        const res = await getAirTrackingAereo({
+          force,
+          limit: 50,
+          cursor_data: cursor.cursor_data,
+          cursor_id: cursor.cursor_id
+        });
+        
+        if (loadId !== progressiveLoadIdRef.current) return;
+        
+        if (res?.success) {
+          const rawItems = Array.isArray(res.items) ? res.items : (Array.isArray(res.data) ? res.data : []);
+          const mapped = mapItems(rawItems);
+          if (mapped.length > 0) {
+            awbsDataRef.current = [...awbsDataRef.current, ...mapped];
+            setAwbsData(prev => {
+              const prevMap = new Map(prev.map(i => [`${i.awb}|${i.hawb}`, i]));
+              mapped.forEach(item => {
+                prevMap.set(`${item.awb}|${item.hawb}`, item);
+              });
+              return Array.from(prevMap.values());
+            });
+            setLoadedCount(prev => prev + mapped.length);
+          }
+          cursor = res.next_cursor || null;
+        } else {
+          console.warn("[tracking-aereo] Progressive load failed status:", res?.error);
+          break;
+        }
+      } catch (err) {
+        console.error("[tracking-aereo] progressiveLoad error:", err);
+        toast({
+          title: "Erro no carregamento de dados históricos",
+          description: "Ocorreu um erro ao carregar os dados mais antigos. Exibindo dados carregados até o momento.",
+          variant: "destructive"
+        });
+        break;
+      }
+    }
+    
+    if (loadId === progressiveLoadIdRef.current) {
+      setIsProgressiveLoading(false);
+    }
+  }, [mapItems, toast]);
 
+  // Busca os dados na API interna (/api/air/tracking-aereo) — banco próprio, sem Supabase.
+  const isProgressiveLoadingRef = useRef(false);
+
+  const fetchData = useCallback(async (force = false, isPoll = false) => {
+    if (isFetchingRef.current && !force) return;
+    if (isProgressiveLoadingRef.current && !force) return;
+    
+    isFetchingRef.current = true;
+    if (!isPoll) {
+      // Cancel any ongoing progressive load
+      progressiveLoadIdRef.current++;
+      isProgressiveLoadingRef.current = true;
+      setIsProgressiveLoading(true);
+      setIsLoadingData(true);
+      setLoadedCount(0);
+    }
+    
     // Safety valve: always release loading after 90 s no matter what
     const safetyTimer = setTimeout(() => {
       setIsLoadingData(false);
+      isProgressiveLoadingRef.current = false;
+      setIsProgressiveLoading(false);
       isFetchingRef.current = false;
     }, 90000);
 
     try {
-      const body = await getAirTrackingAereo({ force });
-      if (body?.success && Array.isArray(body?.data)) {
-        const mapped = mapItems(body.data);
-        awbsDataRef.current = mapped;
-        setAwbsData(mapped);
+      const body = await getAirTrackingAereo({ force, limit: 50 });
+      if (body?.success) {
+        const rawItems = Array.isArray(body.items) ? body.items : (Array.isArray(body.data) ? body.data : []);
+        const mapped = mapItems(rawItems);
+        
+        if (isPoll) {
+          // Polling: merge new items into state
+          setAwbsData(prev => {
+            const prevMap = new Map(prev.map(i => [`${i.awb}|${i.hawb}`, i]));
+            mapped.forEach(item => {
+              prevMap.set(`${item.awb}|${item.hawb}`, item);
+            });
+            return Array.from(prevMap.values());
+          });
+        } else {
+          // Initial load: overwrite
+          awbsDataRef.current = mapped;
+          setAwbsData(mapped);
+          setLoadedCount(mapped.length);
+
+          const cursor = body.next_cursor;
+          if (cursor) {
+            progressiveLoadLoop(force, cursor);
+          } else {
+            isProgressiveLoadingRef.current = false;
+            setIsProgressiveLoading(false);
+          }
+        }
       } else {
         throw new Error(body?.error || "Resposta inválida da API de tracking aéreo.");
       }
     } catch (err) {
       console.error("[tracking-aereo] fetchData:", err);
+      
+      // Tratamento específico de timeout/504
+      const errorMsg = (err as any)?.message?.toLowerCase() || "";
+      const is504 = errorMsg.includes("504") || errorMsg.includes("timeout") || errorMsg.includes("gateway");
+      
       // Só alerta o usuário se ainda não há dados em tela (evita toasts no polling).
       if (awbsDataRef.current.length === 0) {
         toast({
-          title: "Erro ao carregar dados",
-          description: "Não foi possível conectar à API de tracking aéreo. Verifique se o backend está ativo e tente novamente.",
+          title: is504 ? "Servidor indisponível" : "Erro ao carregar dados",
+          description: is504 
+            ? "O servidor está temporariamente indisponível. Tentando reconectar em 30 segundos..."
+            : "Não foi possível conectar à API de tracking aéreo. Verifique se o backend está ativo e tente novamente.",
           variant: "destructive",
         });
       }
+      isProgressiveLoadingRef.current = false;
+      setIsProgressiveLoading(false);
+      setIsLoadingData(false);
     } finally {
       clearTimeout(safetyTimer);
       setIsLoadingData(false);
       isFetchingRef.current = false;
     }
-  }, [mapItems, toast]);
+  }, [mapItems, toast, progressiveLoadLoop]);
 
   // A detecção de discrepância é feita no backend via SQL em /api/air/tracking-aereo.
 
   // Acesso liberado a todos os usuários para carregamento dos processos desta tela
   const isAdminUser = true;
 
-
   const isVisible = usePageVisibility();
   useEffect(() => {
+    // ✅ Verificação de rota: só faz fetch se está realmente em /air/tracking-aereo
+    if (location.pathname !== "/air/tracking-aereo") {
+      console.log(`[tracking-aereo] Navegou para ${location.pathname}, parando fetch automático`);
+      return;
+    }
+    
     if (!isVisible) return;
     if (!isAdminUser) { setIsLoadingData(false); return; }
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
+    
+    // Initial fetch (not a poll)
+    fetchData(false, false);
+    
+    // Setup interval for polling (only refreshes first page)
+    const interval = setInterval(() => {
+      fetchData(false, true);
+    }, 30000);
+    
     return () => { clearInterval(interval); };
-  }, [isVisible, fetchData, isAdminUser]);
+  }, [isVisible, fetchData, isAdminUser, location.pathname]);
 
   // ─── Master swap badges + discrepancias pendentes ───
   useEffect(() => {
@@ -1206,6 +1324,12 @@ const TrackingAereo = () => {
 
 
               <div className="flex items-center gap-2">
+                {isProgressiveLoading && (
+                  <div className="flex items-center gap-2 text-xs text-[#ffc800] bg-amber-500/10 border border-[#ffc800]/20 px-3 py-1.5 rounded-full mr-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-[#ffc800]" />
+                    <span>Carregando processos ({loadedCount})...</span>
+                  </div>
+                )}
                 <button onClick={() => { trackEvent("air.monitored_airlines.open"); setShowMonitoredModal(true); }} className="h-8 px-4 rounded-full bg-emerald-600/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-emerald-500/80 transition border border-emerald-500/50">
                   <Plane className="w-3.5 h-3.5" />
                   CIAs Monitoradas ({monitoredAirlinesData.totalAirlines})

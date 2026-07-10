@@ -1,4 +1,4 @@
-﻿/**
+/**
  * server/routes/sea.js
  * Rotas do módulo SEA: /api/sea/*, /api/sea/maritimo/*
  * Pool: MARIADB_SEA_* — databases: dados_dachser, ai_agente
@@ -100,6 +100,22 @@ async function computeCCTData() {
 
   async function doCompute() {
     const database = 'dados_dachser';
+    
+    // Verificar se a tabela existe e tem dados
+    let tableCheck = [];
+    try {
+      tableCheck = await finQuery(`
+        SELECT COUNT(*) as cnt FROM ${database}.t_cct_dashboard_cache LIMIT 1
+      `);
+    } catch (e) {
+      console.warn('[CCT] Tabela t_cct_dashboard_cache pode não existir:', e.message);
+    }
+    
+    if (!tableCheck || tableCheck.length === 0 || tableCheck[0]?.cnt === 0) {
+      console.warn('[CCT] Nenhum dado em t_cct_dashboard_cache, retornando array vazio');
+      return { success: true, data: [] };
+    }
+    
     const cachedRows = await finQuery(`
       SELECT
         c.hawb,
@@ -124,7 +140,7 @@ async function computeCCTData() {
         COALESCE(m.email_analista, a.clerk_email) AS email_analista,
         m.tratamento,
         NULL AS tratamentos_especiais,
-        COALESCE(m.data_insert, a.created_at) AS created_at
+        COALESCE(m.data_insert, a.created_at, NOW()) AS created_at
       FROM ${database}.t_cct_dashboard_cache c
       LEFT JOIN (
         SELECT t.*
@@ -165,6 +181,11 @@ async function computeCCTData() {
          OR TRIM(c.teve_bloqueio) COLLATE utf8mb4_unicode_ci <> 'Sem retorno CCT' COLLATE utf8mb4_unicode_ci
       ORDER BY c.hawb
     `);
+    
+    console.log(`[CCT] Query retornou ${cachedRows?.length || 0} linhas`);
+    if (cachedRows && cachedRows.length > 0) {
+      console.log('[CCT] Primeira linha amostra:', JSON.stringify(cachedRows[0], null, 2).substring(0, 300));
+    }
 
     try {
       await finQuery(`
@@ -603,6 +624,9 @@ function extractSeaShippingData(resultText = '') {
 async function processSeaAnalysisRun({ runId, itemId, analysisType, files, context }) {
   try {
     await seaQuery(`UPDATE dados_dachser.t_sea_runs SET status = 'analisando' WHERE id = ?`, [runId]);
+    if (itemId) await seaQuery(`UPDATE dados_dachser.t_sea_items SET status = 'analisando' WHERE id = ?`, [itemId]);
+
+    console.log(`[AI_REQUEST_STARTED] [RunID: ${runId}] Calling AI models (Anthropic/Gemini) for Sea Analysis`);
 
     const [claudeResult, geminiResult] = await Promise.allSettled([
       seaAnalyzeWithAnthropic(analysisType, files, context),
@@ -614,7 +638,11 @@ async function processSeaAnalysisRun({ runId, itemId, analysisType, files, conte
       throw new Error(`Falha nas duas análises: ${claudeResult.reason?.message || ''} ${geminiResult.reason?.message || ''}`.trim());
     }
 
+    console.log(`[AI_RESPONSE_RECEIVED] [RunID: ${runId}] AI response received. Proceeding to arbitration with OpenAI`);
+
     const finalText    = await seaArbitrateWithOpenAI({ analysisType, claudeText, geminiText });
+
+    console.log(`[RESULT_PARSED] [RunID: ${runId}] OpenAI arbitration response received. Extracting shipping data...`);
     const shippingData = extractSeaShippingData(finalText);
     const jsonResult   = {
       model: process.env.OPENAI_API_KEY ? 'multi-model-direct-openai-arbitration' : 'multi-model-direct',
@@ -623,6 +651,7 @@ async function processSeaAnalysisRun({ runId, itemId, analysisType, files, conte
       hblShippingData: shippingData,
     };
 
+    console.log(`[RESULT_SAVED] [RunID: ${runId}] Saving analysis results to database`);
     await seaQuery(
       `UPDATE dados_dachser.t_sea_runs SET status = 'realizado', result_text = ?, result_json = ? WHERE id = ?`,
       [finalText, JSON.stringify(jsonResult), runId]
@@ -640,8 +669,9 @@ async function processSeaAnalysisRun({ runId, itemId, analysisType, files, conte
         updateValues
       );
     }
+    console.log(`[ANALYSIS_COMPLETED] [RunID: ${runId}] Sea analysis run successfully completed`);
   } catch (err) {
-    console.error('[sea submit analysis] background error:', err.message);
+    console.error(`[ANALYSIS_FAILED] [RunID: ${runId}] Sea analysis failed:`, err.message);
     await seaQuery(`UPDATE dados_dachser.t_sea_runs SET status = 'erro', result_text = ? WHERE id = ?`, [err.message, runId]);
     if (itemId) await seaQuery(`UPDATE dados_dachser.t_sea_items SET status = 'erro' WHERE id = ?`, [itemId]);
   }
@@ -897,7 +927,6 @@ export function registerSeaRoutes(app, _deps = {}) {
           SELECT f.id, f.filename AS file_name, f.url AS file_url, f.mime AS file_type, f.size_bytes, f.created_at
           FROM dados_dachser.t_sea_files f WHERE f.id = ? ORDER BY f.created_at ASC
         `, [arquivoId]);
-      }
       const runsWithFiles = runs.map(r => ({ ...r, files: itemFiles }));
       res.json({ success: true, item: items[0] || { base_file_name: '' }, runs: runsWithFiles });
     } catch (err) {
@@ -942,13 +971,56 @@ export function registerSeaRoutes(app, _deps = {}) {
 
   // POST /api/sea/maritimo/submit-analysis
   app.post('/api/sea/maritimo/submit-analysis', async (req, res) => {
+    const crypto = await import('crypto');
+    const requestId = crypto.randomUUID ? crypto.randomUUID() : `sea_${Date.now()}`;
+    console.log(`[REQUEST_RECEIVED] [RequestId: ${requestId}] POST /api/sea/maritimo/submit-analysis initiated`);
+    let step = 'REQUEST_RECEIVED';
+
     try {
       const { itemId, analysisType, files = [], fileUrls = [], linkData = null } = req.body || {};
-      if (!analysisType) return res.status(400).json({ error: 'analysisType é obrigatório' });
-      if (analysisType === 'manifest_hbl' && files.length === 0) return res.status(400).json({ error: 'At least 1 HBL file is required' });
-      if (analysisType === 'hbl_mbl' && files.length !== 1) return res.status(400).json({ error: 'Exactly 1 MBL file is required' });
-      if (analysisType === 'invoices_hbl' && files.length === 0 && fileUrls.length === 0) return res.status(400).json({ error: 'At least 1 file is required for analysis' });
+      step = 'FILES_VALIDATED';
+      if (!analysisType) {
+        console.error(`[FILES_VALIDATED] [RequestId: ${requestId}] Missing analysisType`);
+        return res.status(400).json({
+          success: false,
+          code: 'SEA_MISSING_ANALYSIS_TYPE',
+          message: 'analysisType é obrigatório',
+          requestId,
+          step
+        });
+      }
+      if (analysisType === 'manifest_hbl' && files.length === 0) {
+        console.error(`[FILES_VALIDATED] [RequestId: ${requestId}] Missing HBL files`);
+        return res.status(400).json({
+          success: false,
+          code: 'SEA_MISSING_HBL_FILES',
+          message: 'At least 1 HBL file is required',
+          requestId,
+          step
+        });
+      }
+      if (analysisType === 'hbl_mbl' && files.length !== 1) {
+        console.error(`[FILES_VALIDATED] [RequestId: ${requestId}] Invalid MBL count`);
+        return res.status(400).json({
+          success: false,
+          code: 'SEA_INVALID_MBL_COUNT',
+          message: 'Exactly 1 MBL file is required',
+          requestId,
+          step
+        });
+      }
+      if (analysisType === 'invoices_hbl' && files.length === 0 && fileUrls.length === 0) {
+        console.error(`[FILES_VALIDATED] [RequestId: ${requestId}] No files provided`);
+        return res.status(400).json({
+          success: false,
+          code: 'SEA_NO_FILES_PROVIDED',
+          message: 'At least 1 file is required for analysis',
+          requestId,
+          step
+        });
+      }
 
+      step = 'MANIFEST_LOADED';
       let actualItemId = itemId ? Number(itemId) : null;
       if (analysisType === 'invoices_hbl' && !actualItemId) {
         const base = files.find(f => /hbl|house|hbol/i.test(f.name)) || fileUrls.find(f => /hbl|house|hbol/i.test(f.name)) || files[0] || fileUrls[0];
@@ -965,7 +1037,28 @@ export function registerSeaRoutes(app, _deps = {}) {
         }
       }
 
+      step = 'HBL_FILES_LOADED';
       const modeValue = analysisType === 'invoices_hbl' ? 'hbl_mbl' : analysisType;
+      if (actualItemId) {
+        const existingRuns = await seaQuery(
+          `SELECT id, status FROM dados_dachser.t_sea_runs WHERE item_id = ? AND mode = ? AND status IN ('pendente', 'analisando') LIMIT 1`,
+          [actualItemId, modeValue]
+        );
+        if (existingRuns.length > 0) {
+          const existingRun = existingRuns[0];
+          console.log(`[HBL_FILES_LOADED] [RequestId: ${requestId}] Analysis already in progress: Run ID ${existingRun.id}`);
+          return res.json({
+            success: true,
+            analysisId: String(existingRun.id),
+            runId: Number(existingRun.id),
+            itemId: actualItemId,
+            status: existingRun.status,
+            message: 'Análise já está em processamento',
+            files: files.length + fileUrls.length
+          });
+        }
+      }
+
       const runResult = await seaQuery(
         `INSERT INTO dados_dachser.t_sea_runs (item_id, mode, status, created_at) VALUES (?, ?, 'pendente', NOW())`,
         [actualItemId, modeValue]
@@ -991,18 +1084,34 @@ export function registerSeaRoutes(app, _deps = {}) {
         ...fileUrls.map(f => ({ ...f, mimeType: f.type || 'application/octet-stream' })),
       ];
 
+      step = 'AI_REQUEST_STARTED';
       setImmediate(() => {
         processSeaAnalysisRun({ runId, itemId: actualItemId, analysisType, files: allFiles, context: { linkData } })
-          .catch(err => console.error('[sea submit analysis] unhandled:', err.message));
+          .catch(err => console.error(`[sea submit analysis] [RequestId: ${requestId}] unhandled background processing error:`, err.message));
       });
 
+      console.log(`[AI_REQUEST_STARTED] [RequestId: ${requestId}] Background job scheduled. RunID: ${runId}, ItemID: ${actualItemId}`);
+
       res.json({
-        success: true, analysisId: String(runId), runId, itemId: actualItemId,
-        status: 'queued', message: 'Análise iniciada em background', files: allFiles.length,
+        success: true,
+        analysisId: String(runId),
+        runId,
+        itemId: actualItemId,
+        status: 'queued',
+        message: 'Análise iniciada em background',
+        files: allFiles.length,
+        requestId
       });
     } catch (err) {
-      console.error('[POST /api/sea/maritimo/submit-analysis]', err.message);
-      res.status(500).json({ error: err.message });
+      console.error(`[ANALYSIS_FAILED] [RequestId: ${requestId}] [Step: ${step}] Error:`, err.message);
+      res.status(500).json({
+        success: false,
+        code: 'SEA_AI_REQUEST_FAILED',
+        message: 'Não foi possível processar os documentos.',
+        technicalMessage: err.message,
+        requestId,
+        step
+      });
     }
   });
 

@@ -45,6 +45,16 @@ try {
         $context = $jobData['context'];
         
         processSeaAnalysisRunPHP($runId, $itemId, $analysisType, $files, $context);
+    } else if ($task === 'chb_analysis') {
+        require_once __DIR__ . '/routes/chb.php';
+        
+        $runId = $jobData['runId'];
+        $stepId = $jobData['stepId'];
+        $files = $jobData['files'];
+        $clientConfig = $jobData['clientConfig'];
+        $itemId = $jobData['itemId'];
+        
+        chbProcessAnalysis($runId, $stepId, $files, $clientConfig, $itemId);
     } else {
         echo "Erro: Tarefa desconhecida: $task\n";
     }

@@ -100,7 +100,7 @@ const PEOPLE = [
 
 function cleanOthelloPorName(val: string | null | undefined): string | null {
   if (!val || typeof val !== "string") return null;
-  let name = val
+  const name = val
     .replace(/Resp\.?\s*:?\s*/gi, "")
     .replace(/Ms\.?\s*/gi, "")
     .replace(/Mr\.?\s*/gi, "")

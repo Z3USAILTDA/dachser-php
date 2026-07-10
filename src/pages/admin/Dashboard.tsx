@@ -252,7 +252,6 @@ const Dashboard = () => {
               subChildren: [
                 { label: "Cadastro de Usuário", href: "/admin/register" },
                 { label: "Métricas de Uso", href: "/admin/metrics" },
-                { label: "Gerenciamento de Usuários", href: "/admin/users" },
               ],
             },
             {
@@ -260,16 +259,6 @@ const Dashboard = () => {
               expandableId: "z3us-monitoramento",
               subChildren: [
                 { label: "Monitoramento de Dados", href: "/admin/database" },
-                { label: "Monitoramento de Dados ZEUS", href: "/admin/firecrawl-monitor" },
-                { label: "Gerenciamento de Crons", href: "/admin/cron-manager" },
-              ],
-            },
-            {
-              label: "Teste",
-              expandableId: "z3us-teste",
-              subChildren: [
-                { label: "Upload Master", href: "/admin/z3us/upload-master" },
-                { label: "Teste de API Keys", href: "/admin/api-test" },
               ],
             },
           ],

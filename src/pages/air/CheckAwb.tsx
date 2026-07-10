@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Search, RefreshCw, Filter as FilterIcon, UploadCloud, FileText, Trash2, TerminalSquare, Loader2, ChevronDown, ChevronUp, Plus, Database, ArrowLeft, RotateCw, FileCheck, HelpCircle } from "lucide-react";
@@ -348,6 +348,20 @@ const CheckAwb = () => {
     if (!data?.success) throw new Error(data?.error || "Erro ao salvar validação");
   };
 
+  const normalizeCnpj = (val: any): string => {
+    if (val === null || val === undefined) return "";
+    let str = String(val).trim();
+    // Se contiver .0 ao final (padrão float do Excel), remove
+    str = str.replace(/\.0+$/, "");
+    // Remove tudo que não for dígito
+    str = str.replace(/\D/g, "");
+    // Se tiver menos de 14 caracteres, preenche com zeros à esquerda
+    if (str.length > 0 && str.length < 14) {
+      str = str.padStart(14, "0");
+    }
+    return str;
+  };
+
   const validateAgainstMatrix = async (parsedData: any) => {
     const missingFields = [];
     if (!parsedData.cnpj) missingFields.push("CNPJ");
@@ -355,55 +369,152 @@ const CheckAwb = () => {
     if (!parsedData.destination) missingFields.push("Destino");
     if (missingFields.length > 0) throw new Error(`Campos não encontrados: ${missingFields.join(", ")}`);
 
-    const normalizedCnpj = parsedData.cnpj.replace(/\D/g, "");
+    const normalizedCnpj = normalizeCnpj(parsedData.cnpj);
     if (normalizedCnpj.length !== 14) throw new Error("CNPJ inválido detectado");
 
-    const matricesData = await fetchActiveMatrices();
-    if (!matricesData?.success || !matricesData?.matrices?.length) throw new Error("Nenhuma matriz ativa encontrada");
-
-    const matrices = matricesData.matrices;
     const extractedCustomer = parsedData.customer?.toUpperCase() as "KLABIN" | "ZF" | null;
-
     if (!extractedCustomer) {
+      console.log("[AwbValidation] Incompatibility: Customer (Klabin/ZF) not identified in document", {
+        extractedCnpj: parsedData.cnpj,
+        normalizedCnpj,
+        customer: parsedData.customer
+      });
       return { result: "INCOMPATIVEL" as const, reason: "Cliente (Klabin/ZF) não identificado", customer: "KLABIN" as const, matchedRuleId: null };
     }
 
+    console.log("[AwbValidation] Starting validation process:", {
+      extractedCnpj: parsedData.cnpj,
+      normalizedCnpj,
+      identifiedCustomer: extractedCustomer,
+      documentOrigin: parsedData.origin,
+      documentDestination: parsedData.destination
+    });
+
+    let matricesData;
+    try {
+      matricesData = await fetchActiveMatrices();
+    } catch (e: any) {
+      console.error("[AwbValidation] Error fetching active matrices:", e.message);
+      return { result: "INCOMPATIVEL" as const, reason: "Não foi possível carregar a matriz de regras", customer: extractedCustomer, matchedRuleId: null };
+    }
+
+    if (!matricesData?.success || !matricesData?.matrices) {
+      console.error("[AwbValidation] Active matrices load failure:", matricesData);
+      return { result: "INCOMPATIVEL" as const, reason: "Não foi possível carregar a matriz de regras", customer: extractedCustomer, matchedRuleId: null };
+    }
+
+    if (matricesData.matrices.length === 0) {
+      console.log("[AwbValidation] Incompatibility: Empty active matrices list");
+      return { result: "INCOMPATIVEL" as const, reason: "Nenhuma regra encontrada na matriz ativa", customer: extractedCustomer, matchedRuleId: null };
+    }
+
+    const matrices = matricesData.matrices;
     const customerMatrix = matrices.find((m: any) => m.customer?.toUpperCase() === extractedCustomer);
     if (!customerMatrix) {
+      console.log(`[AwbValidation] Incompatibility: Active matrix not found for customer ${extractedCustomer}`);
       return { result: "INCOMPATIVEL" as const, reason: `Matriz ${extractedCustomer} não encontrada`, customer: extractedCustomer, matchedRuleId: null };
     }
 
-    const rulesData = await fetchRules(customerMatrix.id, normalizedCnpj);
+    // Verify matrix customer mapping
+    if (customerMatrix.customer?.toUpperCase() !== extractedCustomer) {
+      console.log("[AwbValidation] Incompatibility: Selected matrix customer mismatch", {
+        matrixId: customerMatrix.id,
+        matrixCustomer: customerMatrix.customer,
+        extractedCustomer
+      });
+      return { result: "INCOMPATIVEL" as const, reason: "A versão da matriz selecionada não pertence ao cliente", customer: extractedCustomer, matchedRuleId: null };
+    }
+
+    // Verify matrix validity (effective_date). Date is YYYY-MM-DD.
+    // The current analysis date is 2026-07-10.
+    const todayStr = "2026-07-10"; // As per system instructions and validation timestamp
+    const matrixEffectiveDate = customerMatrix.effective_date ? customerMatrix.effective_date.split('T')[0] : '';
+    if (matrixEffectiveDate && matrixEffectiveDate > todayStr) {
+      console.log("[AwbValidation] Incompatibility: Matrix effective date in the future", {
+        matrixId: customerMatrix.id,
+        effectiveDate: matrixEffectiveDate,
+        analysisDate: todayStr
+      });
+      return { result: "INCOMPATIVEL" as const, reason: "A versão da matriz não está vigente", customer: extractedCustomer, matchedRuleId: null };
+    }
+
+    let rulesData;
+    try {
+      rulesData = await fetchRules(customerMatrix.id, normalizedCnpj);
+    } catch (e: any) {
+      console.error("[AwbValidation] Error fetching rules:", e.message);
+      return { result: "INCOMPATIVEL" as const, reason: "Não foi possível carregar a matriz de regras", customer: extractedCustomer, matchedRuleId: null };
+    }
+
+    let allRulesData;
+    try {
+      allRulesData = await fetchRules(customerMatrix.id);
+    } catch (e) {
+      allRulesData = null;
+    }
+    const hasAnyRulesInMatrix = allRulesData?.success && allRulesData?.rules?.length > 0;
+    if (!hasAnyRulesInMatrix) {
+      console.log("[AwbValidation] Incompatibility: Active matrix contains 0 rules in t_awb_rule_row", {
+        matrixId: customerMatrix.id
+      });
+      return { result: "INCOMPATIVEL" as const, reason: "Nenhuma regra encontrada na matriz ativa", customer: extractedCustomer, matchedRuleId: null };
+    }
+
     const rules = rulesData?.rules || [];
+    if (rules.length === 0) {
+      console.log("[AwbValidation] Incompatibility: CNPJ not found in rules table for active matrix", {
+        matrixId: customerMatrix.id,
+        normalizedCnpj
+      });
+      return { result: "INCOMPATIVEL" as const, reason: "CNPJ não encontrado na versão selecionada", customer: extractedCustomer, matchedRuleId: null };
+    }
+
+    console.log("[AwbValidation] CNPJ found in rules. Evaluating rules constraints:", {
+      matrixId: customerMatrix.id,
+      rulesCount: rules.length,
+      rulesFilters: { matrixId: customerMatrix.id, cnpj: normalizedCnpj }
+    });
+
+    const consigneeAddress = parsedData.consignee || parsedData.deliveryAddress || "";
+    const airportMatch = rules.find((r: any) =>
+      r.airport_code && r.airport_code !== "N/A" &&
+      (r.airport_code.toUpperCase() === parsedData.origin?.toUpperCase() ||
+       r.airport_code.toUpperCase() === parsedData.destination?.toUpperCase())
+    );
+    const addressMatch = rules.find((r: any) => r.address_pattern && addressMatches(consigneeAddress, r.address_pattern));
 
     let result: "COMPATIVEL" | "INCOMPATIVEL";
     let reason: string;
     let matchedRuleId: number | null = null;
 
-    if (rules.length > 0) {
-      const consigneeAddress = parsedData.consignee || parsedData.deliveryAddress || "";
-      const airportMatch = rules.find((r: any) =>
-        r.airport_code && r.airport_code !== "N/A" &&
-        (r.airport_code.toUpperCase() === parsedData.origin?.toUpperCase() ||
-         r.airport_code.toUpperCase() === parsedData.destination?.toUpperCase())
-      );
-      const addressMatch = rules.find((r: any) => r.address_pattern && addressMatches(consigneeAddress, r.address_pattern));
-
-      if (airportMatch) {
-        result = "COMPATIVEL"; reason = "CNPJ e aeroporto compatíveis"; matchedRuleId = airportMatch.id;
-      } else if (addressMatch) {
-        result = "COMPATIVEL"; reason = "CNPJ e endereço compatíveis"; matchedRuleId = addressMatch.id;
-      } else {
-        const hasValidAirport = rules.some((r: any) => r.airport_code && r.airport_code !== "N/A");
-        const hasValidAddress = rules.some((r: any) => r.address_pattern?.trim());
-        if (!hasValidAirport && !hasValidAddress) {
-          result = "COMPATIVEL"; reason = "CNPJ compatível"; matchedRuleId = rules[0]?.id || null;
-        } else {
-          result = "INCOMPATIVEL"; reason = "Aeroporto não compatível";
-        }
-      }
+    if (airportMatch) {
+      result = "COMPATIVEL"; 
+      reason = "CNPJ e aeroporto compatíveis"; 
+      matchedRuleId = airportMatch.id;
+      console.log("[AwbValidation] Success: Airport match found", { ruleId: airportMatch.id, airportCode: airportMatch.airport_code });
+    } else if (addressMatch) {
+      result = "COMPATIVEL"; 
+      reason = "CNPJ e endereço compatíveis"; 
+      matchedRuleId = addressMatch.id;
+      console.log("[AwbValidation] Success: Address pattern match found", { ruleId: addressMatch.id, addressPattern: addressMatch.address_pattern });
     } else {
-      result = "INCOMPATIVEL"; reason = "CNPJ não compatível";
+      const hasValidAirport = rules.some((r: any) => r.airport_code && r.airport_code !== "N/A");
+      const hasValidAddress = rules.some((r: any) => r.address_pattern?.trim());
+      if (!hasValidAirport && !hasValidAddress) {
+        result = "COMPATIVEL"; 
+        reason = "CNPJ compatível"; 
+        matchedRuleId = rules[0]?.id || null;
+        console.log("[AwbValidation] Success: Generic CNPJ compatibilty (no airport/address rules configured)", { ruleId: matchedRuleId });
+      } else {
+        result = "INCOMPATIVEL"; 
+        reason = "Aeroporto não compatível";
+        console.log("[AwbValidation] Incompatibility: Airport mismatch", {
+          expectedAirports: rules.map((r: any) => r.airport_code).filter(Boolean),
+          extractedOrigin: parsedData.origin,
+          extractedDestination: parsedData.destination,
+          extractedConsignee: consigneeAddress
+        });
+      }
     }
 
     return { result, reason, customer: extractedCustomer, matchedRuleId };
@@ -855,6 +966,9 @@ const CheckAwb = () => {
         >
           <DialogHeader>
             <DialogTitle className="text-xl text-[#f5f5f5]">Nova Validação de AWB/HAWB</DialogTitle>
+            <DialogDescription className="sr-only">
+              Arraste ou selecione arquivos de AWB para extração e validação das regras correspondentes.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <input
@@ -910,6 +1024,9 @@ const CheckAwb = () => {
         >
           <DialogHeader>
             <DialogTitle className="text-xl text-[#f5f5f5]">Descrição Detalhada</DialogTitle>
+            <DialogDescription className="sr-only">
+              Exibição detalhada com os dados extraídos do documento e a matriz de regras do AWB.
+            </DialogDescription>
           </DialogHeader>
           {selectedCheck && (
             <div className="space-y-6">

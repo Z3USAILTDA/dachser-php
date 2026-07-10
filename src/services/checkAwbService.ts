@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPatch, apiDelete } from "./apiClient";
+import { apiGet, apiPost, apiPatch, apiDelete, apiUrl } from "./apiClient";
 
 export async function fetchChecks() {
   return apiGet("/api/air/check-awb");
@@ -9,38 +9,34 @@ export async function deleteCheck(id: number, performedBy?: string) {
 }
 
 export async function uploadDocument(file: File, uploadedBy?: number): Promise<{ success: boolean; documentId?: number; error?: string }> {
-  const fileBase64 = await fileToBase64(file);
-  return apiPost("/api/air/check-awb/upload", {
-    fileName: file.name,
-    mimeType: file.type || "application/pdf",
-    fileBase64,
-    fileSize: file.size,
-    uploadedBy: uploadedBy ?? null,
-  });
+  const formData = new FormData();
+  formData.append("file", file);
+  if (uploadedBy != null) formData.append("uploadedBy", String(uploadedBy));
+  const res = await fetch(apiUrl("/api/air/check-awb/upload"), { method: "POST", body: formData });
+  return res.json();
 }
 
 export async function parseDocument(
   file: File,
   documentType: "house_awb" | "instruction" = "house_awb"
 ): Promise<any> {
-  const fileBase64 = await fileToBase64(file);
-  return apiPost("/api/air/check-awb/parse", {
-    fileBase64,
-    mimeType: file.type || "application/pdf",
-    documentType,
-  });
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("documentType", documentType);
+  const res = await fetch(apiUrl("/api/air/check-awb/parse"), { method: "POST", body: formData });
+  return res.json();
 }
 
 export async function parseDocumentById(documentId: number): Promise<any> {
-  const res = await fetch(`/api/air/check-awb/document/${documentId}`);
+  const res = await fetch(apiUrl(`/api/air/check-awb/document/${documentId}`));
   if (!res.ok) throw new Error("Documento não encontrado");
   const blob = await res.blob();
-  const fileBase64 = await blobToBase64(blob);
-  return apiPost("/api/air/check-awb/parse", {
-    fileBase64,
-    mimeType: blob.type || "application/pdf",
-    documentType: "house_awb",
-  });
+  const file = new File([blob], "document.pdf", { type: blob.type || "application/pdf" });
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("documentType", "house_awb");
+  const parseRes = await fetch(apiUrl("/api/air/check-awb/parse"), { method: "POST", body: formData });
+  return parseRes.json();
 }
 
 export async function createCheck(payload: Record<string, unknown>) {

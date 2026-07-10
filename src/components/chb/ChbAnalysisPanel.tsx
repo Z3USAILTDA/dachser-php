@@ -22,6 +22,7 @@ interface ChbAnalysisPanelProps {
   reference?: string;
   itemId?: number | null;
   corrections?: ChbCorrection[];
+  analysisError?: string | null;
 }
 
 const copyAnalysisResult = async (html: string) => {
@@ -46,7 +47,8 @@ export function ChbAnalysisPanel({
   analysisProgress = '',
   reference = '',
   itemId = null,
-  corrections = []
+  corrections = [],
+  analysisError = null
 }: ChbAnalysisPanelProps) {
 
   const handleExportPDF = () => {
@@ -114,6 +116,23 @@ export function ChbAnalysisPanel({
               <p className="text-white/40 text-[0.65rem]">
                 A análise pode levar alguns minutos dependendo do tamanho dos arquivos.
               </p>
+            </>
+          ) : analysisError ? (
+            <>
+              <XCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+              <p className="text-white/85 text-xs mb-2 font-medium">Falha na análise dos documentos</p>
+              <p className="text-red-400 text-xs max-w-md mx-auto mb-4 bg-red-950/30 border border-red-500/20 p-3 rounded-lg font-mono leading-relaxed">
+                {analysisError}
+              </p>
+              
+              <button
+                onClick={onRunAnalysis}
+                className="flex items-center gap-1.5 px-4 py-2 mx-auto rounded-full bg-amber-500 text-black text-xs font-medium
+                  hover:bg-amber-400 transition-colors"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Tentar novamente
+              </button>
             </>
           ) : (
             <>

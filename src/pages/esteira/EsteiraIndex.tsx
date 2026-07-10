@@ -379,7 +379,7 @@ const DashboardTab = ({
           acimaSLA++;
         }
       }
-      if (vouchersNaEtapa.length > 0) {
+      if (vouchersNaEtapa.length > 0 && acimaSLA > 0) {
         bottlenecks.push({
           etapa,
           etapaLabel: ETAPA_LABELS[etapa] || etapa,
@@ -425,9 +425,9 @@ const DashboardTab = ({
       </div>;
   };
   const getBarColor = (percentual: number) => {
-    if (percentual >= 50) return "hsl(0, 62%, 50%)";
-    if (percentual >= 25) return "hsl(38, 92%, 50%)";
-    return "hsl(142, 76%, 36%)";
+    if (percentual >= 50) return CHART_COLORS.critical;
+    if (percentual >= 25) return CHART_COLORS.warning;
+    return CHART_COLORS.success;
   };
   const CustomTooltip = ({
     active,
@@ -475,8 +475,13 @@ const DashboardTab = ({
                 <XAxis type="number" stroke="hsl(240, 5%, 50%)" fontSize={12} />
                 <YAxis type="category" dataKey="etapaLabel" stroke="hsl(240, 5%, 50%)" fontSize={12} width={100} />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="acimaSLA" name="Acima do SLA" radius={[0, 4, 4, 0]}>
-                  {bottleneckData.map((entry, index) => <Cell key={`cell-${index}`} fill={getBarColor(entry.percentual)} />)}
+                <Bar dataKey="acimaSLA" name="Acima do SLA" fill={CHART_COLORS.primary} radius={[0, 4, 4, 0]}>
+                  {bottleneckData.map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={entry.acimaSLA === 0 ? "transparent" : getBarColor(entry.percentual)} 
+                    />
+                  ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

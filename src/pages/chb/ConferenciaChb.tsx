@@ -17,6 +17,7 @@ import { useChbClientConfig, ChbClientConfig } from '@/hooks/useChbClientConfig'
 import { useChbCorrections } from '@/hooks/useChbCorrections';
 import { applyCorrectionsToHtml } from '@/utils/chbPdfCorrections';
 import { parseHtmlToRows } from '@/components/chb/ChbComparisonGrid';
+import { apiUrl } from '@/services/apiClient';
 
 
 export default function ConferenciaChb() {
@@ -58,6 +59,7 @@ export default function ConferenciaChb() {
   });
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState<string>('');
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [clientConfig, setClientConfig] = useState<ChbClientConfig | null>(null);
   const pollingRef = useRef<boolean>(false);
 
@@ -68,7 +70,7 @@ export default function ConferenciaChb() {
     if (!itemId) return;
     
     try {
-      const response = await fetch(`/api/chb/items/${encodeURIComponent(itemId)}/docs`);
+      const response = await fetch(apiUrl(`/api/chb/items/${encodeURIComponent(itemId)}/docs`));
       const data = await response.json();
 
       if (!response.ok) {
@@ -297,6 +299,11 @@ export default function ConferenciaChb() {
   };
 
   const handleStartAnalysis = async (isRerun = false) => {
+    if (isAnalyzing) {
+      toast.warning('Uma análise já está em andamento');
+      return;
+    }
+
     // Get NEW files uploaded for current step only
     const currentStepFiles = uploadedFiles[activeStep] || [];
     
@@ -325,6 +332,7 @@ export default function ConferenciaChb() {
 
     setIsAnalyzing(true);
     setAnalysisProgress('Preparando arquivos...');
+    setAnalysisError(null);
     setActiveTab('analise');
     pollingRef.current = true;
 
@@ -340,19 +348,16 @@ export default function ConferenciaChb() {
         for (const file of currentStepFiles) {
           try {
             const timestamp = Date.now();
-            const fileBase64 = await fileToBase64(file);
-            const uploadResp = await fetch(`/api/chb/items/${encodeURIComponent(itemId!)}/files/upload`, {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('etapa', activeStep.toString());
+            formData.append('docRole', detectDocumentType(file.name));
+            const userId = localStorage.getItem('user_id');
+            if (userId) formData.append('userId', userId);
+            
+            const uploadResp = await fetch(apiUrl(`/api/chb/items/${encodeURIComponent(itemId!)}/files/upload`), {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                filename: file.name,
-                mime: file.type,
-                sizeBytes: file.size,
-                fileBase64,
-                etapa: activeStep.toString(),
-                docRole: detectDocumentType(file.name),
-                userId: localStorage.getItem('user_id') ? Number(localStorage.getItem('user_id')) : null,
-              }),
+              body: formData,
             });
             const fileData = await uploadResp.json();
 
@@ -450,7 +455,7 @@ export default function ConferenciaChb() {
       setAnalysisProgress('Enviando para análise...');
       
       // Step 1: Submit analysis request
-      const submitResponse = await fetch('/api/chb/analyze-documents', {
+      const submitResponse = await fetch(apiUrl('/api/chb/analyze-documents'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -519,7 +524,7 @@ export default function ConferenciaChb() {
         const elapsedSecs = Math.floor((Date.now() - startTime) / 1000);
         setAnalysisProgress(`Analisando documentos... (${elapsedSecs}s)`);
 
-        const pollResponse = await fetch('/api/chb/analyze-documents', {
+        const pollResponse = await fetch(apiUrl('/api/chb/analyze-documents'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ requestId }),
@@ -553,7 +558,7 @@ export default function ConferenciaChb() {
       }
 
       if (!data) {
-        throw new Error('A análise demorou mais que o esperado. O processamento foi interrompido — por favor, clique em "Fazer Análise Novamente". Se o problema persistir, tente reduzir a quantidade de arquivos.');
+        throw new Error(`A análise não foi concluída dentro do tempo esperado. Identificador da solicitação: ${requestId}. Verifique o processamento ou tente novamente.`);
       }
 
       setAnalysisProgress('');
@@ -688,7 +693,9 @@ export default function ConferenciaChb() {
       toast.success('Análise concluída com sucesso!');
     } catch (error) {
       console.error('Error analyzing documents:', error);
-      toast.error(`Erro na análise: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      const errMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+      setAnalysisError(errMsg);
+      toast.error(`Erro na análise: ${errMsg}`);
     } finally {
       setIsAnalyzing(false);
       setAnalysisProgress('');
@@ -786,7 +793,7 @@ export default function ConferenciaChb() {
           approvedAt: new Date().toISOString(),
         };
         const userId = localStorage.getItem('user_id');
-        const snapshotResponse = await fetch('/api/chb/approved-snapshots', {
+        const snapshotResponse = await fetch(apiUrl('/api/chb/approved-snapshots'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -860,7 +867,7 @@ export default function ConferenciaChb() {
   const handleDeleteDocument = async (docId: string) => {
     // Delete from MariaDB
     try {
-      const response = await fetch(`/api/chb/docs/${encodeURIComponent(String(docId))}`, {
+      const response = await fetch(apiUrl(`/api/chb/docs/${encodeURIComponent(String(docId))}`), {
         method: 'DELETE',
       });
       
@@ -918,6 +925,7 @@ export default function ConferenciaChb() {
             reference={itemId ? `#${itemId}` : ''}
             itemId={itemId}
             corrections={corrections}
+            analysisError={analysisError}
           />
         );
       case 'historico':

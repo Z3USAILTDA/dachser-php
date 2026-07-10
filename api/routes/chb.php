@@ -376,7 +376,12 @@ function chbCallAnthropic($prompt, $files) {
         ])
     ]);
 
-    if (!$res['ok']) throw new Exception("Anthropic API error {$res['status']}: " . substr($res['body'], 0, 300));
+    if (!$res['ok']) {
+        $errorDetail = substr(isset($res['body']) ? $res['body'] : 'No body', 0, 500);
+        $curlError = isset($res['error']) ? $res['error'] : 'N/A';
+        error_log("[Anthropic CHB] Error HTTP {$res['status']}: {$errorDetail} | cURL: {$curlError}");
+        throw new Exception("API ANTHROPIC - ERRO AO EXTRAIR O ARQUIVO. Status {$res['status']}: {$errorDetail}");
+    }
     $data = $res['json']();
     foreach (($data['content'] ?? []) as $c) {
         if ($c['type'] === 'text') return $c['text'];
@@ -418,7 +423,12 @@ function chbCallGeminiVision($prompt, $files) {
         ])
     ]);
 
-    if (!$res['ok']) throw new Exception("Gemini API error {$res['status']}: " . substr($res['body'], 0, 300));
+    if (!$res['ok']) {
+        $errorDetail = substr(isset($res['body']) ? $res['body'] : 'No body', 0, 500);
+        $curlError = isset($res['error']) ? $res['error'] : 'N/A';
+        error_log("[Gemini CHB] Error HTTP {$res['status']}: {$errorDetail} | cURL: {$curlError}");
+        throw new Exception("API GEMINI - ERRO AO EXTRAIR O ARQUIVO. Status {$res['status']}: {$errorDetail}");
+    }
     $data = $res['json']();
     return $data['choices'][0]['message']['content'] ?? '';
 }
@@ -622,31 +632,39 @@ $router->post('chb/items/:id/files', function($params) {
 // POST /api/chb/items/:id/files/upload
 $router->post('chb/items/:id/files/upload', function($params) {
     try {
-        $body = getRequestBody();
-        $filename = $body['filename'] ?? null;
-        $mime = $body['mime'] ?? null;
-        $fileBase64Raw = $body['fileBase64'] ?? null;
-        $etapa = $body['etapa'] ?? '1';
-        $docRole = $body['docRole'] ?? 'O';
+        $uploadResult = handleFileUpload(isset($_FILES['file']) ? $_FILES['file'] : null, 'chb', [
+            'application/pdf',
+            'image/jpeg',
+            'image/png',
+            'image/webp',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-excel.sheet.macroEnabled.12',
+            'text/csv'
+        ]);
+        if (!$uploadResult['success']) sendJson(['success' => false, 'error' => $uploadResult['error']], 400);
 
-        if (!$filename || !$fileBase64Raw) sendJson(['success' => false, 'error' => 'filename e fileBase64 são obrigatórios'], 400);
+        $filename = $uploadResult['originalName'];
+        $mime = $uploadResult['mime'];
+        $sizeBytes = $uploadResult['size'];
+        $buffer = file_get_contents($uploadResult['path']);
 
-        $cleanBase64 = preg_replace('/^data:[^;]+;base64,/', '', (string)$fileBase64Raw);
-        $buffer = base64_decode($cleanBase64);
-        $sizeBytes = strlen($buffer);
+        $etapa = isset($_POST['etapa']) ? $_POST['etapa'] : '1';
+        $docRole = isset($_POST['docRole']) ? $_POST['docRole'] : 'O';
+        $userId = isset($_POST['userId']) ? (int)$_POST['userId'] : null;
 
         try { opsQuery("ALTER TABLE dados_dachser.t_chb_files ADD COLUMN IF NOT EXISTS file_content LONGBLOB NULL"); } catch (Exception $e) {}
 
         $pdo = getOpsPDO();
         $stmt = $pdo->prepare("INSERT INTO dados_dachser.t_chb_files (filename, mime, size_bytes, sha256, rel_path, url, created_by, file_content) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([$filename, $mime, $sizeBytes, null, '', '', getUserIdFromBody($body), $buffer]);
+        $stmt->execute([$filename, $mime, $sizeBytes, null, '', '', $userId, $buffer]);
         $fileId = $pdo->lastInsertId();
 
         $fileUrl = "/api/chb/files/$fileId/download";
         opsQuery("UPDATE dados_dachser.t_chb_files SET url = ? WHERE id = ?", [$fileUrl, $fileId]);
         opsQuery(
             "INSERT INTO dados_dachser.t_chb_docs (item_id, file_id, etapa, doc_role, version, is_active, created_by) VALUES (?, ?, ?, ?, 1, 1, ?)",
-            [$params['id'], $fileId, $etapa, trim((string)$docRole), getUserIdFromBody($body)]
+            [$params['id'], $fileId, $etapa, trim((string)$docRole), $userId]
         );
 
         sendJson(['success' => true, 'fileId' => (int)$fileId, 'fileUrl' => $fileUrl, 'sizeBytes' => $sizeBytes]);
@@ -989,17 +1007,33 @@ $router->post('chb/analyze-documents', function($params) {
         // Polling por requestId
         if (isset($body['requestId'])) {
             $rows = opsQuery(
-                "SELECT status, result_html, result_text, result_json FROM dados_dachser.t_chb_runs WHERE id = ? LIMIT 1",
+                "SELECT status, result_html, result_text, result_json, created_at FROM dados_dachser.t_chb_runs WHERE id = ? LIMIT 1",
                 [$body['requestId']]
             );
             $row = $rows[0] ?? null;
             if (!$row) sendJson(['status' => 'error', 'error' => 'Requisição não encontrada'], 404);
+
+            $status = $row['status'];
+            $createdAt = strtotime($row['created_at']);
+            $now = time();
+            $timeoutSeconds = 600; // 10 minutes
+
+            if (($status === 'pending' || $status === 'processing') && ($now - $createdAt) > $timeoutSeconds) {
+                opsQuery(
+                    "UPDATE dados_dachser.t_chb_runs SET status = 'error', result_text = 'TIMEOUT: A análise demorou mais que o esperado. O processamento foi interrompido.' WHERE id = ?",
+                    [$body['requestId']]
+                );
+                $status = 'error';
+                $row['result_text'] = 'TIMEOUT: A análise demorou mais que o esperado. O processamento foi interrompido.';
+            }
+
             $result = null;
-            if ($row['status'] === 'completed' && $row['result_html']) {
+            if ($status === 'completed' && $row['result_html']) {
                 $result = json_decode($row['result_html'], true);
                 if (!$result) $result = ['html' => $row['result_html']];
             }
-            sendJson(['status' => $row['status'], 'result' => $result, 'error' => $row['status'] === 'error' ? $row['result_text'] : null]);
+            sendJson(['status' => $status, 'result' => $result, 'error' => $status === 'error' ? $row['result_text'] : null]);
+            return;
         }
 
         $stepId = $body['stepId'] ?? null;
@@ -1047,14 +1081,19 @@ $router->post('chb/analyze-documents', function($params) {
 $router->post('chb/compare-documents', function($params) {
     $startTime = microtime(true);
     try {
-        $body = getRequestBody();
-        $pdfBase64    = $body['pdfBase64'] ?? null;
-        $pdfFileName  = $body['pdfFileName'] ?? 'documento.pdf';
-        $excelContent = $body['excelContent'] ?? null;
-        $excelFileName = $body['excelFileName'] ?? 'planilha.xlsx';
+        $uploadResult = handleFileUpload(isset($_FILES['pdfFile']) ? $_FILES['pdfFile'] : null, 'chb');
+        if (!$uploadResult['success']) {
+            sendJson(['error' => $uploadResult['error']], 400);
+        }
+
+        $pdfBase64 = base64_encode(file_get_contents($uploadResult['path']));
+        $pdfFileName = $uploadResult['originalName'];
+        
+        $excelContent = isset($_POST['excelContent']) ? $_POST['excelContent'] : null;
+        $excelFileName = isset($_POST['excelFileName']) ? $_POST['excelFileName'] : 'planilha.xlsx';
 
         if (!$pdfBase64 || !$excelContent) {
-            sendJson(['error' => 'pdfBase64 e excelContent são obrigatórios'], 400);
+            sendJson(['error' => 'pdfFile e excelContent são obrigatórios'], 400);
         }
 
         $key = isset($_ENV['CHB_ANTHROPIC_API_KEY']) ? $_ENV['CHB_ANTHROPIC_API_KEY'] : (isset($_ENV['ANTHROPIC_API_KEY']) ? $_ENV['ANTHROPIC_API_KEY'] : null);
@@ -1081,8 +1120,12 @@ $router->post('chb/compare-documents', function($params) {
         ]);
 
         if (!$res['ok']) {
+            $errorDetail = substr(isset($res['body']) ? $res['body'] : 'No body', 0, 500);
+            $curlError = isset($res['error']) ? $res['error'] : 'N/A';
+            error_log("[Anthropic Compare] Error HTTP {$res['status']}: {$errorDetail} | cURL: {$curlError}");
+
             if ($res['status'] === 429) sendJson(['error' => 'Limite de requisições excedido. Tente novamente em alguns minutos.'], 429);
-            throw new Exception("Anthropic error: {$res['status']} — " . substr($res['body'], 0, 200));
+            throw new Exception("API ANTHROPIC - ERRO AO EXTRAIR O ARQUIVO. Detalhes: {$res['status']} — {$errorDetail}");
         }
 
         $aiResponse = $res['json']();

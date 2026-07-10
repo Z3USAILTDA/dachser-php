@@ -683,7 +683,7 @@ const Index = () => {
 
   // Rastreio removido — serviço externo gerencia o rastreio (fetch-awbs-for-retrack, track-awb, add-awb-to-status)
   const retrackAWBsFromStatus = React.useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
     async (_sendNoChangesEmail: boolean = false) => {
       // Rastreio removido — serviço externo gerencia o rastreio
     },

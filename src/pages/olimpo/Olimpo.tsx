@@ -480,7 +480,7 @@ function OlimpoContent() {
       mapRef.current = null;
       setMapInstance(null);
     };
-  }, [mapboxToken, isFullscreen]);
+  }, [mapboxToken]);
 
   // Update map markers and routes
   useEffect(() => {
@@ -913,20 +913,6 @@ function OlimpoContent() {
       )}
     </>
   ) : null;
-
-  // Fullscreen mode
-  if (isFullscreen) {
-    return (
-      <div className="fixed inset-0 z-50 bg-[#02040a]">
-        <div 
-          ref={mapContainerRef} 
-          style={{ width: "100%", height: "100%", position: "absolute", top: 0, left: 0, zIndex: 1 }}
-        />
-        {fullscreenOverlay}
-      </div>
-    );
-  }
-
   // Normal mode
   return (
     <div className="min-h-screen relative">
@@ -1030,138 +1016,153 @@ function OlimpoContent() {
         <div className="flex-1 flex flex-col lg:flex-row gap-4 min-h-0">
           {/* Map Card */}
           <div 
-            className="rounded-2xl flex flex-col overflow-hidden flex-1 min-h-[300px] lg:min-h-0"
-            style={{
+            className={isFullscreen 
+              ? "fixed inset-0 z-50 bg-[#02040a] flex flex-col"
+              : "rounded-2xl flex flex-col overflow-hidden flex-1 min-h-[300px] lg:min-h-0"
+            }
+            style={isFullscreen ? {} : {
               background: 'rgba(5,6,18,.9)',
               border: '1px solid rgba(255,255,255,.12)',
               boxShadow: '0 18px 40px rgba(0,0,0,.85)',
             }}
           >
-            <div className="flex items-center justify-between p-3 md:p-4 border-b border-white/[0.08]">
-              <div>
-                <h2 className="text-xs md:text-sm tracking-[0.16em] uppercase text-white/90">Air & Sea Movements</h2>
-                <p className="text-[10px] md:text-xs text-muted-foreground hidden sm:block">Origem x Destino com rotas em tempo quase real</p>
+            {!isFullscreen && (
+              <div className="flex items-center justify-between p-3 md:p-4 border-b border-white/[0.08]">
+                <div>
+                  <h2 className="text-xs md:text-sm tracking-[0.16em] uppercase text-white/90">Air & Sea Movements</h2>
+                  <p className="text-[10px] md:text-xs text-muted-foreground hidden sm:block">Origem x Destino com rotas em tempo quase real</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="border-[rgba(135,206,250,0.7)] text-[#b7e2ff] text-[10px] md:text-xs">
+                    AIR
+                  </Badge>
+                  <Badge variant="outline" className="border-[rgba(64,224,208,0.7)] text-[#a4fff4] text-[10px] md:text-xs">
+                    SEA
+                  </Badge>
+                  <button
+                    onClick={() => setIsFullscreen(true)}
+                    className="w-7 h-7 md:w-8 md:h-8 rounded-full border border-white/20 flex items-center justify-center bg-black/70 text-primary hover:bg-black/90 transition-all"
+                  >
+                    <Maximize2 size={14} />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="border-[rgba(135,206,250,0.7)] text-[#b7e2ff] text-[10px] md:text-xs">
-                  AIR
-                </Badge>
-                <Badge variant="outline" className="border-[rgba(64,224,208,0.7)] text-[#a4fff4] text-[10px] md:text-xs">
-                  SEA
-                </Badge>
-                <button
-                  onClick={() => setIsFullscreen(true)}
-                  className="w-7 h-7 md:w-8 md:h-8 rounded-full border border-white/20 flex items-center justify-center bg-black/70 text-primary hover:bg-black/90 transition-all"
-                >
-                  <Maximize2 size={14} />
-                </button>
-              </div>
-            </div>
+            )}
             <div 
-              className="flex-1 relative bg-[#02040a] m-2 md:m-3 rounded-[18px] overflow-hidden"
-              style={{ minHeight: "550px", height: "550px" }}
+              className={isFullscreen 
+                ? "flex-1 relative bg-[#02040a] overflow-hidden" 
+                : "flex-1 relative bg-[#02040a] m-2 md:m-3 rounded-[18px] overflow-hidden"
+              }
+              style={isFullscreen ? {} : { minHeight: "550px", height: "550px" }}
             >
               <div 
                 ref={mapContainerRef} 
                 style={{ width: "100%", height: "100%", position: "absolute", top: 0, left: 0, zIndex: 1 }}
               />
-              <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 flex items-center gap-2 text-[10px] md:text-xs text-muted-foreground px-2 py-1 rounded-full bg-black/85 border border-white/10 z-[1000]">
-                <span className="w-2 h-2 rounded-full bg-primary" /> SEA
-                <span className="w-2 h-2 rounded-full bg-[#7fd0ff]" /> AIR
-              </div>
+              
+              {isFullscreen ? (
+                fullscreenOverlay
+              ) : (
+                <>
+                  <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 flex items-center gap-2 text-[10px] md:text-xs text-muted-foreground px-2 py-1 rounded-full bg-black/85 border border-white/10 z-[1000]">
+                    <span className="w-2 h-2 rounded-full bg-primary" /> SEA
+                    <span className="w-2 h-2 rounded-full bg-[#7fd0ff]" /> AIR
+                  </div>
 
-              {/* Asset Details Panel */}
-              {selectedAssetDetails && (
-                <div 
-                  className="absolute right-3 top-3 w-80 max-h-[calc(100%-24px)] z-[1000] rounded-xl flex flex-col overflow-hidden"
-                  style={{
-                    background: 'rgba(5,6,18,.95)',
-                    border: '1px solid rgba(255,255,255,.15)',
-                    boxShadow: '0 12px 32px rgba(0,0,0,.7)',
-                  }}
-                >
-                  {/* Header */}
-                  <div className="flex items-center justify-between p-2.5 border-b border-white/[0.08]">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center ${selectedAssetDetails.mode === 'air' ? 'bg-[#7fd0ff]/20' : 'bg-primary/20'}`}>
-                        {selectedAssetDetails.mode === 'air' ? (
-                          <Plane size={14} className="text-[#7fd0ff]" />
-                        ) : (
-                          <Ship size={14} className="text-primary" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                          {selectedAssetDetails.mode === 'air' ? 'Avião' : 'Navio'}
-                        </p>
-                        <p className="font-semibold text-xs">
-                          {selectedAssetDetails.flight || selectedAssetDetails.asset || 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setSelectedAssetDetails(null)}
-                      className="w-5 h-5 rounded-full border border-white/20 flex items-center justify-center bg-black/50 text-muted-foreground hover:text-white transition-all"
+                  {/* Asset Details Panel */}
+                  {selectedAssetDetails && (
+                    <div 
+                      className="absolute right-3 top-3 w-80 max-h-[calc(100%-24px)] z-[1000] rounded-xl flex flex-col overflow-hidden"
+                      style={{
+                        background: 'rgba(5,6,18,.95)',
+                        border: '1px solid rgba(255,255,255,.15)',
+                        boxShadow: '0 12px 32px rgba(0,0,0,.7)',
+                      }}
                     >
-                      <X size={10} />
-                    </button>
-                  </div>
-
-                  {/* Scrollable content */}
-                  <div className="flex-1 overflow-y-auto">
-                    {/* Badge */}
-                    <div className="px-2.5 pt-2">
-                      <Badge 
-                        variant="outline" 
-                        className={`text-[10px] ${selectedAssetDetails.mode === 'air' ? 'border-[#7fd0ff]/70 text-[#b7e2ff]' : 'border-primary/70 text-primary'}`}
-                      >
-                        {selectedAssetDetails.tipo_label} • {selectedAssetDetails.flight || selectedAssetDetails.asset || 'N/A'}
-                      </Badge>
-                    </div>
-
-                    {/* Details */}
-                    <div className="p-2.5 space-y-1.5 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Rota</span>
-                        <span className="font-medium">{selectedAssetDetails.rota}</span>
+                      {/* Header */}
+                      <div className="flex items-center justify-between p-2.5 border-b border-white/[0.08]">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-7 h-7 rounded-full flex items-center justify-center ${selectedAssetDetails.mode === 'air' ? 'bg-[#7fd0ff]/20' : 'bg-primary/20'}`}>
+                            {selectedAssetDetails.mode === 'air' ? (
+                              <Plane size={14} className="text-[#7fd0ff]" />
+                            ) : (
+                              <Ship size={14} className="text-primary" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                              {selectedAssetDetails.mode === 'air' ? 'Avião' : 'Navio'}
+                            </p>
+                            <p className="font-semibold text-xs">
+                              {selectedAssetDetails.flight || selectedAssetDetails.asset || 'N/A'}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setSelectedAssetDetails(null)}
+                          className="w-5 h-5 rounded-full border border-white/20 flex items-center justify-center bg-black/50 text-muted-foreground hover:text-white transition-all"
+                        >
+                          <X size={10} />
+                        </button>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Previsão</span>
-                        <span className="font-medium">{selectedAssetDetails.eta_api}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Status</span>
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${selectedAssetDetails.status === 'Atraso' ? 'bg-red-500/20 text-red-400' : selectedAssetDetails.status === 'Entregue' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
-                          {selectedAssetDetails.status}
-                        </span>
-                      </div>
-                    </div>
 
-                    {/* Processos (AWBs) */}
-                    <div className="p-2.5 border-t border-white/[0.05]">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">
-                        Processos ({selectedAssetDetails.processos.length})
-                      </p>
-                      <div className="space-y-1">
-                        {selectedAssetDetails.processos.length > 0 ? (
-                          selectedAssetDetails.processos.map((awb, idx) => (
-                            <div key={idx} className="text-[10px] px-1.5 py-1 bg-white/[0.03] rounded border border-white/[0.06]">
-                              {awb}
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-[10px] text-muted-foreground italic">Nenhum processo</p>
-                        )}
+                      {/* Scrollable content */}
+                      <div className="flex-1 overflow-y-auto">
+                        {/* Badge */}
+                        <div className="px-2.5 pt-2">
+                          <Badge 
+                            variant="outline" 
+                            className={`text-[10px] ${selectedAssetDetails.mode === 'air' ? 'border-[#7fd0ff]/70 text-[#b7e2ff]' : 'border-primary/70 text-primary'}`}
+                          >
+                            {selectedAssetDetails.tipo_label} • {selectedAssetDetails.flight || selectedAssetDetails.asset || 'N/A'}
+                          </Badge>
+                        </div>
+
+                        {/* Details */}
+                        <div className="p-2.5 space-y-1.5 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Rota</span>
+                            <span className="font-medium">{selectedAssetDetails.rota}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Previsão</span>
+                            <span className="font-medium">{selectedAssetDetails.eta_api}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Status</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] ${selectedAssetDetails.status === 'Atraso' ? 'bg-red-500/20 text-red-400' : selectedAssetDetails.status === 'Entregue' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                              {selectedAssetDetails.status}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Processos (AWBs) */}
+                        <div className="p-2.5 border-t border-white/[0.05]">
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">
+                            Processos ({selectedAssetDetails.processos.length})
+                          </p>
+                          <div className="space-y-1">
+                            {selectedAssetDetails.processos.length > 0 ? (
+                              selectedAssetDetails.processos.map((awb, idx) => (
+                                <div key={idx} className="text-[10px] px-1.5 py-1 bg-white/[0.03] rounded border border-white/[0.06]">
+                                  {awb}
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-[10px] text-muted-foreground italic">Nenhum processo</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Faturamento */}
+                        <div className="p-2.5 border-t border-white/[0.05]">
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Faturamento</p>
+                          <p className="text-[10px] text-muted-foreground italic">Em desenvolvimento...</p>
+                        </div>
                       </div>
                     </div>
-
-                    {/* Faturamento */}
-                    <div className="p-2.5 border-t border-white/[0.05]">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Faturamento</p>
-                      <p className="text-[10px] text-muted-foreground italic">Em desenvolvimento...</p>
-                    </div>
-                  </div>
-                </div>
+                  )}
+                </>
               )}
             </div>
           </div>

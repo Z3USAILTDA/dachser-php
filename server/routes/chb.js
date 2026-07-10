@@ -1,4 +1,4 @@
-﻿/**
+/**
  * server/routes/chb.js
  * Rotas do módulo CHB: /api/chb/*
  * Pool: MARIADB_OPS_* — database: dados_dachser
@@ -1104,16 +1104,31 @@ export function registerChbRoutes(app, _deps = {}) {
       // polling de status por requestId
       if (body.requestId) {
         const rows = await opsQuery(
-          `SELECT status, result_html, result_text, result_json FROM dados_dachser.t_chb_runs WHERE id = ? LIMIT 1`,
+          `SELECT status, result_html, result_text, result_json, created_at FROM dados_dachser.t_chb_runs WHERE id = ? LIMIT 1`,
           [body.requestId]
         );
         const row = rows?.[0];
         if (!row) return res.status(404).json({ status: 'error', error: 'Requisição não encontrada' });
+
+        let status = row.status;
+        const createdAt = new Date(row.created_at).getTime();
+        const now = Date.now();
+        const timeoutMs = 600 * 1000; // 10 minutes
+
+        if ((status === 'pending' || status === 'processing') && (now - createdAt) > timeoutMs) {
+          await opsQuery(
+            `UPDATE dados_dachser.t_chb_runs SET status = 'error', result_text = 'TIMEOUT: A análise demorou mais que o esperado. O processamento foi interrompido.' WHERE id = ?`,
+            [body.requestId]
+          );
+          status = 'error';
+          row.result_text = 'TIMEOUT: A análise demorou mais que o esperado. O processamento foi interrompido.';
+        }
+
         let result = null;
-        if (row.status === 'completed' && row.result_html) {
+        if (status === 'completed' && row.result_html) {
           try { result = JSON.parse(row.result_html); } catch { result = { html: row.result_html }; }
         }
-        return res.json({ status: row.status, result, error: row.status === 'error' ? row.result_text : null });
+        return res.json({ status, result, error: status === 'error' ? row.result_text : null });
       }
 
       const { stepId, files, clientConfig, itemId } = body;
