@@ -891,6 +891,53 @@ $router->get('fin/vouchers/datas-antigas', function ($params) {
     }
 });
 
+// ── GET /api/fin/vouchers/rm-ready ───────────────────────────────────────────
+$router->get('fin/vouchers/rm-ready', function ($params) {
+    try {
+        $numero_spo = trim($_GET['numero_spo'] ?? '');
+        if (empty($numero_spo)) {
+            sendJson(['ready' => false, 'found' => false, 'missingFields' => ['numero_spo']]);
+        }
+
+        $rows = finQuery("
+            SELECT documento, nd, numero_nf, numero_processo, modal, tipo_pag,
+                   forma_pag, data_emissao, data_vencimento, valor_nf, cnpj, razao_social
+            FROM dados_dachser.t_dados_financeiro_voucher
+            WHERE SUBSTRING_INDEX(TRIM(nd), ' ', 1) COLLATE utf8mb4_unicode_ci
+                = SUBSTRING_INDEX(TRIM(?), ' ', 1) COLLATE utf8mb4_unicode_ci
+            LIMIT 1
+        ", [$numero_spo]);
+
+        if (empty($rows)) {
+            sendJson([
+                'ready' => false,
+                'found' => false,
+                'isManual' => true,
+                'missingFields' => ['registro inexistente em t_dados_financeiro_voucher']
+            ]);
+        }
+
+        $row = $rows[0];
+        $required = ['documento', 'nd', 'numero_nf', 'numero_processo', 'modal', 'tipo_pag', 'forma_pag', 'data_emissao', 'data_vencimento', 'valor_nf', 'cnpj', 'razao_social'];
+        $informational = [];
+        foreach ($required as $f) {
+            $v = $row[$f] ?? null;
+            if ($v === null || $v === '') { $informational[] = $f; continue; }
+            if ($f === 'valor_nf' && (float)$v === 0.0) { $informational[] = $f; continue; }
+        }
+
+        sendJson([
+            'ready' => true,
+            'found' => true,
+            'isManual' => false,
+            'missingFields' => [],
+            'informationalEmptyFields' => $informational
+        ]);
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
 // ── GET /api/fin/vouchers/:id ─────────────────────────────────────────────────
 $router->get('fin/vouchers/:id', function ($params) {
     try {
@@ -3005,53 +3052,6 @@ $router->post('fin/vouchers/:id/cancelar', function ($params) {
         }
 
         sendJson(['success' => true]);
-    } catch (Exception $e) {
-        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
-    }
-});
-
-// ── GET /api/fin/vouchers/rm-ready ───────────────────────────────────────────
-$router->get('fin/vouchers/rm-ready', function ($params) {
-    try {
-        $numero_spo = trim($_GET['numero_spo'] ?? '');
-        if (empty($numero_spo)) {
-            sendJson(['ready' => false, 'found' => false, 'missingFields' => ['numero_spo']]);
-        }
-
-        $rows = finQuery("
-            SELECT documento, nd, numero_nf, numero_processo, modal, tipo_pag,
-                   forma_pag, data_emissao, data_vencimento, valor_nf, cnpj, razao_social
-            FROM dados_dachser.t_dados_financeiro_voucher
-            WHERE SUBSTRING_INDEX(TRIM(nd), ' ', 1) COLLATE utf8mb4_unicode_ci
-                = SUBSTRING_INDEX(TRIM(?), ' ', 1) COLLATE utf8mb4_unicode_ci
-            LIMIT 1
-        ", [$numero_spo]);
-
-        if (empty($rows)) {
-            sendJson([
-                'ready' => false,
-                'found' => false,
-                'isManual' => true,
-                'missingFields' => ['registro inexistente em t_dados_financeiro_voucher']
-            ]);
-        }
-
-        $row = $rows[0];
-        $required = ['documento', 'nd', 'numero_nf', 'numero_processo', 'modal', 'tipo_pag', 'forma_pag', 'data_emissao', 'data_vencimento', 'valor_nf', 'cnpj', 'razao_social'];
-        $informational = [];
-        foreach ($required as $f) {
-            $v = $row[$f] ?? null;
-            if ($v === null || $v === '') { $informational[] = $f; continue; }
-            if ($f === 'valor_nf' && (float)$v === 0.0) { $informational[] = $f; continue; }
-        }
-
-        sendJson([
-            'ready' => true,
-            'found' => true,
-            'isManual' => false,
-            'missingFields' => [],
-            'informationalEmptyFields' => $informational
-        ]);
     } catch (Exception $e) {
         sendJson(['success' => false, 'error' => $e->getMessage()], 500);
     }
