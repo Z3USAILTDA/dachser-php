@@ -433,62 +433,177 @@ function chbCallGeminiVision($prompt, $files) {
     return $data['choices'][0]['message']['content'] ?? '';
 }
 
-function logChbStep($runId, $itemId, $requestId, $stage, $extra = []) {
+function chbAnalyzePdfStructure($pdfBase64) {
+    try {
+        $data = base64_decode($pdfBase64);
+        if (!$data) {
+            return ['pages' => 0, 'hasText' => false, 'ocr' => false];
+        }
+        
+        $pages = 1;
+        if (preg_match('/\/Count\s+(\d+)/', $data, $matches)) {
+            $pages = (int)$matches[1];
+        } else {
+            $count = substr_count($data, '/Type /Page') + substr_count($data, '/Type/Page');
+            if ($count > 0) $pages = $count;
+        }
+        
+        $hasText = false;
+        if (strpos($data, 'BT') !== false || strpos($data, '/Font') !== false || strpos($data, 'Text') !== false) {
+            $hasText = true;
+        }
+        
+        return [
+            'pages' => $pages,
+            'hasText' => $hasText,
+            'ocr' => !$hasText
+        ];
+    } catch (Throwable $e) {
+        return ['pages' => 1, 'hasText' => true, 'ocr' => false];
+    }
+}
+
+function logChbStepAdvanced($runId, $itemId, $requestId, $stage, $startTime, $lastStepTime, $extra = []) {
+    $now = microtime(true);
+    $duracaoEtapa = round($now - $lastStepTime, 4);
+    $duracaoAcumulada = round($now - $startTime, 4);
+    
     $log = array_merge([
         'analysis_request_id' => $runId,
         'conference_id' => $itemId,
         'request_id' => $requestId,
-        'etapa_logs' => $stage,
+        'etapa' => $stage,
         'timestamp' => date('Y-m-d H:i:s'),
-        'microtime' => microtime(true),
+        'duracao_etapa' => $duracaoEtapa,
+        'duracao_acumulada' => $duracaoAcumulada
     ], $extra);
+    
     error_log("[CHB_LOG] " . json_encode($log));
+    return $now;
 }
 
 function chbProcessAnalysis($runId, $stepId, $files, $clientConfig, $itemId) {
     $startTime = microtime(true);
+    $lastStepTime = $startTime;
     $requestId = uniqid('chb_');
     $filesCount = is_array($files) ? count($files) : 0;
     
-    logChbStep($runId, $itemId, $requestId, 'CHB_REQUEST_PICKED_BY_WORKER', [
+    $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_REQUEST_PICKED_BY_WORKER', $startTime, $lastStepTime, [
         'quantidade_arquivos' => $filesCount
     ]);
     
     try {
-        logChbStep($runId, $itemId, $requestId, 'CHB_STATUS_PROCESSING');
+        $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_STATUS_PROCESSING', $startTime, $lastStepTime);
         opsQuery("UPDATE dados_dachser.t_chb_runs SET status = 'processing' WHERE id = ?", [$runId]);
         
-        logChbStep($runId, $itemId, $requestId, 'CHB_FILES_LOADING');
-        logChbStep($runId, $itemId, $requestId, 'CHB_FILES_LOADED', [
-            'quantidade_arquivos' => $filesCount
+        $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_FILES_LOADING', $startTime, $lastStepTime);
+        
+        $totalBytes = 0;
+        $filesAnalysis = [];
+        foreach ($files as $index => $file) {
+            $fileStart = microtime(true);
+            $mime = $file['mimeType'] ?? $file['type'] ?? 'application/octet-stream';
+            $fileContent = $file['content'] ?? $file['fileBase64'] ?? '';
+            $name = $file['name'] ?? 'arquivo';
+            $size = strlen($fileContent) * 0.75;
+            $totalBytes += $size;
+            
+            $pages = 1;
+            $hasText = true;
+            $ocr = false;
+            
+            if ($mime === 'application/pdf') {
+                $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_PDF_VALIDATION_STARTED', $startTime, $lastStepTime, [
+                    'file_name' => $name
+                ]);
+                
+                $pdfInfo = chbAnalyzePdfStructure($fileContent);
+                $pages = $pdfInfo['pages'];
+                $hasText = $pdfInfo['hasText'];
+                $ocr = $pdfInfo['ocr'];
+                
+                $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_PDF_VALIDATION_COMPLETED', $startTime, $lastStepTime, [
+                    'file_name' => $name,
+                    'paginas' => $pages,
+                    'contem_texto' => $hasText,
+                    'requer_ocr' => $ocr
+                ]);
+            }
+            
+            $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_TEXT_EXTRACTION_STARTED', $startTime, $lastStepTime, [
+                'file_name' => $name
+            ]);
+            $charCount = strlen($fileContent);
+            $tokens = (int)ceil($charCount / 4);
+            $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_TEXT_EXTRACTION_COMPLETED', $startTime, $lastStepTime, [
+                'file_name' => $name,
+                'tokens_estimados' => $tokens,
+                'duracao_extracao' => round(microtime(true) - $fileStart, 4)
+            ]);
+            
+            $filesAnalysis[] = [
+                'file_id' => $index + 1,
+                'nome' => $name,
+                'mime_type' => $mime,
+                'tamanho' => $size,
+                'caminho' => '',
+                'paginas' => $pages,
+                'tokens' => $tokens,
+                'contem_texto' => $hasText,
+                'requer_ocr' => $ocr
+            ];
+        }
+        
+        $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_FILES_LOADED', $startTime, $lastStepTime, [
+            'quantidade_arquivos' => $filesCount,
+            'tamanho_total' => $totalBytes,
+            'detalhes_arquivos' => $filesAnalysis
         ]);
         
-        logChbStep($runId, $itemId, $requestId, 'CHB_DOCUMENT_EXTRACTION_STARTED');
+        $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_PROMPT_BUILD_STARTED', $startTime, $lastStepTime);
         $prompt = chbBuildPrompt($stepId, $files, $clientConfig, $itemId);
-        logChbStep($runId, $itemId, $requestId, 'CHB_DOCUMENT_EXTRACTION_COMPLETED');
+        $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_PROMPT_BUILD_COMPLETED', $startTime, $lastStepTime);
         
-        logChbStep($runId, $itemId, $requestId, 'CHB_AI_REQUEST_STARTED');
+        $modelName = $_ENV['CHB_ANTHROPIC_MODEL'] ?? 'claude-3-5-sonnet-20241022';
+        $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_AI_REQUEST_STARTED', $startTime, $lastStepTime, [
+            'provedor' => 'Anthropic',
+            'modelo' => $modelName
+        ]);
+        
         $responseText = '';
         $usedFallback = false;
         $aiStartTime = microtime(true);
         try {
             $responseText = chbCallAnthropic($prompt, $files);
-            logChbStep($runId, $itemId, $requestId, 'CHB_AI_RESPONSE_RECEIVED', [
-                'provider' => 'Anthropic',
+            $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_AI_RESPONSE_RECEIVED', $startTime, $lastStepTime, [
+                'provedor' => 'Anthropic',
+                'modelo' => $modelName,
                 'duracao' => round(microtime(true) - $aiStartTime, 2)
             ]);
         } catch (Throwable $anthropicErr) {
             error_log('[chb analyze] Anthropic failed, trying Gemini: ' . $anthropicErr->getMessage());
             $usedFallback = true;
+            $geminiModel = $_ENV['CHB_GEMINI_MODEL'] ?? 'gemini-2.5-pro';
+            
+            $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_AI_REQUEST_STARTED', $startTime, $lastStepTime, [
+                'provedor' => 'Gemini (Fallback)',
+                'modelo' => $geminiModel,
+                'erro_anterior' => $anthropicErr->getMessage()
+            ]);
+            
+            $aiStartTime = microtime(true);
             $responseText = chbCallGeminiVision($prompt, $files);
-            logChbStep($runId, $itemId, $requestId, 'CHB_AI_RESPONSE_RECEIVED', [
-                'provider' => 'Gemini (Fallback)',
+            
+            $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_AI_RESPONSE_RECEIVED', $startTime, $lastStepTime, [
+                'provedor' => 'Gemini (Fallback)',
+                'modelo' => $geminiModel,
                 'duracao' => round(microtime(true) - $aiStartTime, 2)
             ]);
         }
 
-        logChbStep($runId, $itemId, $requestId, 'CHB_AI_RESPONSE_PARSED');
+        $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_AI_RESPONSE_PARSE_STARTED', $startTime, $lastStepTime);
         $parsed = chbExtractHtmlAndTags($responseText, (int)$stepId);
+        $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_AI_RESPONSE_PARSED', $startTime, $lastStepTime);
         
         $resultData = array_merge(['id' => "chb-$runId", 'stepId' => $stepId], $parsed, [
             'generatedAt'   => date('d/m/Y H:i:s'),
@@ -496,18 +611,19 @@ function chbProcessAnalysis($runId, $stepId, $files, $clientConfig, $itemId) {
             'usedFallback'  => $usedFallback,
         ]);
 
-        logChbStep($runId, $itemId, $requestId, 'CHB_RESULT_SAVED');
+        $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_RESULT_SAVE_STARTED', $startTime, $lastStepTime);
         opsQuery(
             "UPDATE dados_dachser.t_chb_runs SET status = 'completed', result_html = ?, result_json = ? WHERE id = ?",
             [json_encode($resultData), json_encode($resultData), $runId]
         );
+        $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_RESULT_SAVED', $startTime, $lastStepTime);
         
-        logChbStep($runId, $itemId, $requestId, 'CHB_STATUS_COMPLETED', [
+        logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_ANALYSIS_COMPLETED', $startTime, $lastStepTime, [
             'duracao_total' => round(microtime(true) - $startTime, 2)
         ]);
     } catch (Throwable $err) {
-        logChbStep($runId, $itemId, $requestId, 'CHB_ANALYSIS_FAILED', [
-            'codigo_erro' => 'CHB_PROCESSING_ERROR',
+        logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_ANALYSIS_FAILED', $startTime, $lastStepTime, [
+            'error_code' => 'CHB_PROCESSING_ERROR',
             'mensagem_tecnica' => $err->getMessage() . " in " . $err->getFile() . " on line " . $err->getLine(),
             'duracao' => round(microtime(true) - $startTime, 2)
         ]);
@@ -516,7 +632,9 @@ function chbProcessAnalysis($runId, $stepId, $files, $clientConfig, $itemId) {
                 'success' => false,
                 'error' => 'Erro no processamento da conferência: ' . $err->getMessage(),
                 'technicalMessage' => $err->getMessage() . " in " . $err->getFile() . " on line " . $err->getLine(),
-                'requestId' => $requestId
+                'requestId' => $requestId,
+                'stage' => 'PROCESSING',
+                'errorCode' => 'CHB_PROCESSING_ERROR'
             ]);
             opsQuery("UPDATE dados_dachser.t_chb_runs SET status = 'error', result_text = ? WHERE id = ?", [$errorPayload, $runId]);
         } catch (Throwable $updateErr) {}
@@ -1075,12 +1193,20 @@ $router->post('chb/analyze-documents', function($params) {
             $timeoutSeconds = 600; // 10 minutes
 
             if (($status === 'pending' || $status === 'processing') && ($now - $createdAt) > $timeoutSeconds) {
+                $errorPayload = json_encode([
+                    'success' => false,
+                    'error' => 'A análise demorou mais que o esperado. O processamento foi interrompido.',
+                    'errorCode' => 'CHB_AI_REQUEST_TIMEOUT',
+                    'stage' => 'AI_REQUEST',
+                    'requestId' => $body['requestId'],
+                    'elapsedMs' => ($now - $createdAt) * 1000,
+                ]);
                 opsQuery(
-                    "UPDATE dados_dachser.t_chb_runs SET status = 'error', result_text = 'TIMEOUT: A análise demorou mais que o esperado. O processamento foi interrompido.' WHERE id = ?",
-                    [$body['requestId']]
+                    "UPDATE dados_dachser.t_chb_runs SET status = 'error', result_text = ? WHERE id = ?",
+                    [$errorPayload, $body['requestId']]
                 );
                 $status = 'error';
-                $row['result_text'] = 'TIMEOUT: A análise demorou mais que o esperado. O processamento foi interrompido.';
+                $row['result_text'] = $errorPayload;
             }
 
             $result = null;

@@ -694,8 +694,23 @@ export default function ConferenciaChb() {
     } catch (error) {
       console.error('Error analyzing documents:', error);
       const errMsg = error instanceof Error ? error.message : 'Erro desconhecido';
-      setAnalysisError(errMsg);
-      toast.error(`Erro na análise: ${errMsg}`);
+      
+      let userFriendlyMsg = errMsg;
+      try {
+        if (errMsg.trim().startsWith('{')) {
+          const parsed = JSON.parse(errMsg);
+          const elapsed = parsed.elapsedMs ? `${Math.round(parsed.elapsedMs / 1000)} segundos` : 'N/A';
+          userFriendlyMsg = `Não foi possível concluir a análise CHB.\n` + 
+                            `Solicitação: ${parsed.requestId || 'N/A'}\n` +
+                            `Etapa: ${parsed.stage || 'N/A'}\n` +
+                            `Código: ${parsed.errorCode || 'CHB_PROCESSING_ERROR'}\n` +
+                            `Tempo decorrido: ${elapsed}.\n` +
+                            `Mensagem técnica: ${parsed.error || 'N/A'}`;
+        }
+      } catch (_) {}
+      
+      setAnalysisError(userFriendlyMsg);
+      toast.error(`Erro na análise: ${userFriendlyMsg.split('\n')[0]}`);
     } finally {
       setIsAnalyzing(false);
       setAnalysisProgress('');

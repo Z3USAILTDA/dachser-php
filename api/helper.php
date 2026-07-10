@@ -252,7 +252,10 @@ function runPHPBackground($scriptPath, $args = []) {
     // Linux/Unix background: tenta primeiro o loopback HTTP por ser mais compatível com shared hostings
     $loopbackSuccess = false;
     try {
-        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+        $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || ($_SERVER['SERVER_PORT'] == 443)
+            || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+        $protocol = $isHttps ? 'https://' : 'http://';
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
         $url = $protocol . $host . "/api/background-worker";
         
@@ -281,8 +284,12 @@ function runPHPBackground($scriptPath, $args = []) {
         $execEnabled = function_exists('exec') && !in_array('exec', array_map('trim', explode(',', $disabled)));
         if ($execEnabled) {
             $phpBin = 'php';
-            if (defined('PHP_BINARY') && PHP_BINARY && strpos(PHP_BINARY, 'php') !== false) {
-                $phpBin = PHP_BINARY;
+            if (defined('PHP_BINARY') && PHP_BINARY) {
+                $binaryName = basename(PHP_BINARY);
+                // lsphp, php-fpm, php-cgi não são CLI executáveis adequados para rodar background workers
+                if ($binaryName === 'php' || $binaryName === 'php-cli' || $binaryName === 'php.exe') {
+                    $phpBin = PHP_BINARY;
+                }
             }
             $escapedArgs = array_map('escapeshellarg', $args);
             $argsStr = implode(' ', $escapedArgs);
