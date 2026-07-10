@@ -125,6 +125,9 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
 
     setLoading(true);
     try {
+      const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+      const userData = storedUser ? JSON.parse(storedUser) : { id: 0, username: "sistema" };
+
       // Determine urgencia_tipo based on tipoDocumento and urgente flag
       let urgenciaTipo = "NORMAL";
       if (formData.tipoDocumento === "ARMAZENAGEM" || formData.tipoDocumento === "ICMS") {
@@ -138,6 +141,8 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           numero_spo: formData.numeroSPO,
+          user_id: userData.id?.toString() || null,
+          user_name: userData.username || 'Sistema',
           fornecedor: formData.fornecedor || null,
           cnpj_fornecedor: formData.cnpjFornecedor || null,
           valor: formData.valor ? parseFloat(formData.valor.replace(",", ".")) : null,

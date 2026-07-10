@@ -156,7 +156,9 @@ app.get('/api/fin/vouchers/search', async (req, res) => {
           COALESCE(v.data_emissao_documento, dfv.data_emissao) AS data_emissao_documento,
           dfv.id_rm as dfv_id_rm, dfv.numero_processo as dfv_numero_processo,
           dfv.razao_social as dfv_razao_social, dfv.nome_beneficiario as dfv_nome_beneficiario,
-          dfv.valor_nf as dfv_valor_nf,
+          dfv.valor_nf as dfv_valor_nf, dfv.ref_fornecedor as dfv_ref_fornecedor, dfv.mawb_mbl as dfv_mawb_mbl,
+          COALESCE(NULLIF(v.ref_fornecedor, ''), dfv.ref_fornecedor) AS ref_fornecedor,
+          COALESCE(NULLIF(v.mawb_mbl, ''), dfv.mawb_mbl) AS mawb_mbl,
           CASE WHEN v.is_master = 1 THEN COALESCE(
             (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci AND lc.acao = 'MASTER_CRIADO' ORDER BY lc.data_hora ASC LIMIT 1),
             v.criado_por_user_id)
@@ -172,7 +174,8 @@ app.get('/api/fin/vouchers/search', async (req, res) => {
         LEFT JOIN (
           SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by, MAX(data_emissao) as data_emissao,
             MIN(numero_processo) as numero_processo, MAX(razao_social) as razao_social,
-            MAX(nome_beneficiario) as nome_beneficiario, MAX(valor_nf) as valor_nf
+            MAX(nome_beneficiario) as nome_beneficiario, MAX(valor_nf) as valor_nf,
+            MAX(ref_fornecedor) as ref_fornecedor, MAX(mawb_mbl) as mawb_mbl
           FROM dados_dachser.t_dados_financeiro_voucher
           WHERE SUBSTRING_INDEX(TRIM(nd), ' ', 1) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
           GROUP BY nd
@@ -284,6 +287,8 @@ app.get('/api/fin/vouchers/combined', async (req, res) => {
         dfv.id_rm as dfv_id_rm, dfv.numero_processo as dfv_numero_processo,
         dfv.razao_social as dfv_razao_social, dfv.nome_beneficiario as dfv_nome_beneficiario,
         dfv.valor_nf as dfv_valor_nf, dfv.ref_fornecedor as dfv_ref_fornecedor, dfv.mawb_mbl as dfv_mawb_mbl,
+        COALESCE(NULLIF(v.ref_fornecedor, ''), dfv.ref_fornecedor) AS ref_fornecedor,
+        COALESCE(NULLIF(v.mawb_mbl, ''), dfv.mawb_mbl) AS mawb_mbl,
         CASE WHEN v.is_master = 1 THEN COALESCE(
           (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci AND lc.acao = 'MASTER_CRIADO' ORDER BY lc.data_hora ASC LIMIT 1),
           v.criado_por_user_id)
@@ -360,6 +365,9 @@ app.get('/api/fin/vouchers/esteira', async (req, res) => {
     const vouchers = await finQuery(`
       SELECT v.*, dfv.id_rm as dfv_id_rm, dfv.numero_processo as dfv_numero_processo,
         dfv.razao_social as dfv_razao_social, dfv.nome_beneficiario as dfv_nome_beneficiario, dfv.valor_nf as dfv_valor_nf,
+        dfv.ref_fornecedor as dfv_ref_fornecedor, dfv.mawb_mbl as dfv_mawb_mbl,
+        COALESCE(NULLIF(v.ref_fornecedor, ''), dfv.ref_fornecedor) AS ref_fornecedor,
+        COALESCE(NULLIF(v.mawb_mbl, ''), dfv.mawb_mbl) AS mawb_mbl,
         CASE WHEN v.is_master = 1 THEN COALESCE(
           (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci AND lc.acao = 'MASTER_CRIADO' ORDER BY lc.data_hora ASC LIMIT 1),
           v.criado_por_user_id)
@@ -374,7 +382,8 @@ app.get('/api/fin/vouchers/esteira', async (req, res) => {
       FROM dados_dachser.t_vouchers v
       LEFT JOIN (
         SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by, MIN(numero_processo) as numero_processo,
-          MAX(razao_social) as razao_social, MAX(nome_beneficiario) as nome_beneficiario, MAX(valor_nf) as valor_nf
+          MAX(razao_social) as razao_social, MAX(nome_beneficiario) as nome_beneficiario, MAX(valor_nf) as valor_nf,
+          MAX(ref_fornecedor) as ref_fornecedor, MAX(mawb_mbl) as mawb_mbl
         FROM dados_dachser.t_dados_financeiro_voucher GROUP BY nd
       ) dfv ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_general_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
       WHERE ${whereClauses.join(' AND ')}
@@ -594,6 +603,9 @@ app.get('/api/fin/vouchers/:id', async (req, res) => {
         dfv.id_rm AS dfv_id_rm, dfv.numero_processo AS dfv_numero_processo,
         dfv.razao_social AS dfv_razao_social, dfv.nome_beneficiario AS dfv_nome_beneficiario,
         dfv.valor_nf AS dfv_valor_nf, dfv.moeda AS dfv_moeda, dfv.cnpj AS dfv_cnpj, dfv.nome_cobranca AS dfv_nome_cobranca,
+        dfv.ref_fornecedor as dfv_ref_fornecedor, dfv.mawb_mbl as dfv_mawb_mbl,
+        COALESCE(NULLIF(v.ref_fornecedor, ''), dfv.ref_fornecedor) AS ref_fornecedor,
+        COALESCE(NULLIF(v.mawb_mbl, ''), dfv.mawb_mbl) AS mawb_mbl,
         COALESCE((SELECT username FROM dados_dachser.t_users_dachser WHERE id = v.criado_por_user_id LIMIT 1), (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('VOUCHER_CRIADO', 'MASTER_CRIADO', 'VOUCHER_CRIADO_LOTE', 'VOUCHER_CRIADO_BATCH', 'IMPORTADO_RM', 'MASTER_CRIADO_LOTE', 'VOUCHER_MASTER_CRIADO', 'LOTE_FINALIZADO') ORDER BY data_hora ASC LIMIT 1)) AS criado_por_nome,
         COALESCE((SELECT username FROM dados_dachser.t_users_dachser WHERE id = v.criado_por_user_id LIMIT 1), (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('VOUCHER_CRIADO', 'MASTER_CRIADO', 'VOUCHER_CRIADO_LOTE', 'VOUCHER_CRIADO_BATCH', 'IMPORTADO_RM', 'MASTER_CRIADO_LOTE', 'VOUCHER_MASTER_CRIADO', 'LOTE_FINALIZADO') ORDER BY data_hora ASC LIMIT 1)) AS criado_por_user_name,
         (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('ENVIADO_OPERACAO','APROVADO_FISCAL','APROVADO_SUPERVISOR','REENVIO_APOS_AJUSTE','APROVADO_URGENTE') ORDER BY data_hora DESC LIMIT 1) AS enviado_por_nome,
@@ -602,7 +614,8 @@ app.get('/api/fin/vouchers/:id', async (req, res) => {
       LEFT JOIN (
         SELECT nd, MIN(id_rm) AS id_rm, MAX(data_emissao) AS data_emissao, MIN(numero_processo) AS numero_processo,
           MAX(razao_social) AS razao_social, MAX(nome_beneficiario) AS nome_beneficiario, MAX(valor_nf) AS valor_nf,
-          MAX(moeda) AS moeda, MAX(cnpj) AS cnpj, MAX(nome_cobranca) AS nome_cobranca
+          MAX(moeda) AS moeda, MAX(cnpj) AS cnpj, MAX(nome_cobranca) AS nome_cobranca,
+          MAX(ref_fornecedor) as ref_fornecedor, MAX(mawb_mbl) as mawb_mbl
         FROM dados_dachser.t_dados_financeiro_voucher GROUP BY nd
       ) dfv ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_general_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
       WHERE v.id = ?`, [id]);
@@ -1262,6 +1275,9 @@ app.get('/api/fin/vouchers/report', async (req, res) => {
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
     const vouchers = await finQuery(`
       SELECT v.*,
+        dfv.ref_fornecedor as dfv_ref_fornecedor, dfv.mawb_mbl as dfv_mawb_mbl,
+        COALESCE(NULLIF(v.ref_fornecedor, ''), dfv.ref_fornecedor) AS ref_fornecedor,
+        COALESCE(NULLIF(v.mawb_mbl, ''), dfv.mawb_mbl) AS mawb_mbl,
         COALESCE(u_criado.username, (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('VOUCHER_CRIADO', 'MASTER_CRIADO', 'VOUCHER_CRIADO_LOTE', 'VOUCHER_CRIADO_BATCH', 'IMPORTADO_RM', 'MASTER_CRIADO_LOTE', 'VOUCHER_MASTER_CRIADO', 'LOTE_FINALIZADO') ORDER BY data_hora ASC LIMIT 1)) AS criado_por_nome,
         COALESCE(u_criado.username, (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('VOUCHER_CRIADO', 'MASTER_CRIADO', 'VOUCHER_CRIADO_LOTE', 'VOUCHER_CRIADO_BATCH', 'IMPORTADO_RM', 'MASTER_CRIADO_LOTE', 'VOUCHER_MASTER_CRIADO', 'LOTE_FINALIZADO') ORDER BY data_hora ASC LIMIT 1)) AS criado_por_username,
         (SELECT user_name FROM dados_dachser.t_voucher_logs WHERE voucher_id = v.id AND acao IN ('ENVIADO_OPERACAO','APROVADO_FISCAL','APROVADO_SUPERVISOR','REENVIO_APOS_AJUSTE','APROVADO_URGENTE') ORDER BY data_hora DESC LIMIT 1) AS enviado_por_nome,
@@ -1278,7 +1294,7 @@ app.get('/api/fin/vouchers/report', async (req, res) => {
       LEFT JOIN dados_dachser.t_users_dachser u_financeiro ON v.responsavel_financeiro_user_id = u_financeiro.id
       LEFT JOIN dados_dachser.t_users_dachser u_supervisor ON v.responsavel_supervisor_user_id = u_supervisor.id
       LEFT JOIN (
-        SELECT nd, MAX(created_by) AS created_by
+        SELECT nd, MAX(created_by) AS created_by, MAX(ref_fornecedor) as ref_fornecedor, MAX(mawb_mbl) as mawb_mbl
         FROM dados_dachser.t_dados_financeiro_voucher
         GROUP BY nd
       ) dfv ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_general_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
