@@ -1181,25 +1181,26 @@ $router->post('chb/analyze-documents', function($params) {
         // Polling por requestId
         if (isset($body['requestId'])) {
             $rows = opsQuery(
-                "SELECT status, result_html, result_text, result_json, created_at FROM dados_dachser.t_chb_runs WHERE id = ? LIMIT 1",
+                "SELECT status, result_html, result_text, result_json, created_at, NOW() as db_now FROM dados_dachser.t_chb_runs WHERE id = ? LIMIT 1",
                 [$body['requestId']]
             );
             $row = $rows[0] ?? null;
             if (!$row) sendJson(['status' => 'error', 'error' => 'Requisição não encontrada'], 404);
 
             $status = $row['status'];
+            $dbNow = strtotime($row['db_now']);
             $createdAt = strtotime($row['created_at']);
-            $now = time();
+            $elapsedSeconds = $dbNow - $createdAt;
             $timeoutSeconds = 600; // 10 minutes
 
-            if (($status === 'pending' || $status === 'processing') && ($now - $createdAt) > $timeoutSeconds) {
+            if (($status === 'pending' || $status === 'processing') && $elapsedSeconds > $timeoutSeconds) {
                 $errorPayload = json_encode([
                     'success' => false,
                     'error' => 'A análise demorou mais que o esperado. O processamento foi interrompido.',
                     'errorCode' => 'CHB_AI_REQUEST_TIMEOUT',
                     'stage' => 'AI_REQUEST',
                     'requestId' => $body['requestId'],
-                    'elapsedMs' => ($now - $createdAt) * 1000,
+                    'elapsedMs' => $elapsedSeconds * 1000,
                 ]);
                 opsQuery(
                     "UPDATE dados_dachser.t_chb_runs SET status = 'error', result_text = ? WHERE id = ?",
