@@ -761,20 +761,20 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       <TableCell className="text-sm max-w-[100px] truncate">
                         <Tooltip>
                           <TooltipTrigger onClick={(e) => e.stopPropagation()}>
-                            <span>{voucher.enviadoPorUserName || voucher.criadoPorUserName || voucher.criadoPorDfv || "-"}</span>
+                            <span>{voucher.enviadoPorUserName || "-"}</span>
                           </TooltipTrigger>
                           <TooltipContent>
-                            Enviado por: {voucher.enviadoPorUserName || voucher.criadoPorUserName || voucher.criadoPorDfv || "Não informado"}
+                            Enviado por: {voucher.enviadoPorUserName || "Não informado"}
                           </TooltipContent>
                         </Tooltip>
                       </TableCell>
                       <TableCell className="text-sm max-w-[100px] truncate">
                         <Tooltip>
                           <TooltipTrigger onClick={(e) => e.stopPropagation()}>
-                            <span>{voucher.criadoPorDfv || "-"}</span>
+                            <span>{voucher.criadoPorUserName || voucher.criadoPorDfv || "-"}</span>
                           </TooltipTrigger>
                           <TooltipContent>
-                            Criado por (DFV): {voucher.criadoPorDfv || "Não informado"}
+                            Criado por: {voucher.criadoPorUserName || voucher.criadoPorDfv || "Não informado"}
                           </TooltipContent>
                         </Tooltip>
                       </TableCell>

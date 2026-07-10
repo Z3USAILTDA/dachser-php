@@ -1548,7 +1548,8 @@ const EsteiraIndex = () => {
         const wanted = filters.criadoPor.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
         if (wanted.length > 0) {
           const dfv = (voucher.criadoPorDfv || "").toLowerCase();
-          if (!wanted.includes(dfv)) return false;
+          const criado = (voucher.criadoPorUserName || "").toLowerCase();
+          if (!wanted.includes(dfv) && !wanted.includes(criado)) return false;
         }
       }
 
@@ -1619,7 +1620,9 @@ const EsteiraIndex = () => {
   const criadoPorOptions = useMemo(() => {
     const set = new Set<string>();
     for (const v of vouchers) {
+      const u = (v.criadoPorUserName || "").trim();
       const dfv = (v.criadoPorDfv || "").trim();
+      if (u) set.add(u);
       if (dfv) set.add(dfv);
     }
     return Array.from(set).sort((x, y) => x.localeCompare(y, "pt-BR"));
