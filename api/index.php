@@ -140,6 +140,37 @@ if ($route === 'chb/diagnosticos' && $method === 'GET') {
         }
     }
 
+    // Teste de conexão cURL local
+    $testLoopback = 'Not run';
+    try {
+        $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || ($_SERVER['SERVER_PORT'] == 443)
+            || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+        $protocol = $isHttps ? 'https://' : 'http://';
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $url = $protocol . $host . "/api/health";
+        
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        $res = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr = curl_error($ch);
+        curl_close($ch);
+        
+        $testLoopback = [
+            'url' => $url,
+            'is_https_detected' => $isHttps,
+            'http_code' => $httpCode,
+            'response' => $res,
+            'error' => $curlErr
+        ];
+    } catch (Throwable $e) {
+        $testLoopback = 'Exception: ' . $e->getMessage();
+    }
+
     sendJson([
         'success' => true,
         'php_os' => PHP_OS,
@@ -149,6 +180,7 @@ if ($route === 'chb/diagnosticos' && $method === 'GET') {
         'exec_enabled' => $execEnabled,
         'popen_enabled' => $popenEnabled,
         'test_php_cli' => $testExec,
+        'test_loopback' => $testLoopback,
         'server_software' => $_SERVER['SERVER_SOFTWARE'] ?? 'Unknown',
         'document_root' => $_SERVER['DOCUMENT_ROOT'] ?? 'Unknown',
         'current_file' => __FILE__,
