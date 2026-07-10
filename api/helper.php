@@ -65,10 +65,34 @@ function fetch($url, $options = []) {
     $headers = isset($options['headers']) ? $options['headers'] : [];
     $body = isset($options['body']) ? $options['body'] : null;
 
+    // Timeouts separados: conexão (10s) e resposta total (300s para IAs)
+    $connectTimeout = isset($options['connectTimeout']) ? (int)$options['connectTimeout'] : 10;
+    $responseTimeout = isset($options['timeout']) ? (int)$options['timeout'] : 300;
+
+    // Contexto de log (passado via options para rastreamento estruturado)
+    $logCtx = isset($options['logCtx']) ? $options['logCtx'] : [];
+
+    // Sanitiza URL para log (remove query strings com tokens)
+    $urlSanitized = preg_replace('/([?&])(key|token|apikey|api_key)=[^&]*/i', '$1***', $url);
+    $urlParts = parse_url($url);
+    $host = $urlParts['host'] ?? 'unknown';
+    $payloadSize = $body !== null ? strlen($body) : 0;
+
+    error_log("[CHB_CURL_REQUEST_STARTED] " . json_encode(array_merge([
+        'url' => $urlSanitized,
+        'host' => $host,
+        'method' => $method,
+        'connectTimeoutMs' => $connectTimeout * 1000,
+        'timeoutMs' => $responseTimeout * 1000,
+        'payloadSize' => $payloadSize,
+        'timestamp' => date('Y-m-d H:i:s'),
+    ], $logCtx)));
+
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 120); // timeout padrão de 120s para IAs
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $connectTimeout);
+    curl_setopt($ch, CURLOPT_TIMEOUT, $responseTimeout);
 
     $formattedHeaders = [];
     foreach ($headers as $k => $v) {
@@ -85,12 +109,38 @@ function fetch($url, $options = []) {
     }
 
     $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
+    $httpCode        = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErrno       = curl_errno($ch);
+    $curlError       = curl_error($ch);
+    $totalTime       = curl_getinfo($ch, CURLINFO_TOTAL_TIME);
+    $connectTime     = curl_getinfo($ch, CURLINFO_CONNECT_TIME);
+    $startTransfer   = curl_getinfo($ch, CURLINFO_STARTTRANSFER_TIME);
+    $primaryIp       = curl_getinfo($ch, CURLINFO_PRIMARY_IP);
+    $bytesReceived   = curl_getinfo($ch, CURLINFO_SIZE_DOWNLOAD);
     curl_close($ch);
 
-    if ($error) {
-        throw new Exception("cURL Error: " . $error);
+    error_log("[CHB_CURL_REQUEST_FINISHED] " . json_encode(array_merge([
+        'url' => $urlSanitized,
+        'host' => $host,
+        'httpCode' => $httpCode,
+        'curlErrno' => $curlErrno,
+        'curlError' => $curlError ?: null,
+        'totalTime' => round($totalTime, 3),
+        'connectTime' => round($connectTime, 3),
+        'startTransferTime' => round($startTransfer, 3),
+        'primaryIp' => $primaryIp ?: null,
+        'bytesReceived' => $bytesReceived,
+        'timestamp' => date('Y-m-d H:i:s'),
+    ], $logCtx)));
+
+    if ($curlError) {
+        // Classifica o tipo de falha para stage mais específico
+        if ($curlErrno === CURLE_OPERATION_TIMEDOUT && $connectTime < 0.01) {
+            throw new Exception("[CHB_AI_CONNECTION_TIMEOUT] cURL: " . $curlError);
+        } elseif ($curlErrno === CURLE_OPERATION_TIMEDOUT) {
+            throw new Exception("[CHB_AI_RESPONSE_TIMEOUT] cURL: " . $curlError);
+        }
+        throw new Exception("[CHB_CURL_ERROR_" . $curlErrno . "] cURL: " . $curlError);
     }
 
     return [
@@ -234,71 +284,112 @@ function parseXlsxSimple($xlsxBase64) {
 
 /**
  * Executa um script PHP em background.
+ * Retorna array com 'success', 'method' e 'error' (se falhou).
  */
 function runPHPBackground($scriptPath, $args = []) {
     if (strncasecmp(PHP_OS, 'WIN', 3) === 0) {
-        // Windows background
+        // Windows: dispara via start /B
         $phpBin = 'C:\\xampp\\php\\php.exe';
-        if (!file_exists($phpBin)) {
-            $phpBin = 'php';
-        }
+        if (!file_exists($phpBin)) $phpBin = 'php';
         $escapedArgs = array_map('escapeshellarg', $args);
         $argsStr = implode(' ', $escapedArgs);
         $cmd = "start /B \"\" " . escapeshellarg($phpBin) . " " . escapeshellarg($scriptPath) . " " . $argsStr . " > NUL 2>&1";
         pclose(popen($cmd, "r"));
-        return;
+        error_log("[CHB_WORKER_DISPATCHED] method=windows cmd=" . $cmd);
+        return ['success' => true, 'method' => 'windows'];
     }
 
-    // Linux/Unix background: tenta primeiro o loopback HTTP por ser mais compatível com shared hostings
-    $loopbackSuccess = false;
+    // ── ESTRATÉGIA 1: PHP CLI via exec (preferida em shared hosting) ──────────
+    $disabled = ini_get('disable_functions');
+    $execEnabled = function_exists('exec') && !in_array('exec', array_map('trim', explode(',', $disabled)));
+
+    if ($execEnabled) {
+        // Determina binário PHP CLI adequado
+        $phpBin = 'php';
+        $candidates = [];
+
+        if (defined('PHP_BINARY') && PHP_BINARY) {
+            $binaryName = basename(PHP_BINARY);
+            // Exclui CGI/FPM — apenas CLI real
+            if (in_array($binaryName, ['php', 'php-cli', 'php.exe'])) {
+                $candidates[] = PHP_BINARY;
+            }
+        }
+
+        // Candidatos genéricos de shared hosting
+        $candidates = array_merge($candidates, [
+            '/usr/bin/php',
+            '/usr/local/bin/php',
+            '/opt/cpanel/ea-php83/root/usr/bin/php',
+            '/opt/cpanel/ea-php82/root/usr/bin/php',
+            '/opt/cpanel/ea-php81/root/usr/bin/php',
+            'php'
+        ]);
+
+        foreach ($candidates as $candidate) {
+            if ($candidate === 'php' || (file_exists($candidate) && is_executable($candidate))) {
+                $phpBin = $candidate;
+                break;
+            }
+        }
+
+        $escapedArgs = array_map('escapeshellarg', $args);
+        $argsStr = implode(' ', $escapedArgs);
+        $logFile = sys_get_temp_dir() . '/dachser_worker_' . md5($argsStr) . '.log';
+        $cmd = escapeshellarg($phpBin) . ' ' . escapeshellarg($scriptPath) . ' ' . $argsStr . ' > ' . escapeshellarg($logFile) . ' 2>&1 &';
+
+        error_log("[CHB_WORKER_DISPATCHED] method=cli phpBin=$phpBin scriptPath=$scriptPath cmd=$cmd");
+        exec($cmd, $output, $exitCode);
+
+        // Pequena espera para verificar se o processo iniciou
+        usleep(200000); // 200ms
+        $started = file_exists($logFile);
+
+        if ($exitCode === 0 || $started) {
+            error_log("[CHB_WORKER_STARTED] method=cli phpBin=$phpBin pid_check=started=$started");
+            return ['success' => true, 'method' => 'cli', 'phpBin' => $phpBin];
+        }
+
+        error_log("[CHB_WORKER_DISPATCH_FAILED] method=cli phpBin=$phpBin exitCode=$exitCode");
+    }
+
+    // ── ESTRATÉGIA 2: Loopback HTTP (apenas como disparo, NÃO aguarda resposta) ─
+    // Timeout mínimo de 2s: envia o job e abandona imediatamente.
+    // NUNCA use cURL loopback aguardando a resposta completa de um job demorado.
     try {
         $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
             || ($_SERVER['SERVER_PORT'] == 443)
             || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
         $protocol = $isHttps ? 'https://' : 'http://';
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        $url = $protocol . $host . "/api/background-worker";
-        
+        $url = $protocol . $host . '/api/background-worker';
+
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['jobFile' => $args[0]]));
         curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 2); 
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 3); // Abandona após 3s — só dispara
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
         $res = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $loopErr = curl_error($ch);
         curl_close($ch);
-        
+
+        error_log("[CHB_WORKER_DISPATCHED] method=loopback url=$url httpCode=$httpCode err=$loopErr");
+
         if ($httpCode >= 200 && $httpCode < 300) {
-            $loopbackSuccess = true;
+            return ['success' => true, 'method' => 'loopback', 'httpCode' => $httpCode];
         }
     } catch (Throwable $e) {
-        error_log("[runPHPBackground] Loopback HTTP failed: " . $e->getMessage());
+        error_log("[CHB_WORKER_DISPATCH_FAILED] method=loopback error=" . $e->getMessage());
     }
 
-    // Se o loopback HTTP falhar, recorre ao CLI clássico via exec
-    if (!$loopbackSuccess) {
-        $disabled = ini_get('disable_functions');
-        $execEnabled = function_exists('exec') && !in_array('exec', array_map('trim', explode(',', $disabled)));
-        if ($execEnabled) {
-            $phpBin = 'php';
-            if (defined('PHP_BINARY') && PHP_BINARY) {
-                $binaryName = basename(PHP_BINARY);
-                // lsphp, php-fpm, php-cgi não são CLI executáveis adequados para rodar background workers
-                if ($binaryName === 'php' || $binaryName === 'php-cli' || $binaryName === 'php.exe') {
-                    $phpBin = PHP_BINARY;
-                }
-            }
-            $escapedArgs = array_map('escapeshellarg', $args);
-            $argsStr = implode(' ', $escapedArgs);
-            $cmd = escapeshellarg($phpBin) . " " . escapeshellarg($scriptPath) . " " . $argsStr . " > /dev/null 2>&1 &";
-            exec($cmd);
-        } else {
-            error_log("[runPHPBackground] CLI execution is blocked and HTTP Loopback failed.");
-        }
-    }
+    // ── FALHA TOTAL: nenhum método funcionou ─────────────────────────────────
+    error_log("[CHB_WORKER_DISPATCH_FAILED] All dispatch methods failed. scriptPath=$scriptPath");
+    return ['success' => false, 'method' => 'none', 'error' => 'exec bloqueado e loopback falhou'];
 }
 
 

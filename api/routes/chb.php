@@ -339,7 +339,7 @@ HTML simples contendo:
 <<END_HTML>>";
 }
 
-function chbCallAnthropic($prompt, $files) {
+function chbCallAnthropic($prompt, $files, $logCtx = []) {
     $key = isset($_ENV['CHB_ANTHROPIC_API_KEY']) ? $_ENV['CHB_ANTHROPIC_API_KEY'] : (isset($_ENV['ANTHROPIC_API_KEY']) ? $_ENV['ANTHROPIC_API_KEY'] : null);
     if (!$key) throw new Exception('ANTHROPIC_API_KEY não configurada');
 
@@ -365,22 +365,27 @@ function chbCallAnthropic($prompt, $files) {
     }
     $content[] = ['type' => 'text', 'text' => $prompt];
 
+    $body = json_encode([
+        'model' => isset($_ENV['CHB_ANTHROPIC_MODEL']) ? $_ENV['CHB_ANTHROPIC_MODEL'] : 'claude-sonnet-4-6',
+        'max_tokens' => 64000,
+        'temperature' => 0,
+        'messages' => [['role' => 'user', 'content' => $content]],
+    ]);
+
     $res = fetch('https://api.anthropic.com/v1/messages', [
         'method' => 'POST',
         'headers' => ['Content-Type' => 'application/json', 'x-api-key' => $key, 'anthropic-version' => '2023-06-01'],
-        'body' => json_encode([
-            'model' => isset($_ENV['CHB_ANTHROPIC_MODEL']) ? $_ENV['CHB_ANTHROPIC_MODEL'] : 'claude-sonnet-4-6',
-            'max_tokens' => 64000,
-            'temperature' => 0,
-            'messages' => [['role' => 'user', 'content' => $content]],
-        ])
+        'body' => $body,
+        'connectTimeout' => 10,
+        'timeout' => 300,
+        'logCtx' => array_merge($logCtx, ['stage' => 'CHB_AI_REQUEST', 'provider' => 'Anthropic', 'fileCount' => count($files)]),
     ]);
 
     if (!$res['ok']) {
         $errorDetail = substr(isset($res['body']) ? $res['body'] : 'No body', 0, 500);
         $curlError = isset($res['error']) ? $res['error'] : 'N/A';
         error_log("[Anthropic CHB] Error HTTP {$res['status']}: {$errorDetail} | cURL: {$curlError}");
-        throw new Exception("API ANTHROPIC - ERRO AO EXTRAIR O ARQUIVO. Status {$res['status']}: {$errorDetail}");
+        throw new Exception("[CHB_AI_HTTP_ERROR] Anthropic Status {$res['status']}: {$errorDetail}");
     }
     $data = $res['json']();
     foreach (($data['content'] ?? []) as $c) {
@@ -389,7 +394,7 @@ function chbCallAnthropic($prompt, $files) {
     return '';
 }
 
-function chbCallGeminiVision($prompt, $files) {
+function chbCallGeminiVision($prompt, $files, $logCtx = []) {
     $key = isset($_ENV['GEMINI_API_KEY']) ? $_ENV['GEMINI_API_KEY'] : null;
     if (!$key) throw new Exception('GEMINI_API_KEY não configurada');
 
@@ -412,22 +417,27 @@ function chbCallGeminiVision($prompt, $files) {
     }
     $content[] = ['type' => 'text', 'text' => $prompt];
 
+    $body = json_encode([
+        'model' => isset($_ENV['CHB_GEMINI_MODEL']) ? $_ENV['CHB_GEMINI_MODEL'] : 'gemini-2.5-pro',
+        'messages' => [['role' => 'user', 'content' => $content]],
+        'max_tokens' => 65536,
+        'temperature' => 0.1,
+    ]);
+
     $res = fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', [
         'method' => 'POST',
         'headers' => ['Authorization' => "Bearer $key", 'Content-Type' => 'application/json'],
-        'body' => json_encode([
-            'model' => isset($_ENV['CHB_GEMINI_MODEL']) ? $_ENV['CHB_GEMINI_MODEL'] : 'gemini-2.5-pro',
-            'messages' => [['role' => 'user', 'content' => $content]],
-            'max_tokens' => 65536,
-            'temperature' => 0.1,
-        ])
+        'body' => $body,
+        'connectTimeout' => 10,
+        'timeout' => 300,
+        'logCtx' => array_merge($logCtx, ['stage' => 'CHB_AI_REQUEST', 'provider' => 'Gemini', 'fileCount' => count($files)]),
     ]);
 
     if (!$res['ok']) {
         $errorDetail = substr(isset($res['body']) ? $res['body'] : 'No body', 0, 500);
         $curlError = isset($res['error']) ? $res['error'] : 'N/A';
         error_log("[Gemini CHB] Error HTTP {$res['status']}: {$errorDetail} | cURL: {$curlError}");
-        throw new Exception("API GEMINI - ERRO AO EXTRAIR O ARQUIVO. Status {$res['status']}: {$errorDetail}");
+        throw new Exception("[CHB_AI_HTTP_ERROR] Gemini Status {$res['status']}: {$errorDetail}");
     }
     $data = $res['json']();
     return $data['choices'][0]['message']['content'] ?? '';
@@ -564,7 +574,13 @@ function chbProcessAnalysis($runId, $stepId, $files, $clientConfig, $itemId) {
         $prompt = chbBuildPrompt($stepId, $files, $clientConfig, $itemId);
         $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_PROMPT_BUILD_COMPLETED', $startTime, $lastStepTime);
         
-        $modelName = $_ENV['CHB_ANTHROPIC_MODEL'] ?? 'claude-3-5-sonnet-20241022';
+        $modelName = $_ENV['CHB_ANTHROPIC_MODEL'] ?? 'claude-sonnet-4-6';
+        $aiLogCtx = [
+            'analysisId' => $runId,
+            'conferenceId' => $itemId,
+            'requestId' => $requestId,
+            'fileCount' => $filesCount,
+        ];
         $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_AI_REQUEST_STARTED', $startTime, $lastStepTime, [
             'provedor' => 'Anthropic',
             'modelo' => $modelName
@@ -573,8 +589,9 @@ function chbProcessAnalysis($runId, $stepId, $files, $clientConfig, $itemId) {
         $responseText = '';
         $usedFallback = false;
         $aiStartTime = microtime(true);
+        $currentStage = 'AI_REQUEST_ANTHROPIC';
         try {
-            $responseText = chbCallAnthropic($prompt, $files);
+            $responseText = chbCallAnthropic($prompt, $files, $aiLogCtx);
             $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_AI_RESPONSE_RECEIVED', $startTime, $lastStepTime, [
                 'provedor' => 'Anthropic',
                 'modelo' => $modelName,
@@ -585,14 +602,15 @@ function chbProcessAnalysis($runId, $stepId, $files, $clientConfig, $itemId) {
             $usedFallback = true;
             $geminiModel = $_ENV['CHB_GEMINI_MODEL'] ?? 'gemini-2.5-pro';
             
-            $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_AI_REQUEST_STARTED', $startTime, $lastStepTime, [
+            $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_AI_FALLBACK_GEMINI', $startTime, $lastStepTime, [
                 'provedor' => 'Gemini (Fallback)',
                 'modelo' => $geminiModel,
                 'erro_anterior' => $anthropicErr->getMessage()
             ]);
             
             $aiStartTime = microtime(true);
-            $responseText = chbCallGeminiVision($prompt, $files);
+            $currentStage = 'AI_REQUEST_GEMINI';
+            $responseText = chbCallGeminiVision($prompt, $files, $aiLogCtx);
             
             $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_AI_RESPONSE_RECEIVED', $startTime, $lastStepTime, [
                 'provedor' => 'Gemini (Fallback)',
@@ -601,6 +619,7 @@ function chbProcessAnalysis($runId, $stepId, $files, $clientConfig, $itemId) {
             ]);
         }
 
+        $currentStage = 'RESULT_PARSE';
         $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_AI_RESPONSE_PARSE_STARTED', $startTime, $lastStepTime);
         $parsed = chbExtractHtmlAndTags($responseText, (int)$stepId);
         $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_AI_RESPONSE_PARSED', $startTime, $lastStepTime);
@@ -611,6 +630,7 @@ function chbProcessAnalysis($runId, $stepId, $files, $clientConfig, $itemId) {
             'usedFallback'  => $usedFallback,
         ]);
 
+        $currentStage = 'RESULT_SAVE';
         $lastStepTime = logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_RESULT_SAVE_STARTED', $startTime, $lastStepTime);
         opsQuery(
             "UPDATE dados_dachser.t_chb_runs SET status = 'completed', result_html = ?, result_json = ? WHERE id = ?",
@@ -622,19 +642,38 @@ function chbProcessAnalysis($runId, $stepId, $files, $clientConfig, $itemId) {
             'duracao_total' => round(microtime(true) - $startTime, 2)
         ]);
     } catch (Throwable $err) {
+        // Determina errorCode a partir do prefixo da mensagem (set pela função fetch())
+        $errMsg = $err->getMessage();
+        $errorCode = 'CHB_PROCESSING_ERROR';
+        if (strpos($errMsg, '[CHB_AI_CONNECTION_TIMEOUT]') !== false) {
+            $errorCode = 'CHB_AI_CONNECTION_TIMEOUT';
+        } elseif (strpos($errMsg, '[CHB_AI_RESPONSE_TIMEOUT]') !== false) {
+            $errorCode = 'CHB_AI_RESPONSE_TIMEOUT';
+        } elseif (strpos($errMsg, '[CHB_AI_HTTP_ERROR]') !== false) {
+            $errorCode = 'CHB_AI_HTTP_ERROR';
+        } elseif (strpos($errMsg, '[CHB_CURL_ERROR') !== false) {
+            $errorCode = 'CHB_CURL_ERROR';
+        }
+
+        // Log interno com caminho e linha (não exposto ao frontend)
+        error_log("[CHB_ANALYSIS_FAILED] requestId=$requestId stage=$currentStage errorCode=$errorCode msg=" . $errMsg . " file=" . $err->getFile() . " line=" . $err->getLine());
+
         logChbStepAdvanced($runId, $itemId, $requestId, 'CHB_ANALYSIS_FAILED', $startTime, $lastStepTime, [
-            'error_code' => 'CHB_PROCESSING_ERROR',
-            'mensagem_tecnica' => $err->getMessage() . " in " . $err->getFile() . " on line " . $err->getLine(),
+            'error_code' => $errorCode,
+            'stage' => $currentStage,
             'duracao' => round(microtime(true) - $startTime, 2)
         ]);
+
         try {
+            // Payload para o frontend: sem caminho interno, sem stack trace
             $errorPayload = json_encode([
                 'success' => false,
-                'error' => 'Erro no processamento da conferência: ' . $err->getMessage(),
-                'technicalMessage' => $err->getMessage() . " in " . $err->getFile() . " on line " . $err->getLine(),
+                'error' => 'Não foi possível concluir o processamento da análise CHB.',
+                'errorCode' => $errorCode,
+                'stage' => $currentStage,
                 'requestId' => $requestId,
-                'stage' => 'PROCESSING',
-                'errorCode' => 'CHB_PROCESSING_ERROR'
+                'analysisId' => $runId,
+                'elapsedMs' => round((microtime(true) - $startTime) * 1000),
             ]);
             opsQuery("UPDATE dados_dachser.t_chb_runs SET status = 'error', result_text = ? WHERE id = ?", [$errorPayload, $runId]);
         } catch (Throwable $updateErr) {}
@@ -1241,7 +1280,6 @@ $router->post('chb/analyze-documents', function($params) {
         );
         $requestId = (string)($insert['insertId'] ?? '');
 
-        // Run analysis in a background worker (usando arquivo de job temporário)
         $jobData = [
             'task' => 'chb_analysis',
             'runId' => $requestId,
@@ -1252,7 +1290,30 @@ $router->post('chb/analyze-documents', function($params) {
         ];
         $jobFile = sys_get_temp_dir() . '/dachser_chb_job_' . $requestId . '.json';
         file_put_contents($jobFile, json_encode($jobData));
-        runPHPBackground(dirname(__DIR__) . '/background_worker.php', [$jobFile]);
+        $dispatchResult = runPHPBackground(dirname(__DIR__) . '/background_worker.php', [$jobFile]);
+
+        if (!($dispatchResult['success'] ?? false)) {
+            // Worker não iniciou — marca a análise como failed imediatamente
+            $dispatchErr = json_encode([
+                'success' => false,
+                'errorCode' => 'CHB_WORKER_DISPATCH_FAILED',
+                'stage' => 'WORKER_DISPATCH',
+                'message' => 'Não foi possível iniciar o processamento em segundo plano.',
+                'analysisId' => $requestId,
+                'requestId' => $requestId,
+            ]);
+            opsQuery("UPDATE dados_dachser.t_chb_runs SET status = 'error', result_text = ? WHERE id = ?", [$dispatchErr, $requestId]);
+            @unlink($jobFile);
+            error_log("[CHB_WORKER_DISPATCH_FAILED] requestId=$requestId method=" . ($dispatchResult['method'] ?? 'unknown') . " error=" . ($dispatchResult['error'] ?? 'unknown'));
+            sendJson([
+                'success' => false,
+                'errorCode' => 'CHB_WORKER_DISPATCH_FAILED',
+                'stage' => 'WORKER_DISPATCH',
+                'message' => 'Não foi possível iniciar o processamento em segundo plano.',
+                'analysisId' => $requestId,
+            ], 500);
+            return;
+        }
 
         sendJson(['requestId' => $requestId, 'status' => 'pending', 'message' => 'Análise iniciada. Use o requestId para consultar o status.']);
     } catch (Exception $e) {
