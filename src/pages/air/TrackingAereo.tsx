@@ -534,6 +534,15 @@ interface SessionUser {
   username?: string;
 }
 
+interface AirTrackingCache {
+  awbsData: AWBData[];
+  loadedCount: number;
+  nextCursor: { cursor_data: string; cursor_id: number } | null;
+  isFullyLoaded: boolean;
+}
+
+let trackingCache: AirTrackingCache | null = null;
+
 const TrackingAereo = () => {
   useAirPageView("/air/tracking-aereo");
   const navigate = useNavigate();
@@ -542,7 +551,9 @@ const TrackingAereo = () => {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [regrasOpen, setRegrasOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [awbsData, setAwbsData] = useState<AWBData[]>([]);
+  const [awbsData, setAwbsData] = useState<AWBData[]>(() => {
+    return trackingCache ? trackingCache.awbsData : [];
+  });
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterAirline, setFilterAirline] = useState("all");
@@ -577,7 +588,9 @@ const TrackingAereo = () => {
   const isFetchingRef = useRef(false);
   const awbsDataRef  = useRef<AWBData[]>([]);
   const [isProgressiveLoading, setIsProgressiveLoading] = useState(false);
-  const [loadedCount, setLoadedCount] = useState(0);
+  const [loadedCount, setLoadedCount] = useState(() => {
+    return trackingCache ? trackingCache.loadedCount : 0;
+  });
   const progressiveLoadIdRef = useRef(0);
 
   // Usuário logado (localStorage) — sem Supabase Auth.
@@ -684,11 +697,17 @@ const TrackingAereo = () => {
   const progressiveLoadLoop = useCallback(async (force: boolean, initialCursor: { cursor_data: string; cursor_id: number }) => {
     const loadId = ++progressiveLoadIdRef.current;
     let cursor: typeof initialCursor | null = initialCursor;
+    let pageCount = 1;
     
     while (cursor) {
       if (loadId !== progressiveLoadIdRef.current) {
         console.log(`[tracking-aereo] progressiveLoad cancelled for ID ${loadId}`);
         return;
+      }
+
+      // Adiciona throttling (800ms de delay) a partir da página 3 (após carregar os primeiros 100 registros)
+      if (pageCount >= 3) {
+        await new Promise(resolve => setTimeout(resolve, 800));
       }
       
       try {
@@ -702,6 +721,7 @@ const TrackingAereo = () => {
         if (loadId !== progressiveLoadIdRef.current) return;
         
         if (res?.success) {
+          pageCount++;
           const rawItems = Array.isArray(res.items) ? res.items : (Array.isArray(res.data) ? res.data : []);
           const mapped = mapItems(rawItems);
           if (mapped.length > 0) {
@@ -711,7 +731,17 @@ const TrackingAereo = () => {
               mapped.forEach(item => {
                 prevMap.set(`${item.awb}|${item.hawb}`, item);
               });
-              return Array.from(prevMap.values());
+              const nextVal = Array.from(prevMap.values());
+              
+              // Atualiza o cache global
+              trackingCache = {
+                awbsData: nextVal,
+                loadedCount: nextVal.length,
+                nextCursor: res.next_cursor || null,
+                isFullyLoaded: !res.next_cursor
+              };
+              
+              return nextVal;
             });
             setLoadedCount(prev => prev + mapped.length);
           }
@@ -751,6 +781,12 @@ const TrackingAereo = () => {
       setIsProgressiveLoading(true);
       setIsLoadingData(true);
       setLoadedCount(0);
+
+      // Se for um refresh forçado (clique manual do usuário), limpamos o cache para recarregar tudo do zero
+      if (force) {
+        trackingCache = null;
+        setAwbsData([]);
+      }
     }
     
     // Safety valve: always release loading after 90 s no matter what
@@ -768,13 +804,27 @@ const TrackingAereo = () => {
         const mapped = mapItems(rawItems);
         
         if (isPoll) {
-          // Polling: merge new items into state
+          // Polling/Revalidação: faz merge das atualizações no state e no cache
           setAwbsData(prev => {
             const prevMap = new Map(prev.map(i => [`${i.awb}|${i.hawb}`, i]));
             mapped.forEach(item => {
               prevMap.set(`${item.awb}|${item.hawb}`, item);
             });
-            return Array.from(prevMap.values());
+            const nextVal = Array.from(prevMap.values());
+            
+            if (trackingCache) {
+              trackingCache.awbsData = nextVal;
+              trackingCache.loadedCount = nextVal.length;
+            } else {
+              trackingCache = {
+                awbsData: nextVal,
+                loadedCount: nextVal.length,
+                nextCursor: body.next_cursor || null,
+                isFullyLoaded: !body.next_cursor
+              };
+            }
+            
+            return nextVal;
           });
         } else {
           // Initial load: overwrite
@@ -783,6 +833,14 @@ const TrackingAereo = () => {
           setLoadedCount(mapped.length);
 
           const cursor = body.next_cursor;
+          
+          trackingCache = {
+            awbsData: mapped,
+            loadedCount: mapped.length,
+            nextCursor: cursor || null,
+            isFullyLoaded: !cursor
+          };
+
           if (cursor) {
             progressiveLoadLoop(force, cursor);
           } else {
@@ -826,49 +884,47 @@ const TrackingAereo = () => {
   const isAdminUser = true;
 
   const isVisible = usePageVisibility();
+  const isFirstMountRef = useRef(true);
+
   useEffect(() => {
-    // ✅ Verificação de rota: só faz fetch se está realmente em /air/tracking-aereo
     if (location.pathname !== "/air/tracking-aereo") {
-      console.log(`[tracking-aereo] Navegou para ${location.pathname}, parando fetch automático`);
       return;
     }
-    
     if (!isVisible) return;
     if (!isAdminUser) { setIsLoadingData(false); return; }
     
-    // Initial fetch (not a poll)
-    fetchData(false, false);
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      
+      if (trackingCache) {
+        // Inicializa a partir do cache instantaneamente
+        awbsDataRef.current = trackingCache.awbsData;
+        setIsLoadingData(false);
+        
+        // Dispara revalidação em background (tipo polling)
+        fetchData(false, true);
+        
+        // Se a carga progressiva anterior não terminou e temos cursor, retoma
+        if (!trackingCache.isFullyLoaded && trackingCache.nextCursor) {
+          isProgressiveLoadingRef.current = true;
+          setIsProgressiveLoading(true);
+          progressiveLoadLoop(false, trackingCache.nextCursor);
+        }
+      } else {
+        // Carga inicial limpa
+        fetchData(false, false);
+      }
+    }
     
-    // Setup interval for polling (only refreshes first page)
+    // Configura o polling
     const interval = setInterval(() => {
       fetchData(false, true);
     }, 30000);
     
     return () => { clearInterval(interval); };
-  }, [isVisible, fetchData, isAdminUser, location.pathname]);
+  }, [isVisible, fetchData, isAdminUser, location.pathname, progressiveLoadLoop]);
 
-  // ─── Master swap badges + discrepancias pendentes ───
-  useEffect(() => {
-    if (awbsData.length === 0) return;
-    const awbs = Array.from(new Set(awbsData.map(a => (a.awb || "").trim()).filter(Boolean)));
-    if (awbs.length === 0) return;
-    (async () => {
-      try {
-        const data = await getMasterSwaps(awbs);
-        if (data?.success && Array.isArray(data.data)) {
-          const map: Record<string, any> = {};
-          for (const row of data.data) {
-            const k = (row.awb_novo || "").trim().toUpperCase();
-            if (!k) continue;
-            if (!map[k] || new Date(row.data_atualizacao) > new Date(map[k].data_atualizacao)) {
-              map[k] = row;
-            }
-          }
-          setMasterSwaps(map);
-        }
-      } catch (e) { console.warn("[master_swap_list]", e); }
-    })();
-  }, [awbsData]);
+
 
   useEffect(() => {
     const load = async () => {
@@ -905,13 +961,7 @@ const TrackingAereo = () => {
   }, [discrepancyModal, user, toast, fetchData]);
 
 
-  // ─── Alert for tracking failures ───
-  useEffect(() => {
-    if (!isAdminUser) return;
-    const failedAwbs = awbsData.filter(a => a.tracking_failed);
-    if (failedAwbs.length === 0) return;
-    void reportTrackingFailures(failedAwbs.map(a => a.awb));
-  }, [awbsData, isAdminUser]);
+
 
   // ─── Unique analysts ───
   const uniqueAnalysts = useMemo(() => {
@@ -1140,6 +1190,47 @@ const TrackingAereo = () => {
       return applyTopFilters(awb);
     }).length;
   }, [awbsData, searchTerm, applyTopFilters, matchesFullNumber, hasMasterDiscrepancy]);
+
+  // Serialização dos AWBs visíveis para evitar loops de render
+  const serializedVisibleAwbs = useMemo(() => {
+    return Array.from(new Set(currentAwbs.map(a => (a.awb || "").trim()).filter(Boolean))).sort().join(',');
+  }, [currentAwbs]);
+
+  // Busca badges de "master swaps" apenas para os AWBs visíveis
+  useEffect(() => {
+    if (!serializedVisibleAwbs) return;
+    const awbs = serializedVisibleAwbs.split(',');
+    
+    (async () => {
+      try {
+        const data = await getMasterSwaps(awbs);
+        if (data?.success && Array.isArray(data.data)) {
+          const map: Record<string, any> = {};
+          for (const row of data.data) {
+            const k = (row.awb_novo || "").trim().toUpperCase();
+            if (!k) continue;
+            if (!map[k] || new Date(row.data_atualizacao) > new Date(map[k].data_atualizacao)) {
+              map[k] = row;
+            }
+          }
+          setMasterSwaps(prev => ({ ...prev, ...map }));
+        }
+      } catch (e) {
+        console.warn("[master_swap_list]", e);
+      }
+    })();
+  }, [serializedVisibleAwbs]);
+
+  // Relatório de falha de tracking apenas para os AWBs visíveis que falharam
+  useEffect(() => {
+    if (!isAdminUser || !serializedVisibleAwbs) return;
+    const awbsOnPage = serializedVisibleAwbs.split(',');
+    
+    const visibleFailedAwbs = currentAwbs.filter(a => a.tracking_failed && awbsOnPage.includes(a.awb));
+    if (visibleFailedAwbs.length === 0) return;
+    
+    void reportTrackingFailures(visibleFailedAwbs.map(a => a.awb));
+  }, [serializedVisibleAwbs, isAdminUser, currentAwbs]);
 
   const abbreviateName = (name: string): string => {
     if (!name || name === "-") return "-";
@@ -1690,7 +1781,7 @@ const TrackingAereo = () => {
                 <div className="text-[0.78rem] text-[#aaaaaa]">
                   Página {currentPage} de {totalPages} | Total: {filteredAwbs.length} registros
                 </div>
-                <TablePagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} showFirstLast={false} />
+                <TablePagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} showFirstLast={true} />
               </div>
             </>
           ) : (
