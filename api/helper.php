@@ -317,7 +317,7 @@ function fetch($url, $options = []) {
  * Cada requisição respeita seu próprio connectTimeout/timeout individualmente,
  * mesmo rodando em paralelo com as demais.
  */
-function fetchParallel($requests) {
+function fetchParallel($requests, $onHeartbeat = null) {
     if (empty($requests)) return [];
 
     $mh = curl_multi_init();
@@ -356,6 +356,14 @@ function fetchParallel($requests) {
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $connectTimeout);
         curl_setopt($ch, CURLOPT_TIMEOUT, $responseTimeout);
+        // Este processo roda "destacado" após fastcgi_finish_request() (worker em
+        // background via loopback). Forçamos conexão nova em vez de reaproveitar
+        // um socket keep-alive potencialmente aberto ANTES do destacamento —
+        // suspeita real de travamento silencioso (processo simplesmente some,
+        // sem exceção, sem timeout individual disparando).
+        curl_setopt($ch, CURLOPT_FRESH_CONNECT, true);
+        curl_setopt($ch, CURLOPT_FORBID_REUSE, true);
+        curl_setopt($ch, CURLOPT_TCP_KEEPALIVE, 0);
 
         $formattedHeaders = [];
         foreach ($headers as $k => $v) {
@@ -382,11 +390,23 @@ function fetchParallel($requests) {
         $execStatus = curl_multi_exec($mh, $running);
     } while ($execStatus === CURLM_CALL_MULTI_PERFORM);
 
+    $loopStart = microtime(true);
+    $lastHeartbeat = 0.0;
     while ($running > 0 && $execStatus === CURLM_OK) {
         if (microtime(true) >= $watchdogDeadline) {
             $watchdogTripped = true;
             error_log("[AI_CURL_WATCHDOG_TRIPPED] fetchParallel exceeded max wall-clock deadline, forcing exit. backendVersion=" . BACKEND_API_VERSION);
             break;
+        }
+        // Prova concreta para o próximo travamento: se o processo for morto
+        // silenciosamente pelo host (em vez de ficar preso neste loop), o
+        // último heartbeat gravado marca com precisão até onde ele chegou —
+        // diferencia "preso no loop" (heartbeats param de repente bem antes do
+        // watchdogDeadline) de "loop realmente rodando" (heartbeats seguem até
+        // o watchdog disparar).
+        if ($onHeartbeat && (microtime(true) - $lastHeartbeat) >= 5.0) {
+            $lastHeartbeat = microtime(true);
+            try { $onHeartbeat(round(($lastHeartbeat - $loopStart) * 1000), $running); } catch (Throwable $e) {}
         }
         $selectResult = curl_multi_select($mh, 1.0);
         if ($selectResult === -1) {

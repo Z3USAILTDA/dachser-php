@@ -702,7 +702,20 @@ function processSeaAnalysisRunPHP($runId, $itemId, $analysisType, $files, $conte
         'providers' => array_keys($parallelRequests), 'parallel' => true,
     ]);
     seaPersistTiming($runId, $timing, 'ai_dispatch_started_ms', $startTime);
-    $parallelResults = fetchParallel($parallelRequests);
+    // Heartbeat: prova, no próximo travamento, se o processo morreu em silêncio
+    // (host matando o worker destacado) ou ficou preso de fato no loop de
+    // polling do curl_multi — os dois têm o mesmo sintoma externo (run presa em
+    // 'analisando' até o watchdog do endpoint de status), mas exigem correções
+    // completamente diferentes.
+    $parallelResults = fetchParallel($parallelRequests, function($loopElapsedMs, $stillRunning) use ($runId, &$timing, $startTime) {
+        seaPersistTiming($runId, $timing, 'ai_fetch_heartbeat_ms', $startTime);
+        try {
+            seaQuery("UPDATE dados_dachser.t_sea_runs SET timing_json = ? WHERE id = ?", [
+                json_encode(array_merge($timing, ['ai_fetch_loop_elapsed_ms' => $loopElapsedMs, 'ai_fetch_still_running' => $stillRunning])),
+                $runId,
+            ]);
+        } catch (Throwable $e) {}
+    });
     seaPersistTiming($runId, $timing, 'ai_parallel_fetch_done_ms', $startTime);
 
     $claudeText = '';
