@@ -713,7 +713,14 @@ function processSeaAnalysisRunPHP($runId, $itemId, $analysisType, $files, $conte
     }
 
     if (!$claudeText && !$geminiText) {
-      throw new Exception("Falha nas duas análises de IA.");
+      $errDetails = "";
+      if (isset($parallelResults['anthropic'])) {
+          $errDetails .= "Anthropic error: " . ($parallelResults['anthropic']['error'] ?? "HTTP " . $parallelResults['anthropic']['status'] . " " . substr($parallelResults['anthropic']['body'], 0, 500)) . "; ";
+      }
+      if (isset($parallelResults['gemini'])) {
+          $errDetails .= "Gemini error: " . ($parallelResults['gemini']['error'] ?? "HTTP " . $parallelResults['gemini']['status'] . " " . substr($parallelResults['gemini']['body'], 0, 500));
+      }
+      throw new Exception("Falha nas duas análises de IA. Detalhes: " . $errDetails);
     }
 
     // Só vale a pena chamar a arbitragem (OpenAI) quando HÁ duas análises reais
