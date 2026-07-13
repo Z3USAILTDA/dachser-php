@@ -206,32 +206,62 @@ if ($route === 'chb/diagnosticos' && $method === 'GET') {
 if ($route === 'background-worker' && $method === 'POST') {
     $body = getRequestBody();
     $jobFile = $body['jobFile'] ?? null;
-    
+
     if (!$jobFile || !file_exists($jobFile)) {
+        // Erro real de entrada — aqui sendJson()+exit() é o comportamento certo.
         sendJson(['success' => false, 'error' => 'Arquivo de job inválido'], 400);
     }
-    
-    // Libera a requisição HTTP imediatamente
+
+    $task = null;
+    try {
+        $peek = json_decode(file_get_contents($jobFile), true);
+        $task = $peek['task'] ?? null;
+    } catch (Throwable $e) {}
+    error_log("[BG_LOOPBACK_HANDLER_ENTERED] " . json_encode(['jobFile' => $jobFile, 'task' => $task, 'backendVersion' => defined('BACKEND_API_VERSION') ? BACKEND_API_VERSION : 'unknown']));
+
+    // CRÍTICO: NÃO usar sendJson() aqui. sendJson() chama fastcgi_finish_request()
+    // E exit(0) internamente — o exit() mata o script antes que o bloco de
+    // processamento abaixo seja alcançado. Isso fazia com que TODO job disparado
+    // via loopback "respondesse com sucesso" mas nunca fosse processado de fato
+    // (bug real, confirmado em produção: requestId 235, CHB_WORKER_NOT_STARTED).
+    // Por isso montamos a resposta manualmente, sem exit(), e só saímos no fim
+    // desta rota, depois de processar o job.
+    if (ob_get_length() > 0) { ob_clean(); }
+    if (!headers_sent()) {
+        http_response_code(200);
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    $responseBody = json_encode(['success' => true, 'message' => 'Executando em background']);
+    echo $responseBody;
+
+    // CRÍTICO (2ª parte do mesmo bug): isto precisa valer para AMBOS os ramos, não
+    // só o fallback. fastcgi_finish_request() só libera a CONEXÃO com o cliente —
+    // o script continua sujeito ao max_execution_time padrão do SAPI web (lsphp),
+    // que normalmente é bem menor que o pior caso do pipeline de IA (até ~900s
+    // somando Claude + Gemini + arbitragem OpenAI, cada um podendo levar até 300s
+    // antes de estourar timeout). Sem isto, o processo é morto pelo PHP no meio do
+    // processamento — não lança exceção capturável, só some, deixando a run presa
+    // em 'analisando'/'processing' para sempre. Isto explica os runs 1125-1130.
+    ignore_user_abort(true);
+    set_time_limit(1200); // 20 min — folga sobre o pior caso teórico de ~900s
+
     if (function_exists('fastcgi_finish_request')) {
-        sendJson(['success' => true, 'message' => 'Executando em background via FastCGI']);
         fastcgi_finish_request();
     } else {
-        ignore_user_abort(true);
-        set_time_limit(600);
-        ob_start();
-        echo json_encode(['success' => true, 'message' => 'Executando em background via loopback']);
-        $size = ob_get_length();
-        header("Content-Length: $size");
+        header("Content-Length: " . strlen($responseBody));
         header("Connection: close");
-        ob_end_flush();
+        while (ob_get_level() > 0) { ob_end_flush(); }
         flush();
     }
-    
-    // Processa a tarefa após a liberação da conexão
+
+    error_log("[BG_LOOPBACK_RESPONSE_SENT] " . json_encode(['jobFile' => $jobFile, 'task' => $task, 'fastcgi' => function_exists('fastcgi_finish_request')]));
+
+    // Processa a tarefa após a liberação da conexão — agora efetivamente alcançável.
     try {
         $jobData = json_decode(file_get_contents($jobFile), true);
         if ($jobData) {
             $task = $jobData['task'] ?? '';
+            error_log("[BG_LOOPBACK_PROCESSING_STARTED] " . json_encode(['task' => $task, 'runId' => $jobData['runId'] ?? null]));
             if ($task === 'sea_analysis') {
                 require_once __DIR__ . '/routes/sea.php';
                 processSeaAnalysisRunPHP(
@@ -252,9 +282,12 @@ if ($route === 'background-worker' && $method === 'POST') {
                     $jobData['itemId']
                 );
             }
+            error_log("[BG_LOOPBACK_PROCESSING_FINISHED] " . json_encode(['task' => $task, 'runId' => $jobData['runId'] ?? null]));
+        } else {
+            error_log("[BG_LOOPBACK_PROCESSING_FAILED] " . json_encode(['error' => 'jobData vazio/inválido', 'jobFile' => $jobFile]));
         }
     } catch (Throwable $e) {
-        error_log("[background-worker] Loopback execution error: " . $e->getMessage());
+        error_log("[BG_LOOPBACK_PROCESSING_FAILED] " . json_encode(['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]));
     } finally {
         @unlink($jobFile);
     }

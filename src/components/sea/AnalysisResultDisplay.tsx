@@ -63,7 +63,7 @@ const lineStyles: Record<LineType, string> = {
   action: 'bg-blue-500/10 border-l-2 border-blue-400 pl-3 py-0.5 text-blue-300',
   warning: 'bg-amber-500/10 border-l-2 border-amber-400 pl-3 py-0.5 text-amber-300',
   header: 'bg-white/5 font-bold text-white mt-4 py-1 px-2 rounded',
-  match: 'text-emerald-400/70',
+  match: 'bg-emerald-500/10 border-l-2 border-emerald-400 pl-3 py-0.5 text-emerald-300 font-medium rounded-r',
   normal: 'text-neutral-300',
   'summary-header': 'bg-amber-500/20 font-bold text-amber-300 mt-6 py-2 px-3 rounded border border-amber-500/30',
 };
@@ -72,7 +72,7 @@ const lineIcons: Partial<Record<LineType, React.ReactNode>> = {
   divergence: <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 text-rose-400" />,
   action: <ArrowRight className="w-3.5 h-3.5 flex-shrink-0 text-blue-400" />,
   warning: <FileWarning className="w-3.5 h-3.5 flex-shrink-0 text-amber-400" />,
-  match: <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 text-emerald-400/70" />,
+  match: <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 text-emerald-400" />,
 };
 
 function cleanResultText(text: string): string {

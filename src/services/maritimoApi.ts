@@ -285,16 +285,26 @@ export const maritimoApi = {
    * Poll analysis status with extended timeout and retry logic
    */
   async pollAnalysisUntilComplete(
-    analysisId: string, 
+    analysisId: string,
     onProgress?: (percent: number, step: string) => void,
     timeoutMs: number = 20 * 60 * 1000 // 20 minutes
   ): Promise<any> {
     const startTime = Date.now();
-    const pollInterval = 4000; // 4 seconds between polls
+    const basePollInterval = 4000; // 4 seconds — usado como base do backoff de erro
     let consecutiveErrors = 0;
     const maxConsecutiveErrors = 10;
     let lastProgress = 15;
-    
+
+    // Backoff progressivo no caminho feliz: mantém a UI responsiva nos primeiros
+    // 30s (análise ainda "quente"), mas reduz a carga de polling em análises
+    // longas em vez de martelar o servidor a cada 4s por até 20 minutos.
+    const getPollInterval = (elapsedMs: number) => {
+      if (elapsedMs < 30_000) return 4_000;
+      if (elapsedMs < 120_000) return 8_000;
+      if (elapsedMs < 300_000) return 15_000;
+      return 20_000;
+    };
+
     while (Date.now() - startTime < timeoutMs) {
       try {
         const status = await this.pollAnalysis(analysisId);
@@ -304,12 +314,17 @@ export const maritimoApi = {
         let progressPercent = status.progress_percent || 10;
         let progressStep = status.progress_message || 'Processando...';
         
-        // Only use time-based fallback if backend sends generic status
-        if (!status.progress_message || status.progress_message === 'Processando...') {
-          const elapsed = Date.now() - startTime;
-          const progressRatio = Math.min(elapsed / (timeoutMs * 0.8), 1);
-          progressPercent = Math.min(10 + Math.floor(progressRatio * 75), 85);
-          progressStep = 'Processando com IA...';
+        if (status.status === 'pendente') {
+          progressPercent = 10;
+          progressStep = 'Aguardando início do processamento';
+        } else if (status.status === 'analisando') {
+          // Only use time-based fallback if backend sends generic status
+          if (!status.progress_message || status.progress_message === 'Processando...') {
+            const elapsed = Date.now() - startTime;
+            const progressRatio = Math.min(elapsed / (timeoutMs * 0.8), 1);
+            progressPercent = Math.min(10 + Math.floor(progressRatio * 75), 85);
+            progressStep = 'Processando com IA...';
+          }
         }
 
         if (status.status === 'realizado' || status.status === 'completed') {
@@ -335,12 +350,18 @@ export const maritimoApi = {
         }
 
         if (status.status === 'erro' || status.status === 'error') {
-          throw new Error(status.error_message || 'Erro na análise');
+          const finalError: any = new Error(status.error_message || 'Erro na análise');
+          finalError.isFinalAnalysisError = true;
+          throw finalError;
         }
 
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
-        
+        await new Promise(resolve => setTimeout(resolve, getPollInterval(Date.now() - startTime)));
+
       } catch (pollError: any) {
+        if (pollError.isFinalAnalysisError) {
+          throw pollError;
+        }
+        
         const httpStatus = pollError.status;
         
         // Parar polling imediatamente para erros do cliente ou não autorizado
@@ -359,8 +380,9 @@ export const maritimoApi = {
           throw new Error(`Não foi possível consultar a análise ${analysisId} devido a erros internos consecutivos no servidor.${reqIdSuffix}`);
         }
         
-        // Backoff exponencial no atraso entre as tentativas
-        const delay = pollInterval * Math.min(consecutiveErrors, 4);
+        // Backoff exponencial no atraso entre as tentativas (independente do
+        // backoff progressivo do caminho feliz — este é sobre falhas de rede/servidor)
+        const delay = basePollInterval * Math.min(consecutiveErrors, 4);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }

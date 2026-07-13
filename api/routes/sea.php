@@ -240,16 +240,119 @@ function computeCCTData() {
 
 // ── SEA PROMPTS & AI HELPERS ──────────────────────────────────────────────────
 
+// Template de formatação oficial DACHSER para o relatório manifest_hbl — usado
+// tanto no prompt inicial (Claude/Gemini) quanto na arbitragem final (OpenAI),
+// para garantir saída visualmente consistente entre execuções (nunca usar "___"
+// como separador; sempre "━" repetido 66 vezes).
+define('SEA_MANIFEST_HBL_FORMAT_TEMPLATE', <<<'TEMPLATE'
+MANDATORY OUTPUT FORMAT — follow this exactly, do not deviate:
+
+Hello, team.
+
+Please update HBL as follows:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DRAFT HBL: <hbl number>
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CONTAINER VERIFICATION:
+- Manifest Container: <value>
+- HBL Container: <value>
+- Status: MATCH | UPDATE REQUIRED → Update: <instruction>
+
+TOTAL WEIGHT:
+- Manifest Total (Weight after Weighting): <value> kg
+- HBL Total Gross Weight: <value> kg
+- Delta: <value> kg
+- Status: MATCH | UPDATE REQUIRED → Update: <instruction>
+
+TOTAL CBM:
+- Manifest Total: <value> m³
+- HBL Total Measurement: <value> m³
+- Delta: <value> m³
+- Status: MATCH | UPDATE REQUIRED → Update: <instruction>
+
+TOTAL VOLUMES:
+- Manifest Total Packages: <value>
+- HBL Total Packages: <value>
+- Status: MATCH | UPDATE REQUIRED → Update: <instruction>
+
+SEAL NUMBER:
+- Manifest Seal: <value>
+- HBL Seal: <value>
+- Status: MATCH | UPDATE REQUIRED → Update: <instruction>
+
+CONSIGNEE CNPJ:
+- Manifest VAT No.: <value>
+- HBL CNPJ: <value>
+- Status: MATCH | UPDATE REQUIRED → Update: <instruction>
+
+NCM CODES:
+- Manifest NCMs: [<list>]
+- HBL NCMs: [<list>]
+- Missing in HBL: <list or "none">
+- Extra in HBL: <list or "none">
+- Status: MATCH | UPDATE REQUIRED → Update: <instruction>
+
+INVOICE REFERENCES:
+<summary sentence>
+- Status: MATCH | UPDATE REQUIRED → Update: <instruction>
+
+EXPORTER/SHIPPER ANALYSIS:
+(repeat this block per exporter found)
+
+EXPORTER #N: <name>
+- CNPJ: Manifest: <value> | HBL: <value> | Status: MATCH | UPDATE REQUIRED
+- Seal: Manifest: <value> | HBL: <value> | Status: MATCH | UPDATE REQUIRED
+
+Invoice References:
+- Manifest invoices: [<list>]
+- HBL invoices: [<list>]
+- Status: MATCH | UPDATE REQUIRED
+
+Manifest Items (reference only — totals verified at exporter level):
+  - Item: <description> / <weight> kg / <cbm> m³ / <packages>
+
+Subtotals EXPORTER #N:
+- Total Weight: Manifest: <value> kg | HBL: <value> kg | Delta: <value> kg | Status: MATCH | UPDATE REQUIRED
+- Total CBM: Manifest: <value> m³ | HBL: <value> m³ | Delta: <value> m³ | Status: MATCH | UPDATE REQUIRED
+- Total Volumes: Manifest: <value> | HBL: <value> | Delta: <value> | Status: MATCH | UPDATE REQUIRED
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ANALYSIS SUMMARY:
+- Total exporters identified: <N> entries analyzed
+- Total items analyzed: <N> packages
+- Fields with discrepancies: <list, or "None">
+
+VERIFICATION CHECKLIST:
+Files analyzed:
+- Manifest: <filename>
+- Draft HBL: <filename>
+
+Explicit verifications:
+[✓ or ⚠] Container, [✓ or ⚠] Seal, [✓ or ⚠] Shipper, [✓ or ⚠] Consignee, [✓ or ⚠] CNPJ, [✓ or ⚠] NCM Codes, [✓ or ⚠] Invoices, [✓ or ⚠] Total CBM, [✓ or ⚠] Total Volumes, [✓ or ⚠] Total Weight
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FORMATTING RULES (mandatory):
+- Section separator lines MUST be exactly 66 repetitions of the "━" character (U+2501, BOX DRAWINGS HEAVY HORIZONTAL). NEVER use "_", "-", "=" or any other character as a separator.
+- Leave exactly one blank line between sections.
+- Use "MATCH" or "UPDATE REQUIRED → Update: <clear instruction>" as the status value — never invent other status words.
+- Always end the message with the JSON block below, wrapped EXACTLY in a fenced code block tagged json (so it can be reliably detected and removed before the report reaches the end user — it must NEVER be visible in the rendered report itself):
+```json
+{"hbl_shipping_data":{"container":"","consignee":"","vessel":"","voyage":"","origem":"","destino":"","mbl_number":"","carrier":"","ata_date":""}}
+```
+TEMPLATE
+);
+
 function seaPromptForAnalysisType($analysisType) {
   if ($analysisType === 'manifest_hbl') {
     return 'You are a senior ocean freight document auditor for DACHSER.
 Compare the provided Manifest (Excel/spreadsheet) against the Draft HBL document(s) (PDF).
-Produce a structured operational correction report in English, with:
-DRAFT HBL, CONTAINER VERIFICATION, TOTAL WEIGHT, TOTAL CBM, TOTAL VOLUMES, SEAL NUMBER, CONSIGNEE CNPJ, NCM CODES, INVOICE REFERENCES, EXPORTER/SHIPPER ANALYSIS.
-At the end, always append:
-```json
-{"hbl_shipping_data":{"container":"","consignee":"","vessel":"","voyage":"","origem":"","destino":"","mbl_number":"","carrier":"","ata_date":""}}
-```';
+' . SEA_MANIFEST_HBL_FORMAT_TEMPLATE;
   }
   if ($analysisType === 'hbl_mbl') {
     return 'You are a senior ocean freight document auditor for DACHSER.
@@ -319,7 +422,9 @@ function seaBuildLlmContentPHP($files) {
     return $content;
 }
 
-function seaAnalyzeWithAnthropicPHP($analysisType, $files, $context = [], $logCtx = []) {
+// ── Anthropic: build request / parse response (separados para permitir disparo
+// paralelo via fetchParallel — ver processSeaAnalysisRunPHP) ──────────────────
+function seaBuildAnthropicRequest($analysisType, $files, $context = [], $logCtx = []) {
   $key = isset($_ENV['ANTHROPIC_API_KEY']) ? $_ENV['ANTHROPIC_API_KEY'] : null;
   if (!$key) throw new Exception('ANTHROPIC_API_KEY não configurada');
 
@@ -329,7 +434,8 @@ function seaAnalyzeWithAnthropicPHP($analysisType, $files, $context = [], $logCt
     'text' => seaPromptForAnalysisType($analysisType) . "\n\nContext: " . json_encode($context)
   ];
 
-  $res = fetch('https://api.anthropic.com/v1/messages', [
+  return [
+    'url' => 'https://api.anthropic.com/v1/messages',
     'method' => 'POST',
     'headers' => [
       'x-api-key' => $key,
@@ -345,13 +451,15 @@ function seaAnalyzeWithAnthropicPHP($analysisType, $files, $context = [], $logCt
     'connectTimeout' => 10,
     'timeout' => 300,
     'logCtx' => array_merge($logCtx, ['module' => 'sea', 'provider' => 'Anthropic']),
-  ]);
-  
+  ];
+}
+
+function seaParseAnthropicResponse($res) {
   if (!$res['ok']) {
-      throw new Exception("Anthropic SEA error {$res['status']}: " . substr($res['body'], 0, 300));
+      throw new Exception("[SEA_AI_HTTP_ERROR] Anthropic SEA error {$res['status']}: " . substr((string)$res['body'], 0, 300));
   }
   $data = $res['json']();
-  
+
   $text = '';
   if (isset($data['content'])) {
       foreach ($data['content'] as $c) {
@@ -361,23 +469,30 @@ function seaAnalyzeWithAnthropicPHP($analysisType, $files, $context = [], $logCt
   return $text;
 }
 
-function seaAnalyzeWithGeminiPHP($analysisType, $files, $context = [], $logCtx = []) {
+function seaAnalyzeWithAnthropicPHP($analysisType, $files, $context = [], $logCtx = []) {
+  $req = seaBuildAnthropicRequest($analysisType, $files, $context, $logCtx);
+  $res = fetch($req['url'], $req);
+  return seaParseAnthropicResponse($res);
+}
+
+// ── Gemini: build request / parse response (idem) ─────────────────────────────
+function seaBuildGeminiRequest($analysisType, $files, $context = [], $logCtx = []) {
   $key = isset($_ENV['GEMINI_API_KEY']) ? $_ENV['GEMINI_API_KEY'] : null;
   if (!$key) throw new Exception('GEMINI_API_KEY não configurada');
-  
+
   $parts = [];
   foreach ($files as $file) {
     $name = isset($file['name']) ? $file['name'] : (isset($file['file_name']) ? $file['file_name'] : 'arquivo');
     $mime = isset($file['mimeType']) ? $file['mimeType'] : (isset($file['type']) ? $file['type'] : (isset($file['file_type']) ? $file['file_type'] : 'application/octet-stream'));
     $base64 = isset($file['content']) ? $file['content'] : (isset($file['fileBase64']) ? $file['fileBase64'] : null);
-    
+
     if (!$base64 && isset($file['url']) && $file['url']) {
       $res = fetch($file['url']);
       if ($res['ok']) $base64 = base64_encode($res['body']);
     }
-    
+
     $isPdfOrImage = $mime === 'application/pdf' || strpos($mime, 'image/') === 0 || preg_match('/\.pdf$/i', $name);
-    
+
     if ($base64 && $isPdfOrImage) {
       $parts[] = ['type' => 'image_url', 'image_url' => ['url' => "data:" . ($mime ?: 'application/pdf') . ";base64,$base64"]];
     } elseif ($base64) {
@@ -385,10 +500,11 @@ function seaAnalyzeWithGeminiPHP($analysisType, $files, $context = [], $logCtx =
     }
     $parts[] = ['type' => 'text', 'text' => "[Arquivo: $name]"];
   }
-  
+
   $parts[] = ['type' => 'text', 'text' => seaPromptForAnalysisType($analysisType) . "\n\nContext: " . json_encode($context)];
 
-  $res = fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', [
+  return [
+    'url' => 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
     'method' => 'POST',
     'headers' => [
       'Authorization' => "Bearer $key",
@@ -403,13 +519,21 @@ function seaAnalyzeWithGeminiPHP($analysisType, $files, $context = [], $logCtx =
     'connectTimeout' => 10,
     'timeout' => 300,
     'logCtx' => array_merge($logCtx, ['module' => 'sea', 'provider' => 'Gemini']),
-  ]);
+  ];
+}
 
+function seaParseGeminiResponse($res) {
   if (!$res['ok']) {
-    throw new Exception("Gemini SEA error {$res['status']}: " . substr($res['body'], 0, 300));
+    throw new Exception("[SEA_AI_HTTP_ERROR] Gemini SEA error {$res['status']}: " . substr((string)$res['body'], 0, 300));
   }
   $data = $res['json']();
   return isset($data['choices'][0]['message']['content']) ? $data['choices'][0]['message']['content'] : '';
+}
+
+function seaAnalyzeWithGeminiPHP($analysisType, $files, $context = [], $logCtx = []) {
+  $req = seaBuildGeminiRequest($analysisType, $files, $context, $logCtx);
+  $res = fetch($req['url'], $req);
+  return seaParseGeminiResponse($res);
 }
 
 function seaArbitrateWithOpenAIPHP($analysisType, $claudeText, $geminiText, $logCtx = []) {
@@ -417,8 +541,11 @@ function seaArbitrateWithOpenAIPHP($analysisType, $claudeText, $geminiText, $log
   if (!$key) return $claudeText ?: $geminiText;
 
   $manifestHblInstructions = $analysisType === 'manifest_hbl' ? "
-CRITICAL FORMAT RULE for manifest_hbl:
-The output MUST start with \"Hello, team.\" and follow the exact HBL correction structure. Do not reformat.
+CRITICAL FORMAT RULE for manifest_hbl — the two analyses below may use inconsistent
+separators/spacing; your job includes NORMALIZING the final output to this exact
+template (do not change the factual content/findings, only the formatting):
+
+" . SEA_MANIFEST_HBL_FORMAT_TEMPLATE . "
 " : '';
 
   $prompt = "You are a senior logistics document auditor. Produce one final report from the two model analyses.
@@ -479,9 +606,21 @@ function logSeaWorkerStep($stage, $runId, $itemId, $requestId, $extra = []) {
 }
 
 // Background analysis process execution
+// Persiste tempo decorrido (em ms desde o início do worker) por etapa, direto no
+// banco (não só em error_log, que não é consultável remotamente). Escreve a cada
+// checkpoint para que, mesmo se o processo morrer/travar depois, o que já rodou
+// fique visível em t_sea_runs.timing_json em vez de virar uma caixa-preta.
+function seaPersistTiming($runId, &$timing, $label, $startTime) {
+    $timing[$label] = round((microtime(true) - $startTime) * 1000);
+    try {
+        seaQuery("UPDATE dados_dachser.t_sea_runs SET timing_json = ? WHERE id = ?", [json_encode($timing), $runId]);
+    } catch (Throwable $e) {}
+}
+
 function processSeaAnalysisRunPHP($runId, $itemId, $analysisType, $files, $context, $requestId = null) {
   $requestId = $requestId ?: uniqid('sea_worker_');
   $startTime = microtime(true);
+  $timing = [];
   logSeaWorkerStep('SEA_WORKER_STARTED', $runId, $itemId, $requestId, ['analysisType' => $analysisType, 'fileCount' => is_array($files) ? count($files) : 0]);
 
   try {
@@ -498,35 +637,77 @@ function processSeaAnalysisRunPHP($runId, $itemId, $analysisType, $files, $conte
       throw new Exception("[SEA_AI_CONFIG_MISSING] Nenhuma chave de IA (ANTHROPIC_API_KEY/GEMINI_API_KEY) configurada no ambiente $requestId" . "(SAPI: " . PHP_SAPI . ")");
     }
 
-    seaQuery("UPDATE dados_dachser.t_sea_runs SET status = 'analisando' WHERE id = ?", [$runId]);
+    seaQuery("UPDATE dados_dachser.t_sea_runs SET status = 'analisando', started_at = NOW() WHERE id = ?", [$runId]);
     if ($itemId) seaQuery("UPDATE dados_dachser.t_sea_items SET status = 'analisando' WHERE id = ?", [$itemId]);
     logSeaWorkerStep('SEA_STATUS_PROCESSING', $runId, $itemId, $requestId);
+    seaPersistTiming($runId, $timing, 'config_validated_ms', $startTime);
 
     $aiLogCtx = ['analysisId' => $runId, 'itemId' => $itemId, 'requestId' => $requestId];
 
-    logSeaWorkerStep('SEA_AI_REQUEST_STARTED', $runId, $itemId, $requestId, ['provider' => 'Anthropic']);
-    $claudeText = '';
+    // Claude e Gemini disparados em PARALELO (curl_multi) em vez de sequenciais —
+    // corta o pior caso de latência de ~600s (300s+300s somados) para ~300s
+    // (o maior dos dois, rodando ao mesmo tempo). Timeout individual de 300s por
+    // provedor é preservado; se um falhar/der timeout mas o outro responder, a
+    // regra de negócio existente (arbitragem com o texto disponível) se aplica
+    // normalmente. Só lança exceção se AMBOS falharem.
+    $parallelRequests = [];
     try {
-        $claudeText = seaAnalyzeWithAnthropicPHP($analysisType, $files, $context, $aiLogCtx);
-        logSeaWorkerStep('SEA_AI_RESPONSE_RECEIVED', $runId, $itemId, $requestId, ['provider' => 'Anthropic', 'chars' => strlen($claudeText)]);
+        $parallelRequests['anthropic'] = seaBuildAnthropicRequest($analysisType, $files, $context, $aiLogCtx);
     } catch (Throwable $ex) {
-        error_log('[worker claude] ' . $ex->getMessage());
+        error_log('[worker claude] build request failed: ' . $ex->getMessage());
+    }
+    try {
+        $parallelRequests['gemini'] = seaBuildGeminiRequest($analysisType, $files, $context, $aiLogCtx);
+    } catch (Throwable $ex) {
+        error_log('[worker gemini] build request failed: ' . $ex->getMessage());
     }
 
-    logSeaWorkerStep('SEA_AI_REQUEST_STARTED', $runId, $itemId, $requestId, ['provider' => 'Gemini']);
+    logSeaWorkerStep('SEA_AI_REQUEST_STARTED', $runId, $itemId, $requestId, [
+        'providers' => array_keys($parallelRequests), 'parallel' => true,
+    ]);
+    seaPersistTiming($runId, $timing, 'ai_dispatch_started_ms', $startTime);
+    $parallelResults = fetchParallel($parallelRequests);
+    seaPersistTiming($runId, $timing, 'ai_parallel_fetch_done_ms', $startTime);
+
+    $claudeText = '';
+    if (isset($parallelResults['anthropic'])) {
+        try {
+            $claudeText = seaParseAnthropicResponse($parallelResults['anthropic']);
+            logSeaWorkerStep('SEA_AI_RESPONSE_RECEIVED', $runId, $itemId, $requestId, ['provider' => 'Anthropic', 'chars' => strlen($claudeText)]);
+        } catch (Throwable $ex) {
+            error_log('[worker claude] ' . $ex->getMessage());
+        }
+    }
+
     $geminiText = '';
-    try {
-        $geminiText = seaAnalyzeWithGeminiPHP($analysisType, $files, $context, $aiLogCtx);
-        logSeaWorkerStep('SEA_AI_RESPONSE_RECEIVED', $runId, $itemId, $requestId, ['provider' => 'Gemini', 'chars' => strlen($geminiText)]);
-    } catch (Throwable $ex) {
-        error_log('[worker gemini] ' . $ex->getMessage());
+    if (isset($parallelResults['gemini'])) {
+        try {
+            $geminiText = seaParseGeminiResponse($parallelResults['gemini']);
+            logSeaWorkerStep('SEA_AI_RESPONSE_RECEIVED', $runId, $itemId, $requestId, ['provider' => 'Gemini', 'chars' => strlen($geminiText)]);
+        } catch (Throwable $ex) {
+            error_log('[worker gemini] ' . $ex->getMessage());
+        }
     }
 
     if (!$claudeText && !$geminiText) {
       throw new Exception("Falha nas duas análises de IA.");
     }
 
-    $finalText = seaArbitrateWithOpenAIPHP($analysisType, $claudeText, $geminiText, $aiLogCtx);
+    // Só vale a pena chamar a arbitragem (OpenAI) quando HÁ duas análises reais
+    // para reconciliar. Se só uma respondeu, arbitrar contra um texto vazio é
+    // latência pura jogada fora (até +300s) sem nenhum ganho — usa a que existe.
+    if ($claudeText && $geminiText) {
+        logSeaWorkerStep('SEA_AI_ARBITRATION_STARTED', $runId, $itemId, $requestId, ['provider' => 'OpenAI']);
+        $finalText = seaArbitrateWithOpenAIPHP($analysisType, $claudeText, $geminiText, $aiLogCtx);
+        logSeaWorkerStep('SEA_AI_ARBITRATION_COMPLETED', $runId, $itemId, $requestId, ['chars' => strlen($finalText)]);
+    } else {
+        $finalText = $claudeText ?: $geminiText;
+        logSeaWorkerStep('SEA_AI_ARBITRATION_SKIPPED', $runId, $itemId, $requestId, [
+            'reason' => 'only one provider succeeded, nothing to arbitrate',
+            'sourceUsed' => $claudeText ? 'Anthropic' : 'Gemini',
+        ]);
+    }
+    seaPersistTiming($runId, $timing, 'arbitration_done_ms', $startTime);
 
     logSeaWorkerStep('SEA_RESULT_VALIDATED', $runId, $itemId, $requestId);
     $shippingData = extractSeaShippingData($finalText);
@@ -539,7 +720,7 @@ function processSeaAnalysisRunPHP($runId, $itemId, $analysisType, $files, $conte
     ];
 
     seaQuery(
-      "UPDATE dados_dachser.t_sea_runs SET status = 'realizado', result_text = ?, result_json = ? WHERE id = ?",
+      "UPDATE dados_dachser.t_sea_runs SET status = 'realizado', result_text = ?, result_json = ?, completed_at = NOW() WHERE id = ?",
       [$finalText, json_encode($jsonResult), $runId]
     );
     logSeaWorkerStep('SEA_RESULT_SAVED', $runId, $itemId, $requestId);
@@ -572,6 +753,7 @@ function processSeaAnalysisRunPHP($runId, $itemId, $analysisType, $files, $conte
     }
     logSeaWorkerStep('SEA_RUN_COMPLETED', $runId, $itemId, $requestId, ['durationMs' => round((microtime(true) - $startTime) * 1000)]);
   } catch (Throwable $err) {
+    seaPersistTiming($runId, $timing, 'failed_at_ms', $startTime);
     $errMsg = $err->getMessage();
     $errorCode = 'SEA_PROCESSING_ERROR';
     $stage = 'AI_REQUEST';
@@ -602,7 +784,7 @@ function processSeaAnalysisRunPHP($runId, $itemId, $analysisType, $files, $conte
             'requestId' => $requestId,
             'technicalMessage' => $errMsg . " in " . $err->getFile() . " on line " . $err->getLine(),
         ]);
-        seaQuery("UPDATE dados_dachser.t_sea_runs SET status = 'erro', result_text = ? WHERE id = ?", [$errorPayload, $runId]);
+        seaQuery("UPDATE dados_dachser.t_sea_runs SET status = 'erro', result_text = ?, completed_at = NOW() WHERE id = ?", [$errorPayload, $runId]);
         if ($itemId) seaQuery("UPDATE dados_dachser.t_sea_items SET status = 'erro' WHERE id = ?", [$itemId]);
     } catch (Throwable $updateErr) {}
   }
@@ -1080,6 +1262,48 @@ $router->post('sea/maritimo/submit-analysis', function($params) {
         }
 
         $allFiles = [];
+
+        // Recupera o arquivo base (ex: Manifest Excel no caso de manifest_hbl, ou HBL base nos outros casos)
+        // e o adiciona como o primeiro item do array de arquivos para a IA.
+        if ($actualItemId) {
+            try {
+                $itemRows = seaQuery("SELECT arquivo_id FROM dados_dachser.t_sea_items WHERE id = ? LIMIT 1", [$actualItemId]);
+                if (!empty($itemRows) && !empty($itemRows[0]['arquivo_id'])) {
+                    $baseFileId = (int)$itemRows[0]['arquivo_id'];
+                    $fileRows = seaQuery("SELECT filename, mime, size_bytes, file_content FROM dados_dachser.t_sea_files WHERE id = ? LIMIT 1", [$baseFileId]);
+                    if (!empty($fileRows)) {
+                        $baseFile = $fileRows[0];
+                        $content = $baseFile['file_content'];
+                        if (is_resource($content)) {
+                            $content = stream_get_contents($content);
+                        }
+                        
+                        $base64Content = null;
+                        if (is_string($content) && strlen($content) > 0) {
+                            if (strpos($content, 'data:') === 0 && strpos($content, ';base64,') !== false) {
+                                $parts = explode(';base64,', $content);
+                                $base64Content = $parts[1];
+                            } else {
+                                $base64Content = base64_encode($content);
+                            }
+                        }
+                        
+                        if ($base64Content !== null) {
+                            $allFiles[] = [
+                                'name' => $baseFile['filename'],
+                                'type' => $baseFile['mime'] ?: 'application/octet-stream',
+                                'mimeType' => $baseFile['mime'] ?: 'application/octet-stream',
+                                'size' => (int)$baseFile['size_bytes'],
+                                'content' => $base64Content
+                            ];
+                        }
+                    }
+                }
+            } catch (Throwable $e) {
+                error_log("[SUBMIT_ANALYSIS_LOAD_BASE_FILE_ERROR] ItemId: $actualItemId, Error: " . $e->getMessage());
+            }
+        }
+
         foreach ($files as $f) { $allFiles[] = array_merge($f, ['mimeType' => isset($f['mimeType']) ? $f['mimeType'] : (isset($f['type']) ? $f['type'] : 'application/octet-stream')]); }
         foreach ($fileUrls as $f) { $allFiles[] = array_merge($f, ['mimeType' => isset($f['type']) ? $f['type'] : 'application/octet-stream']); }
 
@@ -1099,20 +1323,24 @@ $router->post('sea/maritimo/submit-analysis', function($params) {
         file_put_contents($jobFile, json_encode($jobData));
 
         $step = 'WORKER_DISPATCH';
-        $dispatchResult = runPHPBackground(dirname(__DIR__) . '/background_worker.php', [$jobFile], 'SEA');
+        $customLogFile = sys_get_temp_dir() . '/dachser_worker_sea_' . $runId . '.log';
+        if (file_exists($customLogFile)) {
+            @unlink($customLogFile);
+        }
+        $dispatchResult = runPHPBackground(dirname(__DIR__) . '/background_worker.php', [$jobFile], 'SEA', $customLogFile);
 
         if (!($dispatchResult['success'] ?? false)) {
             // Worker não iniciou — marca a análise como failed imediatamente em vez de
             // deixá-la presa em 'pendente' (10%) indefinidamente.
             $dispatchErr = json_encode([
                 'success' => false,
-                'error' => 'Não foi possível iniciar o processamento em segundo plano.',
+                'error' => 'O processo em segundo plano (worker) não pôde ser iniciado (falha no dispatch).',
                 'errorCode' => 'SEA_WORKER_DISPATCH_FAILED',
                 'stage' => 'WORKER_DISPATCH',
                 'requestId' => $requestId,
                 'dispatchMethod' => $dispatchResult['method'] ?? 'unknown',
             ]);
-            seaQuery("UPDATE dados_dachser.t_sea_runs SET status = 'erro', result_text = ? WHERE id = ?", [$dispatchErr, $runId]);
+            seaQuery("UPDATE dados_dachser.t_sea_runs SET status = 'erro', result_text = ?, completed_at = NOW() WHERE id = ?", [$dispatchErr, $runId]);
             if ($actualItemId) seaQuery("UPDATE dados_dachser.t_sea_items SET status = 'erro' WHERE id = ?", [$actualItemId]);
             @unlink($jobFile);
             error_log("[SEA_WORKER_DISPATCH_FAILED] analysisId=$runId requestId=$requestId method=" . ($dispatchResult['method'] ?? 'unknown') . " error=" . ($dispatchResult['error'] ?? 'unknown'));
@@ -1182,7 +1410,7 @@ $router->get('sea/maritimo/analysis/:id', function($params) {
         logSeaStatusStep($analysisId, $requestId, 'SEA_STATUS_AUTH_VALIDATED');
         
         logSeaStatusStep($analysisId, $requestId, 'SEA_STATUS_ANALYSIS_QUERY_STARTED');
-        $rows = seaQuery("SELECT id, status, result_text, result_json, created_at, NOW() as db_now FROM dados_dachser.t_sea_runs WHERE id = ? LIMIT 1", [$analysisId]);
+        $rows = seaQuery("SELECT id, status, result_text, result_json, created_at, started_at, completed_at, NOW() as db_now FROM dados_dachser.t_sea_runs WHERE id = ? LIMIT 1", [$analysisId]);
 
         $run = isset($rows[0]) ? $rows[0] : null;
         if (!$run) {
@@ -1205,9 +1433,48 @@ $router->get('sea/maritimo/analysis/:id', function($params) {
         $createdAt = strtotime($run['created_at']);
         $elapsedSeconds = $dbNow - $createdAt;
         $dispatchTimeoutSeconds = 45;
-        $processingTimeoutSeconds = 600;
+        // 750s (era 600s): a run 1138 real errou aos 618s — ou seja, o pior caso
+        // teórico da pipeline (300s paralelo Claude/Gemini + até 300s de
+        // arbitragem = 600s) já estava sendo atingido de verdade, mais uma folga
+        // de overhead real (rede, prompt grande de 37+ exportadores). Isso não é
+        // "aumentar timeout sem achar a causa" — a causa (soma dos timeouts
+        // nominais dos 2 estágios) está identificada; a folga é para não matar
+        // runs legítimas bem na borda enquanto SEA_AI_ARBITRATION_SKIPPED (que já
+        // evita a arbitragem span quando só uma IA responde) reduz o caso comum.
+        $processingTimeoutSeconds = 750;
 
         if ($run['status'] === 'pendente' && $elapsedSeconds > $dispatchTimeoutSeconds) {
+            $customLogFile = sys_get_temp_dir() . '/dachser_worker_sea_' . $analysisId . '.log';
+            $logContent = '';
+            if (file_exists($customLogFile)) {
+                $logContent = @file_get_contents($customLogFile);
+            }
+            
+            $workerBooted = false;
+            $lastStep = 'Nenhum log gravado. O processo PHP CLI sequer iniciou.';
+            
+            if ($logContent) {
+                if (strpos($logContent, 'SEA_WORKER_BOOT') !== false) {
+                    $workerBooted = true;
+                    $lastStep = 'Processo CLI iniciado (SEA_WORKER_BOOT)';
+                }
+                if (strpos($logContent, 'SEA_WORKER_ARGUMENT_RECEIVED') !== false) {
+                    $lastStep = 'Argumentos do job recebidos';
+                }
+                if (strpos($logContent, 'SEA_WORKER_DATABASE_CONNECTED') !== false) {
+                    $lastStep = 'Conectado ao banco de dados';
+                }
+                if (strpos($logContent, 'SEA_WORKER_RUN_FOUND') !== false) {
+                    $lastStep = 'Registro da análise encontrado no banco';
+                }
+                if (strpos($logContent, 'SEA_WORKER_STATUS_PROCESSING') !== false) {
+                    $lastStep = 'Processamento da análise iniciado';
+                }
+                if (preg_match('/(Fatal error|Parse error|Exception|Throwable): (.*)/i', $logContent, $matches)) {
+                    $lastStep .= ' | Erro CLI fatal: ' . trim($matches[0]);
+                }
+            }
+
             $errorPayload = json_encode([
                 'success' => false,
                 'error' => 'O worker de processamento não assumiu a análise a tempo.',
@@ -1215,8 +1482,11 @@ $router->get('sea/maritimo/analysis/:id', function($params) {
                 'stage' => 'WAITING_FOR_WORKER',
                 'requestId' => $requestId,
                 'elapsedMs' => $elapsedSeconds * 1000,
+                'workerBooted' => $workerBooted,
+                'lastStep' => $lastStep,
+                'workerLog' => $logContent ? substr($logContent, -2000) : 'Sem log do worker.'
             ]);
-            seaQuery("UPDATE dados_dachser.t_sea_runs SET status = 'erro', result_text = ? WHERE id = ?", [$errorPayload, $analysisId]);
+            seaQuery("UPDATE dados_dachser.t_sea_runs SET status = 'erro', result_text = ?, completed_at = NOW() WHERE id = ?", [$errorPayload, $analysisId]);
             $run['status'] = 'erro';
             $run['result_text'] = $errorPayload;
             logSeaStatusStep($analysisId, $requestId, 'SEA_RUN_FAILED', ['error_code' => 'SEA_WORKER_NOT_STARTED', 'stage' => 'WAITING_FOR_WORKER', 'elapsedSeconds' => $elapsedSeconds]);
@@ -1229,7 +1499,7 @@ $router->get('sea/maritimo/analysis/:id', function($params) {
                 'requestId' => $requestId,
                 'elapsedMs' => $elapsedSeconds * 1000,
             ]);
-            seaQuery("UPDATE dados_dachser.t_sea_runs SET status = 'erro', result_text = ? WHERE id = ?", [$errorPayload, $analysisId]);
+            seaQuery("UPDATE dados_dachser.t_sea_runs SET status = 'erro', result_text = ?, completed_at = NOW() WHERE id = ?", [$errorPayload, $analysisId]);
             $run['status'] = 'erro';
             $run['result_text'] = $errorPayload;
             logSeaStatusStep($analysisId, $requestId, 'SEA_RUN_FAILED', ['error_code' => 'SEA_AI_REQUEST_TIMEOUT', 'stage' => 'AI_REQUEST', 'elapsedSeconds' => $elapsedSeconds]);
@@ -1619,5 +1889,49 @@ $router->post('sea/tracking/send-status-email', function($params) {
         sendJson(['success' => true]);
     } else {
         sendJson(['success' => false, 'error' => 'Falha ao enviar e-mail'], 500);
+    }
+});
+
+// GET /api/sea/diagnostic
+$router->get('sea/diagnostic', function($params) {
+    try {
+        $disabled = ini_get('disable_functions');
+        $diagnostics = [
+            'php_sapi' => PHP_SAPI,
+            'php_binary' => defined('PHP_BINARY') ? PHP_BINARY : 'unknown',
+            'disable_functions' => $disabled,
+            'exec_exists' => function_exists('exec'),
+            'shell_exec_exists' => function_exists('shell_exec'),
+            'system_exists' => function_exists('system'),
+            'proc_open_exists' => function_exists('proc_open'),
+            'temp_dir' => sys_get_temp_dir(),
+            'env_vars' => [
+                'GEMINI_API_KEY_exists' => isset($_ENV['GEMINI_API_KEY']),
+                'GEMINI_API_KEY_empty' => empty($_ENV['GEMINI_API_KEY']),
+                'GEMINI_API_KEY_length' => isset($_ENV['GEMINI_API_KEY']) ? strlen($_ENV['GEMINI_API_KEY']) : 0,
+            ],
+            'files' => []
+        ];
+
+        // Scan temp dir
+        $tempDir = sys_get_temp_dir();
+        if (is_dir($tempDir)) {
+            $files = scandir($tempDir);
+            foreach ($files as $file) {
+                if (str_starts_with($file, 'dachser_worker_') || str_starts_with($file, 'dachser_analysis_job_')) {
+                    $filePath = $tempDir . '/' . $file;
+                    $content = @file_get_contents($filePath);
+                    $diagnostics['files'][] = [
+                        'name' => $file,
+                        'size' => @filesize($filePath),
+                        'mtime' => date('Y-m-d H:i:s', @filemtime($filePath)),
+                        'content' => $content
+                    ];
+                }
+            }
+        }
+        sendJson(['success' => true, 'diagnostics' => $diagnostics]);
+    } catch (Exception $e) {
+        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
     }
 });

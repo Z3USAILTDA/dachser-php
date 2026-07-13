@@ -101,6 +101,34 @@ export default function SubmeterManifestHbl() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [analysisStep, setAnalysisStep] = useState("");
+  // ----- Perceived performance helpers -----
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [msgIndex, setMsgIndex] = useState(0);
+  const MESSAGES = [
+    'Lendo estrutura do PDF...',
+    'Extracting data from Draft HBL...',
+    'Consolidando análises Claude + Gemini...',
+    'Isso pode levar de 1 a 3 minutos para arquivos grandes',
+  ];
+  const ESTIMATED_TOTAL = 180; // seconds, adjust as needed
+
+  // Timer & message rotation while analyzing
+  useEffect(() => {
+    if (!isAnalyzing) {
+      setElapsedSeconds(0);
+      setMsgIndex(0);
+      return;
+    }
+    const tick = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
+    const rotate = setInterval(() => setMsgIndex(i => (i + 1) % MESSAGES.length), 15000);
+    return () => {
+      clearInterval(tick);
+      clearInterval(rotate);
+    };
+  }, [isAnalyzing]);
+
+  // Assymptotic progress (60% -> 95%)
+  const pseudoProgress = Math.min(95, 60 + Math.floor((elapsedSeconds / ESTIMATED_TOTAL) * 35));
   const [isCompletingAnalysis, setIsCompletingAnalysis] = useState(false);
   const [copiedResult, setCopiedResult] = useState(false);
   const [copiedDivergences, setCopiedDivergences] = useState(false);
@@ -197,24 +225,16 @@ export default function SubmeterManifestHbl() {
     setAnalysisProgress(5);
     setAnalysisStep("Enviando arquivos...");
     setInlineStatus(null);
+    // Reset timers for perceived progress
+    setElapsedSeconds(0);
+    setMsgIndex(0);
     showInlineStatus("Processando análise com IA...", 'info');
     try {
-      // Smoother progress animation
-      const progressInterval = setInterval(() => {
-        setAnalysisProgress(prev => {
-          if (prev >= 85) {
-            return prev;
-          }
-          // Slower progress increase for longer processing
-          return prev + 1;
-        });
-      }, 3000);
       const response = await maritimoApi.submitAnalysis({
         itemId,
         analysisType: 'manifest_hbl',
         files: hblFiles
       });
-      clearInterval(progressInterval);
       setAnalysisId(response.analysisId);
       let result: {
         status: string;
@@ -237,9 +257,11 @@ export default function SubmeterManifestHbl() {
         console.log('Analysis queued — polling for status', response.analysisId);
         setAnalysisStep("Processando com IA...");
         result = await maritimoApi.pollAnalysisUntilComplete(response.analysisId, (percent, step) => {
-          setAnalysisProgress(Math.min(percent, 95));
+          setAnalysisProgress(pseudoProgress);
           setAnalysisStep(step);
-        }, 10 * 60 * 1000 // 10 minutes (extended timeout)
+        }, 13 * 60 * 1000 // 13 min — maior que o watchdog de 750s do backend (SEA_AI_REQUEST_TIMEOUT),
+        // para o frontend continuar perguntando até realmente testemunhar o status
+        // terminal em vez de desistir alguns segundos antes do backend decidir.
         );
       }
       setAnalysisProgress(100);
@@ -269,6 +291,8 @@ export default function SubmeterManifestHbl() {
       setIsAnalyzing(false);
       setAnalysisProgress(0);
       setAnalysisStep("");
+      setElapsedSeconds(0);
+      setMsgIndex(0);
     }
   };
   const handleCompleteAnalysis = async () => {
@@ -458,10 +482,10 @@ export default function SubmeterManifestHbl() {
                 <div className="bg-black/20 border border-white/5 rounded-xl p-5">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-400"></div>
-                    <span className="text-sm text-white font-medium">{analysisStep || 'Processando...'}</span>
+                    <span className="text-sm text-white font-medium">{analysisStep || MESSAGES[msgIndex]} ({elapsedSeconds}s)</span>
                   </div>
                   <div className="flex items-center gap-3 mb-4">
-                    <Progress value={analysisProgress} className="h-2 flex-1" />
+                    <Progress value={pseudoProgress} className="h-2 flex-1" />
                     <span className="text-xs text-neutral-400 font-mono min-w-[3rem] text-right">{analysisProgress}%</span>
                   </div>
                 </div>

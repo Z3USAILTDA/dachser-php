@@ -39,6 +39,36 @@ export default function SubmeterHblMbl() {
     type: 'info' | 'success' | 'error';
   } | null>(null);
 
+  // ----- Perceived performance helpers -----
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [msgIndex, setMsgIndex] = useState(0);
+  const MESSAGES = [
+    'Lendo estrutura do PDF...',
+    'Extracting data from MBL...',
+    'Comparando HBL base com MBL enviado...',
+    'Consolidando análises Claude + Gemini...',
+    'Isso pode levar de 1 a 3 minutos para arquivos grandes',
+  ];
+  const ESTIMATED_TOTAL = 180; // seconds, adjust as needed
+
+  // Timer & message rotation while analyzing
+  useEffect(() => {
+    if (!isAnalyzing) {
+      setElapsedSeconds(0);
+      setMsgIndex(0);
+      return;
+    }
+    const tick = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
+    const rotate = setInterval(() => setMsgIndex(i => (i + 1) % MESSAGES.length), 15000);
+    return () => {
+      clearInterval(tick);
+      clearInterval(rotate);
+    };
+  }, [isAnalyzing]);
+
+  // Assymptotic progress (60% -> 95%)
+  const pseudoProgress = Math.min(95, 60 + Math.floor((elapsedSeconds / ESTIMATED_TOTAL) * 35));
+
   // Support both query params (from SeaAnalysis list) and location state (from CadastroHbl)
   const searchParams = new URLSearchParams(location.search);
   const itemId = searchParams.get('itemId') || location.state?.itemId;
@@ -76,6 +106,8 @@ export default function SubmeterHblMbl() {
     setAnalysisStep("");
     setIsCompletingAnalysis(false);
     setInlineStatus(null);
+    setElapsedSeconds(0);
+    setMsgIndex(0);
   }, [itemId]);
   const showInlineStatus = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
     setInlineStatus({
@@ -117,23 +149,16 @@ export default function SubmeterHblMbl() {
     setAnalysisProgress(5);
     setAnalysisStep("Enviando arquivos...");
     setInlineStatus(null);
+    // Reset timers for perceived progress
+    setElapsedSeconds(0);
+    setMsgIndex(0);
     showInlineStatus("Processando análise com IA...", 'info');
     try {
-      const progressInterval = setInterval(() => {
-        setAnalysisProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return 90;
-          }
-          return prev + 2;
-        });
-      }, 500);
       const response = await maritimoApi.submitAnalysis({
         itemId,
         analysisType: 'hbl_mbl',
         files: [mblFile]
       });
-      clearInterval(progressInterval);
       setAnalysisId(response.analysisId);
       let result: {
         status: string;
@@ -152,15 +177,20 @@ export default function SubmeterHblMbl() {
       } else {
         setAnalysisStep("Aguardando resultado...");
         result = await maritimoApi.pollAnalysisUntilComplete(response.analysisId, (percent, step) => {
-          setAnalysisProgress(Math.min(percent, 95));
+          setAnalysisProgress(pseudoProgress);
           setAnalysisStep(step);
-        }, 600000);
+        }, 13 * 60 * 1000 // 13 min — maior que o watchdog de 750s do backend (SEA_AI_REQUEST_TIMEOUT),
+        // para o frontend continuar perguntando até realmente testemunhar o status
+        // terminal em vez de desistir alguns segundos antes do backend decidir.
+        );
       }
       setAnalysisProgress(100);
       await new Promise(resolve => setTimeout(resolve, 300));
       setIsAnalyzing(false);
       setAnalysisProgress(0);
       setAnalysisStep("");
+      setElapsedSeconds(0);
+      setMsgIndex(0);
       setInlineStatus(null);
       if (result.status === 'error') {
         showInlineStatus("Erro na análise. Verifique os arquivos e tente novamente.", 'error');
@@ -183,6 +213,8 @@ export default function SubmeterHblMbl() {
       setIsAnalyzing(false);
       setAnalysisProgress(0);
       setAnalysisStep("");
+      setElapsedSeconds(0);
+      setMsgIndex(0);
     }
   };
   const handleCompleteAnalysis = async () => {
@@ -343,10 +375,10 @@ export default function SubmeterHblMbl() {
             <div className="bg-black/20 border border-white/5 rounded-xl p-4">
               <div className="flex items-center gap-3 mb-3">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-400"></div>
-                <span className="text-sm text-white font-medium">{analysisStep}</span>
+                <span className="text-sm text-white font-medium">{analysisStep || MESSAGES[msgIndex]} ({elapsedSeconds}s)</span>
               </div>
               <div className="flex items-center gap-3">
-                <Progress value={analysisProgress} className="h-2 flex-1" />
+                <Progress value={pseudoProgress} className="h-2 flex-1" />
                 <span className="text-xs text-neutral-400 font-mono min-w-[3rem] text-right">{analysisProgress}%</span>
               </div>
             </div>
