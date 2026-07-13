@@ -6,7 +6,7 @@
 // Exposta em /api/health, /api/test-deploy e nos logs estruturados SEA_*/CHB_*
 // para permitir confirmar qual código está realmente em produção (não confundir
 // com a versão do frontend).
-define('BACKEND_API_VERSION', '2026.07.13-sea-optimize-v1');
+define('BACKEND_API_VERSION', '2026.07.13-sea-optimize-v2');
 
 /**
  * Normaliza uma data vinda de extração de IA para o formato SQL (Y-m-d) ou NULL.
@@ -719,60 +719,7 @@ function runPHPBackground($scriptPath, $args = [], $logPrefix = 'WORKER', $custo
         return ['success' => false, 'method' => 'windows', 'error' => 'proc_open falhou'];
     }
 
-    // ── ESTRATÉGIA 1: Loopback HTTP (preferida neste host — ver nota abaixo) ──
-    // Timeout curto de 3s: envia o job e abandona a espera da resposta, mas o
-    // PHP do lado do /api/background-worker continua executando a análise DEPOIS
-    // de responder (fastcgi_finish_request ou fallback Connection: close).
-    //
-    // Por que loopback primeiro e não CLI: em hosts LiteSpeed/LSAPI (este é um),
-    // um processo filho criado via exec()+"&" a partir de uma requisição PHP
-    // costuma ser morto pelo servidor assim que essa requisição termina, porque
-    // ele herda o grupo de processos/sessão do worker LSAPI — o job "inicia com
-    // sucesso" e morre segundos depois, antes de sequer atualizar o status no
-    // banco. Já o loopback não cria processo-filho algum: é a MESMA requisição
-    // HTTP continuando a rodar após responder ao cliente, então não sofre desse
-    // problema. Evidência real: em produção, os runs 1104-1107 (que usavam
-    // loopback como estratégia principal) chegaram a processar de verdade;
-    // depois que o CLI passou a ser tentado primeiro, 100% dos runs recentes
-    // (1118, 1120-1124) morreram em SEA_WORKER_NOT_STARTED. NUNCA use este
-    // loopback como chamada bloqueante aguardando o resultado completo — ele só
-    // deve disparar e devolver o controle em até ~3s.
-    $loopbackStart = microtime(true);
-    try {
-        $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-            || ($_SERVER['SERVER_PORT'] == 443)
-            || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
-        $protocol = $isHttps ? 'https://' : 'http://';
-        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        $url = $protocol . $host . '/api/background-worker';
-
-        error_log("[{$logPrefix}_WORKER_DISPATCH_STARTED] " . json_encode(['method' => 'loopback', 'url' => $url, 'backendVersion' => BACKEND_API_VERSION]));
-
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['jobFile' => $args[0]]));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 3); // Abandona após 3s — só dispara
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-        $res = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $loopErr = curl_error($ch);
-        curl_close($ch);
-        $durationMs = round((microtime(true) - $loopbackStart) * 1000);
-
-        if ($httpCode >= 200 && $httpCode < 300) {
-            error_log("[{$logPrefix}_WORKER_DISPATCH_SUCCEEDED] " . json_encode(['method' => 'loopback', 'httpCode' => $httpCode, 'durationMs' => $durationMs]));
-            return ['success' => true, 'method' => 'loopback', 'httpCode' => $httpCode];
-        }
-        error_log("[{$logPrefix}_WORKER_DISPATCH_FAILED] " . json_encode(['method' => 'loopback', 'httpCode' => $httpCode, 'error' => $loopErr, 'durationMs' => $durationMs]));
-    } catch (Throwable $e) {
-        error_log("[{$logPrefix}_WORKER_DISPATCH_FAILED] " . json_encode(['method' => 'loopback', 'error' => $e->getMessage()]));
-    }
-
-    // ── ESTRATÉGIA 2: PHP CLI via exec (fallback) ──────────────────────────────
+    // ── ESTRATÉGIA 1: PHP CLI via exec (preferida para evitar morte do worker no LiteSpeed) ──
     $disabled = ini_get('disable_functions');
     $execEnabled = function_exists('exec') && !in_array('exec', array_map('trim', explode(',', $disabled)));
 
@@ -808,13 +755,11 @@ function runPHPBackground($scriptPath, $args = [], $logPrefix = 'WORKER', $custo
         $argsStr = implode(' ', $escapedArgs);
         $logFile = $customLogFile ? $customLogFile : (sys_get_temp_dir() . '/dachser_worker_' . md5($argsStr . microtime(true)) . '.log');
 
-        // IMPORTANTE: manter isto como UM único comando terminado em UM único `&`.
-        // Um commit anterior desta mesma sessão (54e2dfe3) já constatou que
-        // encadear uma segunda instrução depois do `&` (ex: `... & echo $! > pid`)
-        // é bloqueado/derruba o processo sob o filtro de shell restrito da
-        // Hostinger. `nohup` como prefixo do MESMO comando é seguro (não é uma
-        // segunda instrução); um `echo` ou `;` depois do `&` não é.
-        $cmd = 'nohup ' . escapeshellarg($phpBin) . ' ' . escapeshellarg($scriptPath) . ' ' . $argsStr
+        // IMPORTANTE: usamos setsid prefixando o comando para forçar uma nova sessão de processo.
+        // Sob servidores LiteSpeed (LSAPI), qualquer processo filho que pertença ao mesmo grupo PGID
+        // da requisição web principal é morto imediatamente pelo web server quando a requisição web encerra.
+        // O setsid desacopla completamente o processo CLI do grupo do LSAPI, sobrevivendo ao encerramento.
+        $cmd = 'setsid nohup ' . escapeshellarg($phpBin) . ' ' . escapeshellarg($scriptPath) . ' ' . $argsStr
              . ' > ' . escapeshellarg($logFile) . ' 2>&1 &';
 
         error_log("[{$logPrefix}_WORKER_DISPATCH_STARTED] " . json_encode([
@@ -844,6 +789,45 @@ function runPHPBackground($scriptPath, $args = [], $logPrefix = 'WORKER', $custo
         ]));
     } else {
         error_log("[{$logPrefix}_WORKER_DISPATCH_FAILED] " . json_encode(['method' => 'cli', 'error' => 'exec() desabilitado', 'disable_functions' => $disabled]));
+    }
+
+    // ── ESTRATÉGIA 2: Loopback HTTP (fallback se CLI falhar/não disponível) ──
+    // Timeout curto de 3s: envia o job e abandona a espera da resposta, mas o
+    // PHP do lado do /api/background-worker continua executando a análise DEPOIS
+    // de responder (fastcgi_finish_request ou fallback Connection: close).
+    $loopbackStart = microtime(true);
+    try {
+        $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || ($_SERVER['SERVER_PORT'] == 443)
+            || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+        $protocol = $isHttps ? 'https://' : 'http://';
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $url = $protocol . $host . '/api/background-worker';
+
+        error_log("[{$logPrefix}_WORKER_DISPATCH_STARTED] " . json_encode(['method' => 'loopback', 'url' => $url, 'backendVersion' => BACKEND_API_VERSION]));
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['jobFile' => $args[0]]));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 3); // Abandona após 3s — só dispara
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        $res = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $loopErr = curl_error($ch);
+        curl_close($ch);
+        $durationMs = round((microtime(true) - $loopbackStart) * 1000);
+
+        if ($httpCode >= 200 && $httpCode < 300) {
+            error_log("[{$logPrefix}_WORKER_DISPATCH_SUCCEEDED] " . json_encode(['method' => 'loopback', 'httpCode' => $httpCode, 'durationMs' => $durationMs]));
+            return ['success' => true, 'method' => 'loopback', 'httpCode' => $httpCode];
+        }
+        error_log("[{$logPrefix}_WORKER_DISPATCH_FAILED] " . json_encode(['method' => 'loopback', 'httpCode' => $httpCode, 'error' => $loopErr, 'durationMs' => $durationMs]));
+    } catch (Throwable $e) {
+        error_log("[{$logPrefix}_WORKER_DISPATCH_FAILED] " . json_encode(['method' => 'loopback', 'error' => $e->getMessage()]));
     }
 
     // ── FALHA TOTAL: nenhum método funcionou ─────────────────────────────────
