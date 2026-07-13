@@ -444,12 +444,18 @@ function seaBuildAnthropicRequest($analysisType, $files, $context = [], $logCtx 
     ],
     'body' => json_encode([
       'model' => isset($_ENV['SEA_ANTHROPIC_MODEL']) ? $_ENV['SEA_ANTHROPIC_MODEL'] : 'claude-sonnet-4-6',
-      'max_tokens' => 32000,
+      // Runs reais bem-sucedidos produzem 4-7 mil tokens de saída (result_text
+      // histórico: 15-27 mil caracteres) — 32000 era ~5x maior que o necessário
+      // e só ampliava o pior caso de latência sem benefício real.
+      'max_tokens' => 12000,
       'temperature' => 0,
       'messages' => [['role' => 'user', 'content' => $content]],
     ]),
     'connectTimeout' => 10,
-    'timeout' => 300,
+    // Reduzido de 300s: análises bem-sucedidas historicamente completam em
+    // ~100s; 140s dá folga real sem deixar o pior caso da pipeline
+    // (paralelo + arbitragem) passar de ~4min no total.
+    'timeout' => 140,
     'logCtx' => array_merge($logCtx, ['module' => 'sea', 'provider' => 'Anthropic']),
   ];
 }
@@ -536,11 +542,13 @@ function seaBuildGeminiRequest($analysisType, $files, $context = [], $logCtx = [
     'body' => json_encode([
       'model' => isset($_ENV['SEA_GEMINI_MODEL']) ? $_ENV['SEA_GEMINI_MODEL'] : 'gemini-2.5-pro',
       'messages' => [['role' => 'user', 'content' => $parts]],
-      'max_tokens' => 32000,
+      // Ver nota equivalente em seaBuildAnthropicRequest: 32000 era ~5x maior
+      // que a saída real observada em runs bem-sucedidos.
+      'max_tokens' => 12000,
       'temperature' => 0,
     ]),
     'connectTimeout' => 10,
-    'timeout' => 300,
+    'timeout' => 140,
     'logCtx' => array_merge($logCtx, ['module' => 'sea', 'provider' => 'Gemini']),
   ];
 }
@@ -586,10 +594,15 @@ ANALYSIS B (Gemini): $geminiText";
     'body' => json_encode([
       'model' => isset($_ENV['SEA_OPENAI_MODEL']) ? $_ENV['SEA_OPENAI_MODEL'] : 'gpt-4o',
       'messages' => [['role' => 'user', 'content' => $prompt]],
-      'max_completion_tokens' => 16000,
+      // Arbitragem só reconcilia/reformata 2 textos já prontos (cada um agora
+      // limitado a 12000) — não precisa de um teto maior que as entradas.
+      'max_completion_tokens' => 12000,
     ]),
     'connectTimeout' => 10,
-    'timeout' => 300,
+    // Reduzido de 300s: arbitragem é reformatação, não análise do zero —
+    // 100s é generoso. Junto com os 140s do fetch paralelo, o pior caso
+    // teórico da pipeline cai de ~10min para ~4min.
+    'timeout' => 100,
     'logCtx' => array_merge($logCtx, ['module' => 'sea', 'provider' => 'OpenAI']),
   ]);
 
@@ -1463,15 +1476,14 @@ $router->get('sea/maritimo/analysis/:id', function($params) {
         $createdAt = strtotime($run['created_at']);
         $elapsedSeconds = $dbNow - $createdAt;
         $dispatchTimeoutSeconds = 45;
-        // 750s (era 600s): a run 1138 real errou aos 618s — ou seja, o pior caso
-        // teórico da pipeline (300s paralelo Claude/Gemini + até 300s de
-        // arbitragem = 600s) já estava sendo atingido de verdade, mais uma folga
-        // de overhead real (rede, prompt grande de 37+ exportadores). Isso não é
-        // "aumentar timeout sem achar a causa" — a causa (soma dos timeouts
-        // nominais dos 2 estágios) está identificada; a folga é para não matar
-        // runs legítimas bem na borda enquanto SEA_AI_ARBITRATION_SKIPPED (que já
-        // evita a arbitragem span quando só uma IA responde) reduz o caso comum.
-        $processingTimeoutSeconds = 750;
+        // Antes 750s: o pior caso nominal era 300s (paralelo Claude/Gemini) +
+        // 300s (arbitragem) = 600s, então o watchdog só disparava depois de
+        // 12+ minutos reais de espera do usuário. Os timeouts individuais de
+        // fetchParallel/arbitragem foram reduzidos para 140s/100s (pior caso
+        // teórico ~240s — ver seaBuildAnthropicRequest/seaBuildGeminiRequest/
+        // seaArbitrateWithOpenAIPHP), então este watchdog só precisa de uma
+        // folga real de rede/overhead acima disso, não de outros 500s.
+        $processingTimeoutSeconds = 300;
 
         if ($run['status'] === 'pendente' && $elapsedSeconds > $dispatchTimeoutSeconds) {
             $customLogFile = sys_get_temp_dir() . '/dachser_worker_sea_' . $analysisId . '.log';
