@@ -234,6 +234,10 @@ function fetch($url, $options = []) {
     curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $connectTimeout);
     curl_setopt($ch, CURLOPT_TIMEOUT, $responseTimeout);
+    if (strncasecmp(PHP_OS, 'WIN', 3) === 0) {
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+    }
 
     $formattedHeaders = [];
     foreach ($headers as $k => $v) {
@@ -317,7 +321,7 @@ function fetch($url, $options = []) {
  * Cada requisição respeita seu próprio connectTimeout/timeout individualmente,
  * mesmo rodando em paralelo com as demais.
  */
-function fetchParallel($requests, $onHeartbeat = null) {
+function fetchParallel($requests, $onHeartbeat = null, $onEachResult = null) {
     if (empty($requests)) return [];
 
     $mh = curl_multi_init();
@@ -356,6 +360,10 @@ function fetchParallel($requests, $onHeartbeat = null) {
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $connectTimeout);
         curl_setopt($ch, CURLOPT_TIMEOUT, $responseTimeout);
+        if (strncasecmp(PHP_OS, 'WIN', 3) === 0) {
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        }
         // Este processo roda "destacado" após fastcgi_finish_request() (worker em
         // background via loopback). Forçamos conexão nova em vez de reaproveitar
         // um socket keep-alive potencialmente aberto ANTES do destacamento —
@@ -383,6 +391,9 @@ function fetchParallel($requests, $onHeartbeat = null) {
         $meta[$key] = ['module' => $module, 'urlSanitized' => $urlSanitized, 'host' => $host, 'logCtx' => $logCtx];
     }
 
+    $completedResults = [];
+    $earlyAbort = false;
+
     // Roda todas as transferências até que todas terminem (sucesso, erro ou timeout individual)
     $running = null;
     $watchdogTripped = false;
@@ -409,45 +420,94 @@ function fetchParallel($requests, $onHeartbeat = null) {
             try { $onHeartbeat(round(($lastHeartbeat - $loopStart) * 1000), $running); } catch (Throwable $e) {}
         }
         $selectResult = curl_multi_select($mh, 1.0);
-        if ($selectResult === -1) {
-            // Em alguns ambientes/SAPI (como Windows ou LiteSpeed), curl_multi_select retorna -1 imediatamente.
-            // O usleep evita consumo excessivo de CPU de 100% que faria o processo ser suspenso/congelado pelo watchdog do servidor.
+        if ($selectResult <= 0) {
+            // Corrigido de === -1 para <= 0: evita 100% de uso de CPU e suspensão pelo
+            // LVE manager do servidor LiteSpeed/Hostinger em caso de curl_multi_select imediato (0).
             usleep(100000); // 100ms
         }
         do {
             $execStatus = curl_multi_exec($mh, $running);
         } while ($execStatus === CURLM_CALL_MULTI_PERFORM);
+
+        // Verifica se algum handle completou nesta iteração
+        while ($info = curl_multi_info_read($mh)) {
+            $ch = $info['handle'];
+            $resultCode = $info['result'];
+            $key = array_search($ch, $handles, true);
+            if ($key !== false) {
+                $response = curl_multi_getcontent($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $ok = ($httpCode >= 200 && $httpCode < 300) && ($resultCode === CURLE_OK);
+
+                $res = [
+                    'ok' => $ok,
+                    'status' => $httpCode,
+                    'body' => $response,
+                    'error' => $resultCode !== CURLE_OK ? curl_strerror($resultCode) : null,
+                    'json' => function() use ($response) {
+                        return json_decode($response, true);
+                    }
+                ];
+
+                $completedResults[$key] = [
+                    'res' => $res,
+                    'resultCode' => $resultCode
+                ];
+
+                if ($onEachResult) {
+                    try {
+                        $shouldAbort = $onEachResult($key, $res);
+                        if ($shouldAbort) {
+                            $earlyAbort = true;
+                            break 2; // Sai do do-while e do while externo
+                        }
+                    } catch (Throwable $callbackErr) {
+                        error_log("[fetchParallel callback error] " . $callbackErr->getMessage());
+                    }
+                }
+            }
+        }
     }
 
-    // Handles que o watchdog interrompeu nunca tiveram curl_multi_info_read()
-    // emitido para eles — removê-los explicitamente da pilha para que
-    // curl_getinfo()/curl_errno() abaixo reflitam um erro de timeout em vez de
-    // um resultado parcial/indefinido.
-    if ($watchdogTripped) {
+    // Handles que o watchdog ou abort antecipado interromperam nunca tiveram
+    // curl_multi_info_read() emitido para eles — removê-los explicitamente da pilha.
+    if ($watchdogTripped || $earlyAbort) {
         foreach ($handles as $ch) {
             curl_multi_remove_handle($mh, $ch);
         }
     }
 
-    // IMPORTANTE: dentro de uma pilha curl_multi, curl_error()/curl_errno() em um
-    // handle isolado não são confiáveis para refletir o resultado real da
-    // transferência (bug real encontrado e confirmado em teste: uma falha SSL
-    // ficava com curl_error() vazio). A forma correta é ler o CURLcode de cada
-    // handle via curl_multi_info_read() ANTES de remover os handles da pilha.
     $errnoByHandle = [];
-    while ($info = curl_multi_info_read($mh)) {
-        $errnoByHandle[(int)$info['handle']] = $info['result'];
+    if (!$earlyAbort) {
+        while ($info = curl_multi_info_read($mh)) {
+            $errnoByHandle[(int)$info['handle']] = $info['result'];
+        }
     }
 
     $results = [];
     foreach ($handles as $key => $ch) {
-        $response = curl_multi_getcontent($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $watchdogKilledThisHandle = $watchdogTripped && !isset($errnoByHandle[(int)$ch]);
-        $curlErrno = $errnoByHandle[(int)$ch] ?? curl_errno($ch);
-        $curlError = $watchdogKilledThisHandle
-            ? 'watchdog: fetchParallel exceeded max wall-clock deadline before curl reported completion'
-            : ($curlErrno !== CURLE_OK ? curl_strerror($curlErrno) : '');
+        $response = '';
+        $httpCode = 0;
+        $curlErrno = CURLE_OK;
+        $curlError = '';
+
+        if (isset($completedResults[$key])) {
+            $response = $completedResults[$key]['res']['body'];
+            $httpCode = $completedResults[$key]['res']['status'];
+            $curlErrno = $completedResults[$key]['resultCode'];
+            $curlError = $completedResults[$key]['res']['error'] ?? '';
+        } else {
+            $response = curl_multi_getcontent($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $watchdogKilledThisHandle = ($watchdogTripped || $earlyAbort) && !isset($errnoByHandle[(int)$ch]);
+            $curlErrno = $errnoByHandle[(int)$ch] ?? curl_errno($ch);
+            $curlError = $earlyAbort
+                ? 'early_abort: fetchParallel aborted early because another request succeeded'
+                : ($watchdogKilledThisHandle
+                    ? 'watchdog: fetchParallel exceeded max wall-clock deadline before curl reported completion'
+                    : ($curlErrno !== CURLE_OK ? curl_strerror($curlErrno) : ''));
+        }
+
         $totalTime = curl_getinfo($ch, CURLINFO_TOTAL_TIME);
         $connectTime = curl_getinfo($ch, CURLINFO_CONNECT_TIME);
         $primaryIp = curl_getinfo($ch, CURLINFO_PRIMARY_IP);
@@ -463,7 +523,9 @@ function fetchParallel($requests, $onHeartbeat = null) {
         ], $m['logCtx'])));
 
         $errorCode = null;
-        if ($watchdogKilledThisHandle) {
+        if ($earlyAbort && !isset($completedResults[$key])) {
+            $errorCode = "{$m['module']}_AI_EARLY_ABORT";
+        } elseif ($watchdogTripped && !isset($completedResults[$key])) {
             $errorCode = "{$m['module']}_AI_WATCHDOG_TIMEOUT";
         } elseif ($curlError) {
             if ($curlErrno === CURLE_OPERATION_TIMEDOUT && $connectTime < 0.01) {
@@ -486,11 +548,13 @@ function fetchParallel($requests, $onHeartbeat = null) {
             },
         ];
 
-        curl_multi_remove_handle($mh, $ch);
+        if (!$watchdogTripped && !$earlyAbort) {
+            curl_multi_remove_handle($mh, $ch);
+        }
         curl_close($ch);
     }
-    curl_multi_close($mh);
 
+    curl_multi_close($mh);
     return $results;
 }
 

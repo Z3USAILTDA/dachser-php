@@ -628,21 +628,63 @@ async function processSeaAnalysisRun({ runId, itemId, analysisType, files, conte
 
     console.log(`[AI_REQUEST_STARTED] [RunID: ${runId}] Calling AI models (Anthropic/Gemini) for Sea Analysis`);
 
-    const [claudeResult, geminiResult] = await Promise.allSettled([
-      seaAnalyzeWithAnthropic(analysisType, files, context),
-      seaAnalyzeWithGemini(analysisType, files, context),
-    ]);
-    const claudeText = claudeResult.status === 'fulfilled' ? claudeResult.value : '';
-    const geminiText = geminiResult.status === 'fulfilled' ? geminiResult.value : '';
-    if (!claudeText && !geminiText) {
-      throw new Error(`Falha nas duas análises: ${claudeResult.reason?.message || ''} ${geminiResult.reason?.message || ''}`.trim());
+    const anthropicPromise = seaAnalyzeWithAnthropic(analysisType, files, context);
+    const geminiPromise = seaAnalyzeWithGemini(analysisType, files, context);
+
+    let earlyText = null;
+    let earlyProvider = null;
+
+    const validationPromises = [
+      anthropicPromise.then(res => {
+        if (res && extractSeaShippingData(res) !== null) {
+          return { provider: 'anthropic', text: res };
+        }
+        throw new Error('Invalid or incomplete output from Anthropic');
+      }),
+      geminiPromise.then(res => {
+        if (res && extractSeaShippingData(res) !== null) {
+          return { provider: 'gemini', text: res };
+        }
+        throw new Error('Invalid or incomplete output from Gemini');
+      })
+    ];
+
+    try {
+      const fastest = await Promise.any(validationPromises);
+      earlyText = fastest.text;
+      earlyProvider = fastest.provider;
+      console.log(`[AI_RESPONSE_RECEIVED] [RunID: ${runId}] Fast-return success from provider: ${earlyProvider}`);
+    } catch (e) {
+      console.log(`[AI_RESPONSE_RECEIVED] [RunID: ${runId}] No fast-return achieved. Waiting for all to complete and arbitrate.`);
     }
 
-    console.log(`[AI_RESPONSE_RECEIVED] [RunID: ${runId}] AI response received. Proceeding to arbitration with OpenAI`);
+    let claudeText = '';
+    let geminiText = '';
 
-    const finalText    = await seaArbitrateWithOpenAI({ analysisType, claudeText, geminiText });
+    if (earlyProvider === 'anthropic') {
+      claudeText = earlyText;
+    } else if (earlyProvider === 'gemini') {
+      geminiText = earlyText;
+    } else {
+      const [claudeResult, geminiResult] = await Promise.allSettled([anthropicPromise, geminiPromise]);
+      claudeText = claudeResult.status === 'fulfilled' ? claudeResult.value : '';
+      geminiText = geminiResult.status === 'fulfilled' ? geminiResult.value : '';
+    }
 
-    console.log(`[RESULT_PARSED] [RunID: ${runId}] OpenAI arbitration response received. Extracting shipping data...`);
+    if (!claudeText && !geminiText) {
+      throw new Error('Falha nas duas análises de IA.');
+    }
+
+    let finalText = '';
+    if (claudeText && geminiText) {
+      console.log(`[AI_RESPONSE_RECEIVED] [RunID: ${runId}] AI response received. Proceeding to arbitration with OpenAI`);
+      finalText = await seaArbitrateWithOpenAI({ analysisType, claudeText, geminiText });
+    } else {
+      console.log(`[AI_RESPONSE_RECEIVED] [RunID: ${runId}] Only one provider result used. Skipping arbitration.`);
+      finalText = claudeText || geminiText;
+    }
+
+    console.log(`[RESULT_PARSED] [RunID: ${runId}] Extracting shipping data...`);
     const shippingData = extractSeaShippingData(finalText);
     const jsonResult   = {
       model: process.env.OPENAI_API_KEY ? 'multi-model-direct-openai-arbitration' : 'multi-model-direct',

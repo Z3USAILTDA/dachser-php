@@ -707,6 +707,9 @@ function processSeaAnalysisRunPHP($runId, $itemId, $analysisType, $files, $conte
     // polling do curl_multi — os dois têm o mesmo sintoma externo (run presa em
     // 'analisando' até o watchdog do endpoint de status), mas exigem correções
     // completamente diferentes.
+    $earlyResult = null;
+    $earlyProvider = null;
+
     $parallelResults = fetchParallel($parallelRequests, function($loopElapsedMs, $stillRunning) use ($runId, &$timing, $startTime) {
         seaPersistTiming($runId, $timing, 'ai_fetch_heartbeat_ms', $startTime);
         try {
@@ -715,26 +718,59 @@ function processSeaAnalysisRunPHP($runId, $itemId, $analysisType, $files, $conte
                 $runId,
             ]);
         } catch (Throwable $e) {}
+    }, function($key, $res) use (&$earlyResult, &$earlyProvider, $analysisType) {
+        if ($res['ok']) {
+            $text = '';
+            try {
+                if ($key === 'anthropic') {
+                    $text = seaParseAnthropicResponse($res);
+                } elseif ($key === 'gemini') {
+                    $text = seaParseGeminiResponse($res);
+                }
+            } catch (Throwable $ex) {
+                error_log("[fetchParallel early check] parse failed for $key: " . $ex->getMessage());
+            }
+
+            if ($text) {
+                $shippingData = extractSeaShippingData($text);
+                if ($shippingData !== null) {
+                    error_log("[fetchParallel early check] Got valid result from $key. Aborting other requests!");
+                    $earlyResult = $text;
+                    $earlyProvider = $key;
+                    return true; // Aborta polling imediatamente!
+                }
+            }
+        }
+        return false;
     });
     seaPersistTiming($runId, $timing, 'ai_parallel_fetch_done_ms', $startTime);
 
     $claudeText = '';
-    if (isset($parallelResults['anthropic'])) {
-        try {
-            $claudeText = seaParseAnthropicResponse($parallelResults['anthropic']);
-            logSeaWorkerStep('SEA_AI_RESPONSE_RECEIVED', $runId, $itemId, $requestId, ['provider' => 'Anthropic', 'chars' => strlen($claudeText)]);
-        } catch (Throwable $ex) {
-            error_log('[worker claude] ' . $ex->getMessage());
-        }
-    }
-
     $geminiText = '';
-    if (isset($parallelResults['gemini'])) {
-        try {
-            $geminiText = seaParseGeminiResponse($parallelResults['gemini']);
-            logSeaWorkerStep('SEA_AI_RESPONSE_RECEIVED', $runId, $itemId, $requestId, ['provider' => 'Gemini', 'chars' => strlen($geminiText)]);
-        } catch (Throwable $ex) {
-            error_log('[worker gemini] ' . $ex->getMessage());
+
+    if ($earlyProvider === 'anthropic') {
+        $claudeText = $earlyResult;
+        logSeaWorkerStep('SEA_AI_RESPONSE_RECEIVED', $runId, $itemId, $requestId, ['provider' => 'Anthropic (early abort)', 'chars' => strlen($claudeText)]);
+    } elseif ($earlyProvider === 'gemini') {
+        $geminiText = $earlyResult;
+        logSeaWorkerStep('SEA_AI_RESPONSE_RECEIVED', $runId, $itemId, $requestId, ['provider' => 'Gemini (early abort)', 'chars' => strlen($geminiText)]);
+    } else {
+        if (isset($parallelResults['anthropic'])) {
+            try {
+                $claudeText = seaParseAnthropicResponse($parallelResults['anthropic']);
+                logSeaWorkerStep('SEA_AI_RESPONSE_RECEIVED', $runId, $itemId, $requestId, ['provider' => 'Anthropic', 'chars' => strlen($claudeText)]);
+            } catch (Throwable $ex) {
+                error_log('[worker claude] ' . $ex->getMessage());
+            }
+        }
+
+        if (isset($parallelResults['gemini'])) {
+            try {
+                $geminiText = seaParseGeminiResponse($parallelResults['gemini']);
+                logSeaWorkerStep('SEA_AI_RESPONSE_RECEIVED', $runId, $itemId, $requestId, ['provider' => 'Gemini', 'chars' => strlen($geminiText)]);
+            } catch (Throwable $ex) {
+                error_log('[worker gemini] ' . $ex->getMessage());
+            }
         }
     }
 
