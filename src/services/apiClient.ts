@@ -22,7 +22,20 @@ async function parseAndCheck(res: Response): Promise<any> {
   // vier inválido/truncado (conexão cortada, HTTP/2 interrompido, etc.),
   // consigamos registrar a resposta bruta recebida antes de decidir se vale
   // a pena tentar novamente — nunca mascarar silenciosamente o problema.
-  const raw = await res.text().catch(() => "");
+  let raw = "";
+  try {
+    raw = await res.text();
+  } catch (readErr) {
+    // O corpo nunca chegou a ser lido (stream cortado a meio caminho — ex.:
+    // ERR_HTTP2_PROTOCOL_ERROR). Isto NÃO é uma resposta vazia legítima:
+    // é uma falha de rede/conexão. Reporta como tal, sem disfarçar.
+    console.error("[apiClient] Conexão interrompida ao ler o corpo da resposta:", {
+      url: res.url,
+      status: res.status,
+      error: readErr instanceof Error ? readErr.message : String(readErr),
+    });
+    throw new Error("Conexao interrompida ao ler a resposta da API (rede/HTTP2). Tente novamente.");
+  }
   let body: any = null;
   let parseFailed = false;
   if (raw) {

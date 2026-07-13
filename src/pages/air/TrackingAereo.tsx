@@ -786,6 +786,7 @@ const TrackingAereo = () => {
       msg.includes("gateway") ||
       msg.includes("resposta invalida") ||
       msg.includes("resposta vazia") ||
+      msg.includes("conexao interrompida") ||
       msg.includes("failed to fetch") ||
       msg.includes("network")
     );

@@ -1125,6 +1125,14 @@ $router->get('air/tracking-aereo', function ($params) {
     error_log("[tracking-aereo][$requestId] request_id gerado");
     error_log("[tracking-aereo][$requestId] início da requisição em " . date('c'));
     error_log("[tracking-aereo][$requestId] parâmetros recebidos: " . json_encode($_GET));
+    // Diagnóstico crítico: o truque de "responder rápido + recalcular em
+    // background via register_shutdown_function" SÓ libera a conexão do
+    // cliente de fato se fastcgi_finish_request() existir neste SAPI. Sob
+    // mod_php/Apache prefork ou lsapi sem FastCGI, o shutdown function roda
+    // ANTES da conexão ser liberada — ou seja, o cliente continuaria esperando
+    // o recompute pesado terminar (o mesmo problema de novo, disfarçado).
+    // Este log confirma, com dados reais de produção, qual é o caso aqui.
+    error_log("[tracking-aereo][$requestId] SAPI=" . PHP_SAPI . " fastcgi_finish_request_disponivel=" . (function_exists('fastcgi_finish_request') ? 'sim' : 'NAO'));
 
     try {
         $force = isset($_GET['force']) ? ($_GET['force'] === '1' || $_GET['force'] === 'true') : false;
