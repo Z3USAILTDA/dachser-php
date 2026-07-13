@@ -243,6 +243,11 @@ function fetch($url, $options = []) {
             $formattedHeaders[] = "$k: $v";
         }
     }
+    // cURL adiciona automaticamente "Expect: 100-continue" em POSTs com corpo >1KB
+    // (nossos payloads com PDF em base64 sempre passam disso). Se algo no caminho
+    // de rede (proxy/WAF da hospedagem) não responder "100 Continue" corretamente,
+    // o cURL fica preso esperando indefinidamente. Desabilita explicitamente.
+    $formattedHeaders[] = 'Expect:';
     curl_setopt($ch, CURLOPT_HTTPHEADER, $formattedHeaders);
 
     if ($body !== null && $body !== false) {
@@ -318,6 +323,12 @@ function fetchParallel($requests) {
     $mh = curl_multi_init();
     $handles = [];
     $meta = [];
+    // Watchdog de parede: cada handle já tem CURLOPT_TIMEOUT individual, mas em
+    // ambientes restritos (Hostinger/LiteSpeed) já observamos o loop de polling
+    // do curl_multi ficar preso indefinidamente sem o timeout individual nunca
+    // disparar (processo trava em 'analisando' para sempre). $watchdogDeadline
+    // força a saída do loop mesmo que o curl_multi nunca reporte conclusão.
+    $watchdogDeadline = 0.0;
 
     foreach ($requests as $key => $req) {
         $method = isset($req['method']) ? strtoupper($req['method']) : 'GET';
@@ -327,6 +338,7 @@ function fetchParallel($requests) {
         $responseTimeout = isset($req['timeout']) ? (int)$req['timeout'] : 300;
         $logCtx = isset($req['logCtx']) ? $req['logCtx'] : [];
         $module = isset($logCtx['module']) ? strtoupper($logCtx['module']) : 'AI';
+        $watchdogDeadline = max($watchdogDeadline, microtime(true) + $connectTimeout + $responseTimeout + 15);
 
         $urlSanitized = preg_replace('/([?&])(key|token|apikey|api_key)=[^&]*/i', '$1***', $req['url']);
         $host = parse_url($req['url'], PHP_URL_HOST) ?: 'unknown';
@@ -349,6 +361,10 @@ function fetchParallel($requests) {
         foreach ($headers as $k => $v) {
             $formattedHeaders[] = is_numeric($k) ? $v : "$k: $v";
         }
+        // Ver nota equivalente em fetch() acima: desabilita "Expect: 100-continue"
+        // automático do cURL, que pode travar indefinidamente em payloads >1KB
+        // (todo request com PDF em base64) dependendo do caminho de rede.
+        $formattedHeaders[] = 'Expect:';
         curl_setopt($ch, CURLOPT_HTTPHEADER, $formattedHeaders);
         if ($body !== null && $body !== false) {
             curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
@@ -361,11 +377,17 @@ function fetchParallel($requests) {
 
     // Roda todas as transferências até que todas terminem (sucesso, erro ou timeout individual)
     $running = null;
+    $watchdogTripped = false;
     do {
         $execStatus = curl_multi_exec($mh, $running);
     } while ($execStatus === CURLM_CALL_MULTI_PERFORM);
 
     while ($running > 0 && $execStatus === CURLM_OK) {
+        if (microtime(true) >= $watchdogDeadline) {
+            $watchdogTripped = true;
+            error_log("[AI_CURL_WATCHDOG_TRIPPED] fetchParallel exceeded max wall-clock deadline, forcing exit. backendVersion=" . BACKEND_API_VERSION);
+            break;
+        }
         $selectResult = curl_multi_select($mh, 1.0);
         if ($selectResult === -1) {
             // Em alguns ambientes/SAPI (como Windows ou LiteSpeed), curl_multi_select retorna -1 imediatamente.
@@ -375,6 +397,16 @@ function fetchParallel($requests) {
         do {
             $execStatus = curl_multi_exec($mh, $running);
         } while ($execStatus === CURLM_CALL_MULTI_PERFORM);
+    }
+
+    // Handles que o watchdog interrompeu nunca tiveram curl_multi_info_read()
+    // emitido para eles — removê-los explicitamente da pilha para que
+    // curl_getinfo()/curl_errno() abaixo reflitam um erro de timeout em vez de
+    // um resultado parcial/indefinido.
+    if ($watchdogTripped) {
+        foreach ($handles as $ch) {
+            curl_multi_remove_handle($mh, $ch);
+        }
     }
 
     // IMPORTANTE: dentro de uma pilha curl_multi, curl_error()/curl_errno() em um
@@ -391,8 +423,11 @@ function fetchParallel($requests) {
     foreach ($handles as $key => $ch) {
         $response = curl_multi_getcontent($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $watchdogKilledThisHandle = $watchdogTripped && !isset($errnoByHandle[(int)$ch]);
         $curlErrno = $errnoByHandle[(int)$ch] ?? curl_errno($ch);
-        $curlError = $curlErrno !== CURLE_OK ? curl_strerror($curlErrno) : '';
+        $curlError = $watchdogKilledThisHandle
+            ? 'watchdog: fetchParallel exceeded max wall-clock deadline before curl reported completion'
+            : ($curlErrno !== CURLE_OK ? curl_strerror($curlErrno) : '');
         $totalTime = curl_getinfo($ch, CURLINFO_TOTAL_TIME);
         $connectTime = curl_getinfo($ch, CURLINFO_CONNECT_TIME);
         $primaryIp = curl_getinfo($ch, CURLINFO_PRIMARY_IP);
@@ -408,7 +443,9 @@ function fetchParallel($requests) {
         ], $m['logCtx'])));
 
         $errorCode = null;
-        if ($curlError) {
+        if ($watchdogKilledThisHandle) {
+            $errorCode = "{$m['module']}_AI_WATCHDOG_TIMEOUT";
+        } elseif ($curlError) {
             if ($curlErrno === CURLE_OPERATION_TIMEDOUT && $connectTime < 0.01) {
                 $errorCode = "{$m['module']}_AI_CONNECTION_TIMEOUT";
             } elseif ($curlErrno === CURLE_OPERATION_TIMEDOUT) {
