@@ -6,7 +6,7 @@
 // Exposta em /api/health, /api/test-deploy e nos logs estruturados SEA_*/CHB_*
 // para permitir confirmar qual código está realmente em produção (não confundir
 // com a versão do frontend).
-define('BACKEND_API_VERSION', '2026.07.10-sea-chb-worker-fix-9-stage-timing');
+define('BACKEND_API_VERSION', '2026.07.13-sea-optimize-v1');
 
 /**
  * Normaliza uma data vinda de extração de IA para o formato SQL (Y-m-d) ou NULL.
