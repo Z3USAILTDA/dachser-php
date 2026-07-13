@@ -586,6 +586,8 @@ const TrackingAereo = () => {
 
   const itemsPerPage = 10;
   const isFetchingRef = useRef(false);
+  const fetchAbortRef = useRef<AbortController | null>(null);
+  const fetchGenerationRef = useRef(0);
   const awbsDataRef  = useRef<AWBData[]>([]);
   const [isProgressiveLoading, setIsProgressiveLoading] = useState(false);
   const [loadedCount, setLoadedCount] = useState(() => {
@@ -769,10 +771,43 @@ const TrackingAereo = () => {
   // Busca os dados na API interna (/api/air/tracking-aereo) — banco próprio, sem Supabase.
   const isProgressiveLoadingRef = useRef(false);
 
+  const MAX_FETCH_ATTEMPTS = 3;
+
+  // Um erro é considerado transitório (elegível a retry) quando indica falha de
+  // rede/timeout/gateway ou JSON inválido — sintomas de uma conexão cortada no
+  // meio do caminho. Erros de negócio (validação, 4xx, etc.) não são retried.
+  const isTransientFetchError = (err: any): boolean => {
+    const msg = (err?.message || "").toLowerCase();
+    return (
+      msg.includes("504") ||
+      msg.includes("502") ||
+      msg.includes("503") ||
+      msg.includes("timeout") ||
+      msg.includes("gateway") ||
+      msg.includes("resposta invalida") ||
+      msg.includes("resposta vazia") ||
+      msg.includes("failed to fetch") ||
+      msg.includes("network")
+    );
+  };
+
   const fetchData = useCallback(async (force = false, isPoll = false) => {
-    if (isFetchingRef.current && !force) return;
-    
+    // Single-flight real: se já existe uma requisição em andamento e esta não é
+    // forçada, não empilha outra (evita concorrência com o polling/mount).
+    // Se for forçada (clique em "Atualizar"), cancela a requisição anterior via
+    // AbortController em vez de deixar as duas rodarem em paralelo contra o
+    // mesmo backend — foi essa sobreposição que sobrecarregava o PHP-FPM/DB e
+    // gerava os 504/ERR_HTTP2_PROTOCOL_ERROR intermitentes.
+    if (isFetchingRef.current) {
+      if (!force) return;
+      fetchAbortRef.current?.abort();
+    }
+
+    const generation = ++fetchGenerationRef.current;
+    const controller = new AbortController();
+    fetchAbortRef.current = controller;
     isFetchingRef.current = true;
+
     if (!isPoll) {
       setIsLoadingData(true);
       setLoadedCount(0);
@@ -783,56 +818,85 @@ const TrackingAereo = () => {
         setAwbsData([]);
       }
     }
-    
-    // Safety valve: always release loading after 90 s no matter what
+
+    // Safety valve: always release loading after 90 s no matter what — mas só
+    // se esta ainda for a requisição "vigente" (não superada por outra mais nova).
     const safetyTimer = setTimeout(() => {
+      if (fetchGenerationRef.current !== generation) return;
       setIsLoadingData(false);
       isFetchingRef.current = false;
     }, 90000);
 
-    try {
-      // Modificado para carregar todos os registros de uma vez só usando all: true
-      const body = await getAirTrackingAereo({ force, all: true });
-      if (body?.success) {
-        const rawItems = Array.isArray(body.items) ? body.items : (Array.isArray(body.data) ? body.data : []);
-        const mapped = mapItems(rawItems);
-        
-        // Carga inicial ou Polling/Revalidação: atualiza o estado e o cache global de uma vez só
-        awbsDataRef.current = mapped;
-        setAwbsData(mapped);
-        setLoadedCount(mapped.length);
+    let lastError: any = null;
 
-        trackingCache = {
-          awbsData: mapped,
-          loadedCount: mapped.length,
-          nextCursor: null,
-          isFullyLoaded: true
-        };
-      } else {
-        throw new Error(body?.error || "Resposta inválida da API de tracking aéreo.");
+    try {
+      for (let attempt = 1; attempt <= MAX_FETCH_ATTEMPTS; attempt++) {
+        try {
+          // Modificado para carregar todos os registros de uma vez só usando all: true
+          const body = await getAirTrackingAereo({ force, all: true, signal: controller.signal });
+
+          // Uma requisição mais nova já assumiu — descarta este resultado silenciosamente.
+          if (fetchGenerationRef.current !== generation) return;
+
+          if (body?.success) {
+            const rawItems = Array.isArray(body.items) ? body.items : (Array.isArray(body.data) ? body.data : []);
+            const mapped = mapItems(rawItems);
+
+            // Carga inicial ou Polling/Revalidação: atualiza o estado e o cache global de uma vez só
+            awbsDataRef.current = mapped;
+            setAwbsData(mapped);
+            setLoadedCount(mapped.length);
+
+            trackingCache = {
+              awbsData: mapped,
+              loadedCount: mapped.length,
+              nextCursor: null,
+              isFullyLoaded: true
+            };
+            lastError = null;
+            break;
+          } else {
+            throw new Error(body?.error || "Resposta inválida da API de tracking aéreo.");
+          }
+        } catch (err: any) {
+          // Cancelado por uma requisição mais nova (force) — não é erro real, não retry, não toast.
+          if (err?.name === "AbortError") return;
+          if (fetchGenerationRef.current !== generation) return;
+
+          lastError = err;
+          console.error(`[tracking-aereo] fetchData tentativa ${attempt}/${MAX_FETCH_ATTEMPTS}:`, err);
+
+          const canRetry = attempt < MAX_FETCH_ATTEMPTS && isTransientFetchError(err);
+          if (!canRetry) break;
+
+          // Pequeno intervalo progressivo entre tentativas (1s, 2s, ...).
+          await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+        }
       }
-    } catch (err) {
-      console.error("[tracking-aereo] fetchData:", err);
-      
-      // Tratamento específico de timeout/504
-      const errorMsg = (err as any)?.message?.toLowerCase() || "";
-      const is504 = errorMsg.includes("504") || errorMsg.includes("timeout") || errorMsg.includes("gateway");
-      
-      // Só alerta o usuário se ainda não há dados em tela (evita toasts no polling).
-      if (awbsDataRef.current.length === 0) {
-        toast({
-          title: is504 ? "Servidor indisponível" : "Erro ao carregar dados",
-          description: is504 
-            ? "O servidor está temporariamente indisponível. Tentando reconectar em 30 segundos..."
-            : "Não foi possível conectar à API de tracking aéreo. Verifique se o backend está ativo e tente novamente.",
-          variant: "destructive",
-        });
+
+      if (lastError && fetchGenerationRef.current === generation) {
+        const errorMsg = (lastError.message || "").toLowerCase();
+        const is504 = errorMsg.includes("504") || errorMsg.includes("timeout") || errorMsg.includes("gateway");
+
+        // Só alerta o usuário se ainda não há dados em tela (evita toasts no polling)
+        // e somente depois de esgotar as tentativas — nunca no primeiro erro.
+        if (awbsDataRef.current.length === 0) {
+          toast({
+            title: is504 ? "Servidor indisponível" : "Erro ao carregar dados",
+            description: is504
+              ? "O servidor está temporariamente indisponível. Tentando reconectar em 30 segundos..."
+              : "Não foi possível conectar à API de tracking aéreo. Verifique se o backend está ativo e tente novamente.",
+            variant: "destructive",
+          });
+        }
       }
-      setIsLoadingData(false);
     } finally {
       clearTimeout(safetyTimer);
-      setIsLoadingData(false);
-      isFetchingRef.current = false;
+      if (fetchGenerationRef.current === generation) {
+        setIsLoadingData(false);
+        isFetchingRef.current = false;
+        if (fetchAbortRef.current === controller) fetchAbortRef.current = null;
+      }
     }
   }, [mapItems, toast]);
 

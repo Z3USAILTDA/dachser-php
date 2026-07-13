@@ -18,18 +18,42 @@ export function apiUrl(path: string): string {
 }
 
 async function parseAndCheck(res: Response): Promise<any> {
+  // Lê como texto primeiro (em vez de res.json() direto) para que, se o JSON
+  // vier inválido/truncado (conexão cortada, HTTP/2 interrompido, etc.),
+  // consigamos registrar a resposta bruta recebida antes de decidir se vale
+  // a pena tentar novamente — nunca mascarar silenciosamente o problema.
+  const raw = await res.text().catch(() => "");
   let body: any = null;
-  try {
-    body = await res.json();
-  } catch {
-    body = null;
+  let parseFailed = false;
+  if (raw) {
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      parseFailed = true;
+    }
   }
+
   if (!res.ok) {
     const msg = body?.error || `Erro ${res.status} ao comunicar com a API`;
     throw new Error(msg);
   }
-  if (body === null && res.status !== 204) {
+
+  if (parseFailed) {
+    console.error("[apiClient] JSON inválido recebido do backend:", {
+      url: res.url,
+      status: res.status,
+      bodySnippet: raw.slice(0, 1000),
+    });
     throw new Error("Resposta invalida da API. Verifique se o backend esta publicado e se /api esta encaminhando para o servidor.");
+  }
+
+  if (body === null && res.status !== 204 && raw.length > 0) {
+    throw new Error("Resposta invalida da API. Verifique se o backend esta publicado e se /api esta encaminhando para o servidor.");
+  }
+
+  if (body === null && res.status !== 204 && raw.length === 0) {
+    console.error("[apiClient] Resposta vazia do backend:", { url: res.url, status: res.status });
+    throw new Error("Resposta vazia da API. Verifique se o backend esta publicado e se /api esta encaminhando para o servidor.");
   }
 
   return body;
