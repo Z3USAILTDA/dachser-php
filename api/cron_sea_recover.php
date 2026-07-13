@@ -29,7 +29,19 @@ set_time_limit(1200);
 ini_set('memory_limit', '1024M');
 
 require_once __DIR__ . '/env.php';
-loadEnv(dirname(__DIR__) . '/.env');
+
+$envDirs = [
+    dirname(__DIR__, 2) . '/.env',
+    dirname(__DIR__, 2) . '/app.env',
+    dirname(__DIR__) . '/.env',
+    dirname(__DIR__) . '/app.env'
+];
+foreach ($envDirs as $path) {
+    if (file_exists($path)) {
+        loadEnv($path);
+        break;
+    }
+}
 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/router.php';
