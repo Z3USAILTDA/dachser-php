@@ -38,15 +38,21 @@ export interface AirTrackingParams {
   cursor_id?: number | null;
   /** Aborta a requisição (timeout/cancelamento). */
   signal?: AbortSignal;
+  /** Carrega todos os registros de uma vez (ignora paginação). */
+  all?: boolean;
 }
 
 /** Lista principal de processos aéreos (alimenta tabela e cards). */
 export async function getAirTrackingAereo(params: AirTrackingParams = {}): Promise<AirTrackingResponse> {
   const query = new URLSearchParams();
   if (params.force) query.set("force", "1");
-  if (params.limit !== undefined && params.limit !== null) query.set("limit", String(params.limit));
-  if (params.cursor_data) query.set("cursor_data", params.cursor_data);
-  if (params.cursor_id !== undefined && params.cursor_id !== null) query.set("cursor_id", String(params.cursor_id));
+  if (params.all) {
+    query.set("all", "1");
+  } else {
+    if (params.limit !== undefined && params.limit !== null) query.set("limit", String(params.limit));
+    if (params.cursor_data) query.set("cursor_data", params.cursor_data);
+    if (params.cursor_id !== undefined && params.cursor_id !== null) query.set("cursor_id", String(params.cursor_id));
+  }
   
   const qs = query.toString();
   return apiGet(`/api/air/tracking-aereo${qs ? `?${qs}` : ""}`, {

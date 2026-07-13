@@ -771,14 +771,9 @@ const TrackingAereo = () => {
 
   const fetchData = useCallback(async (force = false, isPoll = false) => {
     if (isFetchingRef.current && !force) return;
-    if (isProgressiveLoadingRef.current && !force) return;
     
     isFetchingRef.current = true;
     if (!isPoll) {
-      // Cancel any ongoing progressive load
-      progressiveLoadIdRef.current++;
-      isProgressiveLoadingRef.current = true;
-      setIsProgressiveLoading(true);
       setIsLoadingData(true);
       setLoadedCount(0);
 
@@ -792,62 +787,27 @@ const TrackingAereo = () => {
     // Safety valve: always release loading after 90 s no matter what
     const safetyTimer = setTimeout(() => {
       setIsLoadingData(false);
-      isProgressiveLoadingRef.current = false;
-      setIsProgressiveLoading(false);
       isFetchingRef.current = false;
     }, 90000);
 
     try {
-      const body = await getAirTrackingAereo({ force, limit: 50 });
+      // Modificado para carregar todos os registros de uma vez só usando all: true
+      const body = await getAirTrackingAereo({ force, all: true });
       if (body?.success) {
         const rawItems = Array.isArray(body.items) ? body.items : (Array.isArray(body.data) ? body.data : []);
         const mapped = mapItems(rawItems);
         
-        if (isPoll) {
-          // Polling/Revalidação: faz merge das atualizações no state e no cache
-          setAwbsData(prev => {
-            const prevMap = new Map(prev.map(i => [`${i.awb}|${i.hawb}`, i]));
-            mapped.forEach(item => {
-              prevMap.set(`${item.awb}|${item.hawb}`, item);
-            });
-            const nextVal = Array.from(prevMap.values());
-            
-            if (trackingCache) {
-              trackingCache.awbsData = nextVal;
-              trackingCache.loadedCount = nextVal.length;
-            } else {
-              trackingCache = {
-                awbsData: nextVal,
-                loadedCount: nextVal.length,
-                nextCursor: body.next_cursor || null,
-                isFullyLoaded: !body.next_cursor
-              };
-            }
-            
-            return nextVal;
-          });
-        } else {
-          // Initial load: overwrite
-          awbsDataRef.current = mapped;
-          setAwbsData(mapped);
-          setLoadedCount(mapped.length);
+        // Carga inicial ou Polling/Revalidação: atualiza o estado e o cache global de uma vez só
+        awbsDataRef.current = mapped;
+        setAwbsData(mapped);
+        setLoadedCount(mapped.length);
 
-          const cursor = body.next_cursor;
-          
-          trackingCache = {
-            awbsData: mapped,
-            loadedCount: mapped.length,
-            nextCursor: cursor || null,
-            isFullyLoaded: !cursor
-          };
-
-          if (cursor) {
-            progressiveLoadLoop(force, cursor);
-          } else {
-            isProgressiveLoadingRef.current = false;
-            setIsProgressiveLoading(false);
-          }
-        }
+        trackingCache = {
+          awbsData: mapped,
+          loadedCount: mapped.length,
+          nextCursor: null,
+          isFullyLoaded: true
+        };
       } else {
         throw new Error(body?.error || "Resposta inválida da API de tracking aéreo.");
       }
@@ -868,15 +828,13 @@ const TrackingAereo = () => {
           variant: "destructive",
         });
       }
-      isProgressiveLoadingRef.current = false;
-      setIsProgressiveLoading(false);
       setIsLoadingData(false);
     } finally {
       clearTimeout(safetyTimer);
       setIsLoadingData(false);
       isFetchingRef.current = false;
     }
-  }, [mapItems, toast, progressiveLoadLoop]);
+  }, [mapItems, toast]);
 
   // A detecção de discrepância é feita no backend via SQL em /api/air/tracking-aereo.
 
@@ -903,13 +861,6 @@ const TrackingAereo = () => {
         
         // Dispara revalidação em background (tipo polling)
         fetchData(false, true);
-        
-        // Se a carga progressiva anterior não terminou e temos cursor, retoma
-        if (!trackingCache.isFullyLoaded && trackingCache.nextCursor) {
-          isProgressiveLoadingRef.current = true;
-          setIsProgressiveLoading(true);
-          progressiveLoadLoop(false, trackingCache.nextCursor);
-        }
       } else {
         // Carga inicial limpa
         fetchData(false, false);
@@ -922,7 +873,7 @@ const TrackingAereo = () => {
     }, 30000);
     
     return () => { clearInterval(interval); };
-  }, [isVisible, fetchData, isAdminUser, location.pathname, progressiveLoadLoop]);
+  }, [isVisible, fetchData, isAdminUser, location.pathname]);
 
 
 

@@ -1069,12 +1069,17 @@ function computeTrackingData($forceRecompute = false, $daysLimit = null, $limit 
 // GET /api/air/tracking-aereo
 $router->get('air/tracking-aereo', function ($params) {
     try {
-        $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 100; // Default to 100 to prevent 504 on old frontend
-        $cursor_data = isset($_GET['cursor_data']) ? $_GET['cursor_data'] : null;
-        $cursor_id = isset($_GET['cursor_id']) ? intval($_GET['cursor_id']) : null;
         $force = isset($_GET['force']) ? ($_GET['force'] === '1' || $_GET['force'] === 'true') : false;
+        $all = isset($_GET['all']) ? ($_GET['all'] === '1' || $_GET['all'] === 'true') : false;
 
-        $result = computeTrackingData($force, null, $limit, $cursor_data, $cursor_id);
+        if ($all) {
+            $result = computeTrackingData($force, null, null);
+        } else {
+            $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 100; // Default to 100 to prevent 504 on old frontend
+            $cursor_data = isset($_GET['cursor_data']) ? $_GET['cursor_data'] : null;
+            $cursor_id = isset($_GET['cursor_id']) ? intval($_GET['cursor_id']) : null;
+            $result = computeTrackingData($force, null, $limit, $cursor_data, $cursor_id);
+        }
         sendJson($result);
     } catch (Exception $e) {
         error_log('[GET air/tracking-aereo] ' . $e->getMessage());
