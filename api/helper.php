@@ -245,7 +245,7 @@ function fetch($url, $options = []) {
     }
     curl_setopt($ch, CURLOPT_HTTPHEADER, $formattedHeaders);
 
-    if ($body !== null) {
+    if ($body !== null && $body !== false) {
         curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
     }
 
@@ -350,7 +350,7 @@ function fetchParallel($requests) {
             $formattedHeaders[] = is_numeric($k) ? $v : "$k: $v";
         }
         curl_setopt($ch, CURLOPT_HTTPHEADER, $formattedHeaders);
-        if ($body !== null) {
+        if ($body !== null && $body !== false) {
             curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
         }
 

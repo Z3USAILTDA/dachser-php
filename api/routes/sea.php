@@ -492,11 +492,34 @@ function seaBuildGeminiRequest($analysisType, $files, $context = [], $logCtx = [
     }
 
     $isPdfOrImage = $mime === 'application/pdf' || strpos($mime, 'image/') === 0 || preg_match('/\.pdf$/i', $name);
+    $isExcel = preg_match('/spreadsheet|excel/i', $mime) || preg_match('/\.(xlsx|xls)$/i', $name);
 
     if ($base64 && $isPdfOrImage) {
       $parts[] = ['type' => 'image_url', 'image_url' => ['url' => "data:" . ($mime ?: 'application/pdf') . ";base64,$base64"]];
+    } elseif ($base64 && $isExcel) {
+      try {
+          $rows = parseXlsxSimple($base64);
+          $text = "[Arquivo Excel: $name]\n";
+          $count = 0;
+          foreach ($rows as $row) {
+              $line = implode(' | ', array_filter(array_map('trim', $row)));
+              if ($line) {
+                  $text .= "$line\n";
+                  $count++;
+              }
+              if ($count > 300) break;
+          }
+          $parts[] = ['type' => 'text', 'text' => $text];
+      } catch (Exception $e) {
+          $parts[] = ['type' => 'text', 'text' => "[Arquivo Excel: $name] - erro ao extrair planilha: " . $e->getMessage()];
+      }
     } elseif ($base64) {
-      $parts[] = ['type' => 'text', 'text' => "[Arquivo: $name]\n" . base64_decode($base64)];
+      $decoded = base64_decode($base64);
+      if (mb_check_encoding($decoded, 'UTF-8')) {
+          $parts[] = ['type' => 'text', 'text' => "[Arquivo: $name]\n" . $decoded];
+      } else {
+          $parts[] = ['type' => 'text', 'text' => "[Arquivo Binário: $name - " . strlen($decoded) . " bytes]"];
+      }
     }
     $parts[] = ['type' => 'text', 'text' => "[Arquivo: $name]"];
   }
