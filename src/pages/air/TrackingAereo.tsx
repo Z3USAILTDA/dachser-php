@@ -678,34 +678,29 @@ const TrackingAereo = () => {
 
   // Carrega os dados da tela numa única requisição — sem cache, sem polling,
   // sem paginação. O botão "Atualizar" chama exatamente a mesma função.
+  //
+  // Sem timeout artificial no cliente: a consulta no backend agora é sempre
+  // síncrona e sem cache (por decisão explícita — preferir esperar a ter
+  // dados incorretos/erros intermitentes), então pode legitimamente levar
+  // mais de alguns segundos. Um AbortController com timeout curto aqui só
+  // mataria requisições válidas que ainda estavam em andamento.
   const loadTrackingData = useCallback(async () => {
     if (isFetchingRef.current) return; // evita requisições simultâneas
     isFetchingRef.current = true;
     setIsLoadingData(true);
     setLoadError(null);
 
-    // Timeout defensivo: evita spinner travado para sempre numa conexão
-    // pendurada. Não é retry — só diferencia "timeout" de outros erros.
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
-
     try {
-      const body = await getAirTrackingAereo({ signal: controller.signal });
+      const body = await getAirTrackingAereo();
       if (!body?.success) {
         throw new Error(body?.message || body?.error || "Não foi possível carregar os dados do Tracking Aéreo.");
       }
       const mapped = mapItems(Array.isArray(body.data) ? body.data : []);
       setAwbsData(mapped);
     } catch (err: any) {
-      const isTimeout = err?.name === "AbortError";
       console.error("[tracking-aereo] loadTrackingData:", err);
-      setLoadError(
-        isTimeout
-          ? "Tempo limite excedido ao carregar os dados. Tente novamente."
-          : (err?.message || "Não foi possível carregar os dados do Tracking Aéreo.")
-      );
+      setLoadError(err?.message || "Não foi possível carregar os dados do Tracking Aéreo.");
     } finally {
-      clearTimeout(timeoutId);
       setIsLoadingData(false);
       isFetchingRef.current = false;
     }
