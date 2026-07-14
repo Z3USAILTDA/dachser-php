@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { usePageVisibility } from "@/hooks/usePageVisibility";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAirPageView, trackEvent } from "@/services/airTelemetry";
 import {
   getAirTrackingAereo,
@@ -534,27 +534,16 @@ interface SessionUser {
   username?: string;
 }
 
-interface AirTrackingCache {
-  awbsData: AWBData[];
-  loadedCount: number;
-  nextCursor: { cursor_data: string; cursor_id: number } | null;
-  isFullyLoaded: boolean;
-}
-
-let trackingCache: AirTrackingCache | null = null;
-
 const TrackingAereo = () => {
   useAirPageView("/air/tracking-aereo");
   const navigate = useNavigate();
-  const location = useLocation();
   const { toast } = useToast();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [regrasOpen, setRegrasOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [awbsData, setAwbsData] = useState<AWBData[]>(() => {
-    return trackingCache ? trackingCache.awbsData : [];
-  });
-  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [awbsData, setAwbsData] = useState<AWBData[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterAirline, setFilterAirline] = useState("all");
   const [filterAnalyst, setFilterAnalyst] = useState("all");
@@ -586,14 +575,6 @@ const TrackingAereo = () => {
 
   const itemsPerPage = 10;
   const isFetchingRef = useRef(false);
-  const fetchAbortRef = useRef<AbortController | null>(null);
-  const fetchGenerationRef = useRef(0);
-  const awbsDataRef  = useRef<AWBData[]>([]);
-  const [isProgressiveLoading, setIsProgressiveLoading] = useState(false);
-  const [loadedCount, setLoadedCount] = useState(() => {
-    return trackingCache ? trackingCache.loadedCount : 0;
-  });
-  const progressiveLoadIdRef = useRef(0);
 
   // Usuário logado (localStorage) — sem Supabase Auth.
   useEffect(() => {
@@ -695,264 +676,65 @@ const TrackingAereo = () => {
     }, []);
   }, []);
 
-  // Progressive load background loop
-  const progressiveLoadLoop = useCallback(async (force: boolean, initialCursor: { cursor_data: string; cursor_id: number }) => {
-    const loadId = ++progressiveLoadIdRef.current;
-    let cursor: typeof initialCursor | null = initialCursor;
-    let pageCount = 1;
-    
-    while (cursor) {
-      if (loadId !== progressiveLoadIdRef.current) {
-        console.log(`[tracking-aereo] progressiveLoad cancelled for ID ${loadId}`);
-        return;
-      }
-
-      // Adiciona throttling (800ms de delay) a partir da página 3 (após carregar os primeiros 100 registros)
-      if (pageCount >= 3) {
-        await new Promise(resolve => setTimeout(resolve, 800));
-      }
-      
-      try {
-        const res = await getAirTrackingAereo({
-          force,
-          limit: 50,
-          cursor_data: cursor.cursor_data,
-          cursor_id: cursor.cursor_id
-        });
-        
-        if (loadId !== progressiveLoadIdRef.current) return;
-        
-        if (res?.success) {
-          pageCount++;
-          const rawItems = Array.isArray(res.items) ? res.items : (Array.isArray(res.data) ? res.data : []);
-          const mapped = mapItems(rawItems);
-          if (mapped.length > 0) {
-            awbsDataRef.current = [...awbsDataRef.current, ...mapped];
-            setAwbsData(prev => {
-              const prevMap = new Map(prev.map(i => [`${i.awb}|${i.hawb}`, i]));
-              mapped.forEach(item => {
-                prevMap.set(`${item.awb}|${item.hawb}`, item);
-              });
-              const nextVal = Array.from(prevMap.values());
-              
-              // Atualiza o cache global
-              trackingCache = {
-                awbsData: nextVal,
-                loadedCount: nextVal.length,
-                nextCursor: res.next_cursor || null,
-                isFullyLoaded: !res.next_cursor
-              };
-              
-              return nextVal;
-            });
-            setLoadedCount(prev => prev + mapped.length);
-          }
-          cursor = res.next_cursor || null;
-        } else {
-          console.warn("[tracking-aereo] Progressive load failed status:", res?.error);
-          break;
-        }
-      } catch (err) {
-        console.error("[tracking-aereo] progressiveLoad error:", err);
-        toast({
-          title: "Erro no carregamento de dados históricos",
-          description: "Ocorreu um erro ao carregar os dados mais antigos. Exibindo dados carregados até o momento.",
-          variant: "destructive"
-        });
-        break;
-      }
-    }
-    
-    if (loadId === progressiveLoadIdRef.current) {
-      setIsProgressiveLoading(false);
-    }
-  }, [mapItems, toast]);
-
-  // Busca os dados na API interna (/api/air/tracking-aereo) — banco próprio, sem Supabase.
-  const isProgressiveLoadingRef = useRef(false);
-
-  const MAX_FETCH_ATTEMPTS = 3;
-
-  // Um erro é considerado transitório (elegível a retry) quando indica falha de
-  // rede/timeout/gateway ou JSON inválido — sintomas de uma conexão cortada no
-  // meio do caminho. Erros de negócio (validação, 4xx, etc.) não são retried.
-  const isTransientFetchError = (err: any): boolean => {
-    const msg = (err?.message || "").toLowerCase();
-    return (
-      msg.includes("504") ||
-      msg.includes("502") ||
-      msg.includes("503") ||
-      msg.includes("timeout") ||
-      msg.includes("gateway") ||
-      msg.includes("resposta invalida") ||
-      msg.includes("resposta vazia") ||
-      msg.includes("conexao interrompida") ||
-      msg.includes("failed to fetch") ||
-      msg.includes("network")
-    );
-  };
-
-  const fetchData = useCallback(async (force = false, isPoll = false) => {
-    // Single-flight real: se já existe uma requisição em andamento e esta não é
-    // forçada, não empilha outra (evita concorrência com o polling/mount).
-    // Se for forçada (clique em "Atualizar"), cancela a requisição anterior via
-    // AbortController em vez de deixar as duas rodarem em paralelo contra o
-    // mesmo backend — foi essa sobreposição que sobrecarregava o PHP-FPM/DB e
-    // gerava os 504/ERR_HTTP2_PROTOCOL_ERROR intermitentes.
-    if (isFetchingRef.current) {
-      if (!force) return;
-      fetchAbortRef.current?.abort();
-    }
-
-    const generation = ++fetchGenerationRef.current;
-    const controller = new AbortController();
-    fetchAbortRef.current = controller;
+  // Carrega os dados da tela numa única requisição — sem cache, sem polling,
+  // sem paginação. O botão "Atualizar" chama exatamente a mesma função.
+  const loadTrackingData = useCallback(async () => {
+    if (isFetchingRef.current) return; // evita requisições simultâneas
     isFetchingRef.current = true;
+    setIsLoadingData(true);
+    setLoadError(null);
 
-    if (!isPoll) {
-      setIsLoadingData(true);
-      setLoadedCount(0);
-
-      // Se for um refresh forçado (clique manual do usuário), limpamos o cache para recarregar tudo do zero
-      if (force) {
-        trackingCache = null;
-        setAwbsData([]);
-      }
-    }
-
-    // Safety valve: always release loading after 90 s no matter what — mas só
-    // se esta ainda for a requisição "vigente" (não superada por outra mais nova).
-    const safetyTimer = setTimeout(() => {
-      if (fetchGenerationRef.current !== generation) return;
-      setIsLoadingData(false);
-      isFetchingRef.current = false;
-    }, 90000);
-
-    let lastError: any = null;
+    // Timeout defensivo: evita spinner travado para sempre numa conexão
+    // pendurada. Não é retry — só diferencia "timeout" de outros erros.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     try {
-      for (let attempt = 1; attempt <= MAX_FETCH_ATTEMPTS; attempt++) {
-        try {
-          // Modificado para carregar todos os registros de uma vez só usando all: true
-          const body = await getAirTrackingAereo({ force, all: true, signal: controller.signal });
-
-          // Uma requisição mais nova já assumiu — descarta este resultado silenciosamente.
-          if (fetchGenerationRef.current !== generation) return;
-
-          if (body?.success) {
-            const rawItems = Array.isArray(body.items) ? body.items : (Array.isArray(body.data) ? body.data : []);
-            const mapped = mapItems(rawItems);
-
-            // Carga inicial ou Polling/Revalidação: atualiza o estado e o cache global de uma vez só
-            awbsDataRef.current = mapped;
-            setAwbsData(mapped);
-            setLoadedCount(mapped.length);
-
-            trackingCache = {
-              awbsData: mapped,
-              loadedCount: mapped.length,
-              nextCursor: null,
-              isFullyLoaded: true
-            };
-            lastError = null;
-            break;
-          } else {
-            throw new Error(body?.error || "Resposta inválida da API de tracking aéreo.");
-          }
-        } catch (err: any) {
-          // Cancelado por uma requisição mais nova (force) — não é erro real, não retry, não toast.
-          if (err?.name === "AbortError") return;
-          if (fetchGenerationRef.current !== generation) return;
-
-          lastError = err;
-          console.error(`[tracking-aereo] fetchData tentativa ${attempt}/${MAX_FETCH_ATTEMPTS}:`, err);
-
-          const canRetry = attempt < MAX_FETCH_ATTEMPTS && isTransientFetchError(err);
-          if (!canRetry) break;
-
-          // Pequeno intervalo progressivo entre tentativas (1s, 2s, ...).
-          await new Promise(resolve => setTimeout(resolve, attempt * 1000));
-        }
+      const body = await getAirTrackingAereo({ signal: controller.signal });
+      if (!body?.success) {
+        throw new Error(body?.message || body?.error || "Não foi possível carregar os dados do Tracking Aéreo.");
       }
-
-      if (lastError && fetchGenerationRef.current === generation) {
-        const errorMsg = (lastError.message || "").toLowerCase();
-        const is504 = errorMsg.includes("504") || errorMsg.includes("timeout") || errorMsg.includes("gateway");
-
-        // Só alerta o usuário se ainda não há dados em tela (evita toasts no polling)
-        // e somente depois de esgotar as tentativas — nunca no primeiro erro.
-        if (awbsDataRef.current.length === 0) {
-          toast({
-            title: is504 ? "Servidor indisponível" : "Erro ao carregar dados",
-            description: is504
-              ? "O servidor está temporariamente indisponível. Tentando reconectar em 30 segundos..."
-              : "Não foi possível conectar à API de tracking aéreo. Verifique se o backend está ativo e tente novamente.",
-            variant: "destructive",
-          });
-        }
-      }
+      const mapped = mapItems(Array.isArray(body.data) ? body.data : []);
+      setAwbsData(mapped);
+    } catch (err: any) {
+      const isTimeout = err?.name === "AbortError";
+      console.error("[tracking-aereo] loadTrackingData:", err);
+      setLoadError(
+        isTimeout
+          ? "Tempo limite excedido ao carregar os dados. Tente novamente."
+          : (err?.message || "Não foi possível carregar os dados do Tracking Aéreo.")
+      );
     } finally {
-      clearTimeout(safetyTimer);
-      if (fetchGenerationRef.current === generation) {
-        setIsLoadingData(false);
-        isFetchingRef.current = false;
-        if (fetchAbortRef.current === controller) fetchAbortRef.current = null;
-      }
+      clearTimeout(timeoutId);
+      setIsLoadingData(false);
+      isFetchingRef.current = false;
     }
-  }, [mapItems, toast]);
+  }, [mapItems]);
 
-  // A detecção de discrepância é feita no backend via SQL em /api/air/tracking-aereo.
-
-  // Acesso liberado a todos os usuários para carregamento dos processos desta tela
-  const isAdminUser = true;
+  useEffect(() => {
+    loadTrackingData();
+  }, [loadTrackingData]);
 
   const isVisible = usePageVisibility();
-  const isFirstMountRef = useRef(true);
 
+  // Discrepâncias de troca de master: lista independente (tabela própria,
+  // sem relação com o pipeline principal), atualizada a cada 60s só enquanto
+  // a aba está visível.
   useEffect(() => {
-    if (location.pathname !== "/air/tracking-aereo") {
-      return;
-    }
     if (!isVisible) return;
-    if (!isAdminUser) { setIsLoadingData(false); return; }
-    
-    if (isFirstMountRef.current) {
-      isFirstMountRef.current = false;
-      
-      if (trackingCache) {
-        // Inicializa a partir do cache instantaneamente
-        awbsDataRef.current = trackingCache.awbsData;
-        setIsLoadingData(false);
-        
-        // Dispara revalidação em background (tipo polling)
-        fetchData(false, true);
-      } else {
-        // Carga inicial limpa
-        fetchData(false, false);
-      }
-    }
-    
-    // Configura o polling
-    const interval = setInterval(() => {
-      fetchData(false, true);
-    }, 30000);
-    
-    return () => { clearInterval(interval); };
-  }, [isVisible, fetchData, isAdminUser, location.pathname]);
-
-
-
-  useEffect(() => {
+    let cancelled = false;
     const load = async () => {
       try {
         const data = await getMasterDiscrepancies();
-        if (data?.success && Array.isArray(data.data)) setDiscrepancies(data.data);
-      } catch (e) { console.warn("[discrepancy_list]", e); }
+        if (!cancelled && data?.success && Array.isArray(data.data)) setDiscrepancies(data.data);
+      } catch (e) {
+        if (!cancelled) console.warn("[discrepancy_list]", e);
+      }
     };
     load();
     const t = setInterval(load, 60000);
-    return () => clearInterval(t);
-  }, []);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [isVisible]);
 
   const resolveDiscrepancy = useCallback(async () => {
     const { disc, chosen } = discrepancyModal;
@@ -967,14 +749,14 @@ const TrackingAereo = () => {
         toast({ title: "Troca de master resolvida", description: `Master correto: ${chosen}` });
         setDiscrepancies(prev => prev.filter(d => d.id !== disc.id));
         setDiscrepancyModal({ open: false, disc: null, chosen: "" });
-        fetchData();
+        loadTrackingData();
       } else {
         toast({ title: "Erro", description: data?.error || "Falha ao resolver", variant: "destructive" });
       }
     } catch (e) {
       toast({ title: "Erro", description: (e as Error).message, variant: "destructive" });
     }
-  }, [discrepancyModal, user, toast, fetchData]);
+  }, [discrepancyModal, user, toast, loadTrackingData]);
 
 
 
@@ -1239,14 +1021,14 @@ const TrackingAereo = () => {
 
   // Relatório de falha de tracking apenas para os AWBs visíveis que falharam
   useEffect(() => {
-    if (!isAdminUser || !serializedVisibleAwbs) return;
+    if (!serializedVisibleAwbs) return;
     const awbsOnPage = serializedVisibleAwbs.split(',');
-    
+
     const visibleFailedAwbs = currentAwbs.filter(a => a.tracking_failed && awbsOnPage.includes(a.awb));
     if (visibleFailedAwbs.length === 0) return;
-    
+
     void reportTrackingFailures(visibleFailedAwbs.map(a => a.awb));
-  }, [serializedVisibleAwbs, isAdminUser, currentAwbs]);
+  }, [serializedVisibleAwbs, currentAwbs]);
 
   const abbreviateName = (name: string): string => {
     if (!name || name === "-") return "-";
@@ -1431,12 +1213,6 @@ const TrackingAereo = () => {
 
 
               <div className="flex items-center gap-2">
-                {isProgressiveLoading && (
-                  <div className="flex items-center gap-2 text-xs text-[#ffc800] bg-amber-500/10 border border-[#ffc800]/20 px-3 py-1.5 rounded-full mr-2">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-[#ffc800]" />
-                    <span>Carregando processos ({loadedCount})...</span>
-                  </div>
-                )}
                 <button onClick={() => { trackEvent("air.monitored_airlines.open"); setShowMonitoredModal(true); }} className="h-8 px-4 rounded-full bg-emerald-600/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-emerald-500/80 transition border border-emerald-500/50">
                   <Plane className="w-3.5 h-3.5" />
                   CIAs Monitoradas ({monitoredAirlinesData.totalAirlines})
@@ -1446,7 +1222,7 @@ const TrackingAereo = () => {
                   Novo Processo
                 </button>
                 <button
-                  onClick={() => { trackEvent("air.refresh"); fetchData(true); }}
+                  onClick={() => { trackEvent("air.refresh"); loadTrackingData(); }}
                   disabled={isLoadingData}
                   className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)] disabled:opacity-60 disabled:cursor-not-allowed"
                 >
@@ -1803,11 +1579,23 @@ const TrackingAereo = () => {
           ) : (
             <div className="p-12 text-center">
               <p className="text-[#f5f5f5] uppercase tracking-[0.15em] font-medium">
-                {isLoadingData ? "CARREGANDO DADOS..." : "NENHUM AWB ENCONTRADO"}
+                {isLoadingData ? "CARREGANDO DADOS..." : loadError ? "ERRO AO CARREGAR DADOS" : "NENHUM AWB ENCONTRADO"}
               </p>
               <p className="text-[0.85rem] text-[#aaaaaa] mt-2">
-                {isLoadingData ? "Buscando em companhias aéreas..." : "Os dados serão carregados automaticamente do banco de dados"}
+                {isLoadingData
+                  ? "Buscando em companhias aéreas..."
+                  : loadError
+                    ? loadError
+                    : "Os dados serão carregados automaticamente do banco de dados"}
               </p>
+              {!isLoadingData && loadError && (
+                <button
+                  onClick={loadTrackingData}
+                  className="mt-4 h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium hover:bg-[#ffdc50] transition"
+                >
+                  Tentar novamente
+                </button>
+              )}
             </div>
           )}
         </section>
@@ -1858,7 +1646,7 @@ const TrackingAereo = () => {
       />
 
       {/* Cadastro NOVA Modal */}
-      <CadastroNovaModal open={cadastroNovaOpen} onOpenChange={setCadastroNovaOpen} onSuccess={fetchData} />
+      <CadastroNovaModal open={cadastroNovaOpen} onOpenChange={setCadastroNovaOpen} onSuccess={loadTrackingData} />
 
 
 

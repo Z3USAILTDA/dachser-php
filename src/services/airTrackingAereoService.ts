@@ -3,8 +3,6 @@
 // Esta camada concentra TODA a comunicação de dados da tela com o backend interno.
 // A tela não fala diretamente com banco nem com Supabase — apenas com estes endpoints:
 //   GET  /api/air/tracking-aereo            -> lista de AWBs (tabela + base dos cards)
-//   GET  /api/air/tracking-aereo/filters    -> opções de filtro (companhias, analistas, serviços)
-//   GET  /api/air/tracking-aereo/summary    -> métricas agregadas (cards)
 //   POST /api/air/tracking-aereo/failed-alert
 //   POST /api/air/master-swaps              -> badges de troca de master por AWB
 //   GET  /api/air/master-discrepancies      -> discrepâncias pendentes de troca de master
@@ -17,48 +15,20 @@ import { apiGet, apiPost } from "./apiClient";
 export interface AirTrackingResponse {
   success: boolean;
   data?: any[];
-  items?: any[];
-  count?: number;
-  next_cursor?: {
-    cursor_data: string;
-    cursor_id: number;
-  } | null;
   failed_count?: number;
   error?: string;
+  message?: string;
+  request_id?: string;
 }
 
 export interface AirTrackingParams {
-  /** Força bypass de cache HTTP no refresh manual. */
-  force?: boolean;
-  /** Limite de itens por requisição. */
-  limit?: number;
-  /** Data do cursor para paginação progressiva. */
-  cursor_data?: string | null;
-  /** ID do cursor para paginação progressiva. */
-  cursor_id?: number | null;
   /** Aborta a requisição (timeout/cancelamento). */
   signal?: AbortSignal;
-  /** Carrega todos os registros de uma vez (ignora paginação). */
-  all?: boolean;
 }
 
-/** Lista principal de processos aéreos (alimenta tabela e cards). */
+/** Lista completa de processos aéreos (alimenta tabela e cards) — uma única requisição, sem paginação. */
 export async function getAirTrackingAereo(params: AirTrackingParams = {}): Promise<AirTrackingResponse> {
-  const query = new URLSearchParams();
-  if (params.force) query.set("force", "1");
-  if (params.all) {
-    query.set("all", "1");
-  } else {
-    if (params.limit !== undefined && params.limit !== null) query.set("limit", String(params.limit));
-    if (params.cursor_data) query.set("cursor_data", params.cursor_data);
-    if (params.cursor_id !== undefined && params.cursor_id !== null) query.set("cursor_id", String(params.cursor_id));
-  }
-  
-  const qs = query.toString();
-  return apiGet(`/api/air/tracking-aereo${qs ? `?${qs}` : ""}`, {
-    noCache: params.force,
-    signal: params.signal,
-  });
+  return apiGet(`/api/air/tracking-aereo`, { signal: params.signal });
 }
 
 /** Opções de filtro derivadas do banco (companhias, analistas, serviços). */

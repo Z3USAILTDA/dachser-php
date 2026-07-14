@@ -109,97 +109,18 @@ function extractIATA($loc)
 }
 // Core compute tracking
 //
-// IMPORTANTE (fix 2026-07-13, ver.: force=1&all=1 causando 504/ERR_HTTP2_PROTOCOL_ERROR):
-// $forceRecompute NUNCA deve mais forçar um cálculo pesado e SÍNCRONO dentro do
-// ciclo de vida da requisição HTTP. As 3 queries deste pipeline (principal +
-// discrepâncias com JSON_TABLE/regex + rotas com múltiplos JOINs) somadas
-// facilmente ultrapassam o timeout do proxy/PHP-FPM quando rodadas sem LIMIT.
-// Por isso "force" agora só marca o cache como stale (força um refresh em
-// background) mas sempre retorna algo rapidamente — igual ao caminho normal de
-// cache expirado. Só quando NÃO existe cache algum é que fazemos o cálculo
-// rápido (janela de 5 dias) de forma síncrona, como já acontecia antes.
-// $bypassCacheGate é usado apenas pela chamada recursiva de background
-// (register_shutdown_function) para de fato executar o cálculo completo —
-// sem ele, a chamada em background cairia de novo no branch de cache e
-// devolveria o valor stale sem nunca recalcular (loop sem refresh real).
-function computeTrackingData($forceRecompute = false, $daysLimit = null, $limit = null, $cursor_data = null, $cursor_id = null, $requestId = null, $bypassCacheGate = false)
+// Fluxo simplificado (2026-07-13): sempre consulta o MariaDB diretamente e
+// devolve o conjunto completo de AWBs dentro da janela de ETD_CUTOFF numa
+// única resposta síncrona. Sem cache, sem paginação por cursor e sem
+// recomputo em background — o volume de dados desta tela (janela de poucas
+// semanas) é pequeno o suficiente para não precisar dessas camadas, e elas
+// eram a origem dos 504/ERR_HTTP2_PROTOCOL_ERROR intermitentes (força
+// disparava recompute concorrente com o polling).
+function computeTrackingData($requestId = null)
 {
-    $lockFile = sys_get_temp_dir() . '/dachser_cache_lock_trackingResultCache.lock';
-    $requestId = $requestId ?: ('internal-' . substr(md5(uniqid('', true)), 0, 8));
+    $requestId = $requestId ?: substr(md5(uniqid('', true)), 0, 10);
     $computeStart = microtime(true);
-
     $effectiveCutoff = ETD_CUTOFF;
-    if ($daysLimit !== null) {
-        $effectiveCutoff = date('Y-m-d', strtotime("-$daysLimit days"));
-    }
-
-    if ($limit === null && $daysLimit === null && !$bypassCacheGate) {
-        $cacheInfo = getCacheStale('trackingResultCache', 25);
-        if ($cacheInfo) {
-            // Cache é considerado stale tanto pelo TTL normal quanto por um
-            // refresh forçado (?force=1) — em ambos os casos, NUNCA bloqueamos
-            // a resposta HTTP: devolvemos o valor conhecido na hora e agendamos
-            // o recálculo completo para depois que a conexão for liberada.
-            $isStale = $cacheInfo['is_stale'] || $forceRecompute;
-            if (!$isStale) {
-                error_log("[tracking-aereo][$requestId] origem dos dados: cache fresco (hit)");
-                return $cacheInfo['value'];
-            }
-            error_log("[tracking-aereo][$requestId] origem dos dados: cache stale (motivo=" . ($forceRecompute ? 'force=1' : 'ttl-expirado') . ") — devolvendo valor conhecido e agendando refresh em background");
-            // Retorna o valor stale imediatamente, agenda atualização em background
-            if (!file_exists($lockFile) || (time() - filemtime($lockFile) > 60)) {
-                touch($lockFile);
-                register_shutdown_function(function () use ($lockFile, $requestId) {
-                    // Roda o recálculo completo no background (conexão do client já foi liberada)
-                    $bgStart = microtime(true);
-                    error_log("[tracking-aereo][$requestId] [bg] início do recompute completo em background");
-                    try {
-                        computeTrackingData(true, null, null, null, null, $requestId, true);
-                        error_log(sprintf("[tracking-aereo][%s] [bg] fim do recompute completo — duração=%.3fs", $requestId, microtime(true) - $bgStart));
-                    } catch (Throwable $e) {
-                        error_log("[tracking-aereo][$requestId] [bg] erro completo: " . $e->getMessage());
-                    } finally {
-                        @unlink($lockFile);
-                    }
-                });
-            } else {
-                error_log("[tracking-aereo][$requestId] refresh em background já em andamento (lock ativo) — não agendando outro");
-            }
-            return $cacheInfo['value'];
-        }
-
-        // Se não tem cache, e outro request está processando, aguarda para não derrubar o banco
-        if (file_exists($lockFile) && (time() - filemtime($lockFile) < 60)) {
-            error_log("[tracking-aereo][$requestId] origem dos dados: sem cache, aguardando lock de outro request em andamento");
-            for ($i = 0; $i < 20; $i++) {
-                sleep(1);
-                $cacheInfo = getCacheStale('trackingResultCache', 25);
-                if ($cacheInfo)
-                    return $cacheInfo['value'];
-            }
-        }
-
-        // Se não tem cache algum, fazemos o primeiro carregamento rápido (ex: 5 dias)
-        // e agendamos o carregamento completo (todas as datas) no background.
-        error_log("[tracking-aereo][$requestId] origem dos dados: sem cache — carregamento rápido inicial (5 dias) + agendando completo em background");
-        if (!file_exists($lockFile) || (time() - filemtime($lockFile) > 60)) {
-            touch($lockFile);
-            register_shutdown_function(function () use ($lockFile, $requestId) {
-                $bgStart = microtime(true);
-                error_log("[tracking-aereo][$requestId] [bg] início do recompute completo em background (cold start)");
-                try {
-                    computeTrackingData(true, null, null, null, null, $requestId, true);
-                    error_log(sprintf("[tracking-aereo][%s] [bg] fim do recompute completo — duração=%.3fs", $requestId, microtime(true) - $bgStart));
-                } catch (Throwable $e) {
-                    error_log("[tracking-aereo][$requestId] [bg] erro completo: " . $e->getMessage());
-                } finally {
-                    @unlink($lockFile);
-                }
-            });
-        }
-
-        return computeTrackingData(true, 5, null, null, null, $requestId, true);
-    }
 
     error_log("[tracking-aereo][$requestId] origem dos dados: consulta direta ao banco (dados_dachser) — sem API externa envolvida");
     $pdo = getPDO();
@@ -245,13 +166,6 @@ function computeTrackingData($forceRecompute = false, $daysLimit = null, $limit 
     });
 
     $queryParams = [$effectiveCutoff];
-    $cursorCondition = "";
-    if ($cursor_data !== null && $cursor_id !== null) {
-        $cursorCondition = " AND ((tda.etd < ?) OR (tda.etd = ? AND tda.id < ?))";
-        $queryParams[] = $cursor_data;
-        $queryParams[] = $cursor_data;
-        $queryParams[] = $cursor_id;
-    }
 
     $sql = "
         WITH base AS (
@@ -288,7 +202,7 @@ function computeTrackingData($forceRecompute = false, $daysLimit = null, $limit 
           FROM dados_dachser.t_dados_aereo tda
           LEFT JOIN dados_dachser.t_fato_aereo tdaf
               ON tdaf.awb = tda.awb_number
-          WHERE tda.etd >= ? {$cursorCondition}
+          WHERE tda.etd >= ?
         ),
         event_time AS (
           SELECT b.*,
@@ -326,11 +240,6 @@ function computeTrackingData($forceRecompute = false, $daysLimit = null, $limit 
                  ELSE concat(round(s.sla_hours_in_status/s.sla_limite_horas*100,1),'% do limite') END AS sla_tooltip
         FROM sla_calc s
     ";
-
-    if ($limit !== null) {
-        // Filtra ETDs inválidos (ano > 2100) e ordena por id DESC para trazer os mais recentes
-        $sql .= " ORDER BY CASE WHEN YEAR(s.ETD) > 2100 THEN 0 ELSE 1 END DESC, s.ETD DESC, s.id DESC LIMIT " . intval($limit);
-    }
 
     error_log("[tracking-aereo][$requestId] início da consulta SQL (principal, cutoff=$effectiveCutoff)");
     $sqlStart = microtime(true);
@@ -1083,24 +992,6 @@ function computeTrackingData($forceRecompute = false, $daysLimit = null, $limit 
         ];
     }
 
-    if ($limit !== null) {
-        $nextCursor = null;
-        if (count($data) >= intval($limit)) {
-            $lastRow = end($rows);
-            $nextCursor = [
-                'cursor_data' => $lastRow['ETD'] ?: '',
-                'cursor_id' => intval($lastRow['id'] ?: 0)
-            ];
-        }
-        return [
-            'success' => true,
-            'items' => $data,
-            'data' => $data, // backward compatibility
-            'count' => count($data),
-            'next_cursor' => $nextCursor
-        ];
-    }
-
     error_log("[tracking-aereo][$requestId] início da serialização JSON");
     $serializeStart = microtime(true);
     $result = ['success' => true, 'data' => $data, 'failed_count' => count($failed)];
@@ -1109,48 +1000,34 @@ function computeTrackingData($forceRecompute = false, $daysLimit = null, $limit 
         "[tracking-aereo][%s] fim da serialização JSON — duração=%.3fs — quantidade de registros=%d — tamanho aproximado da resposta=%d bytes — duração total do compute=%.3fs",
         $requestId, microtime(true) - $serializeStart, count($data), $approxResponseBytes, microtime(true) - $computeStart
     ));
-    setCache('trackingResultCache', $result, 25);
     return $result;
 }
 
 // ── ROTAS / HANDLERS ─────────────────────────────────────────────────────────
 
 // GET /api/air/tracking-aereo
+// Fluxo único e síncrono: consulta o MariaDB e devolve todos os AWBs da janela
+// de ETD_CUTOFF numa resposta só. Sem parâmetros — não há mais cache, force,
+// paginação por cursor nem recompute em background para configurar.
 $router->get('air/tracking-aereo', function ($params) {
-    // request_id único por requisição — usado para correlacionar todos os logs
-    // temporários desta investigação (permite confirmar quantas chamadas o
-    // frontend realmente dispara e quanto tempo cada uma leva).
+    // request_id por requisição — permite conferir no log quantas chamadas o
+    // frontend realmente dispara e quanto tempo cada uma leva.
     $requestId = substr(md5(uniqid('', true)), 0, 10);
     $routeStart = microtime(true);
-    error_log("[tracking-aereo][$requestId] request_id gerado");
     error_log("[tracking-aereo][$requestId] início da requisição em " . date('c'));
-    error_log("[tracking-aereo][$requestId] parâmetros recebidos: " . json_encode($_GET));
-    // Diagnóstico crítico: o truque de "responder rápido + recalcular em
-    // background via register_shutdown_function" SÓ libera a conexão do
-    // cliente de fato se fastcgi_finish_request() existir neste SAPI. Sob
-    // mod_php/Apache prefork ou lsapi sem FastCGI, o shutdown function roda
-    // ANTES da conexão ser liberada — ou seja, o cliente continuaria esperando
-    // o recompute pesado terminar (o mesmo problema de novo, disfarçado).
-    // Este log confirma, com dados reais de produção, qual é o caso aqui.
-    error_log("[tracking-aereo][$requestId] SAPI=" . PHP_SAPI . " fastcgi_finish_request_disponivel=" . (function_exists('fastcgi_finish_request') ? 'sim' : 'NAO'));
 
     try {
-        $force = isset($_GET['force']) ? ($_GET['force'] === '1' || $_GET['force'] === 'true') : false;
-        $all = isset($_GET['all']) ? ($_GET['all'] === '1' || $_GET['all'] === 'true') : false;
-
-        if ($all) {
-            $result = computeTrackingData($force, null, null, null, null, $requestId);
-        } else {
-            $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 100; // Default to 100 to prevent 504 on old frontend
-            $cursor_data = isset($_GET['cursor_data']) ? $_GET['cursor_data'] : null;
-            $cursor_id = isset($_GET['cursor_id']) ? intval($_GET['cursor_id']) : null;
-            $result = computeTrackingData($force, null, $limit, $cursor_data, $cursor_id, $requestId);
-        }
+        $result = computeTrackingData($requestId);
         error_log(sprintf("[tracking-aereo][%s] duração total (até enviar resposta)=%.3fs", $requestId, microtime(true) - $routeStart));
         sendJson($result);
     } catch (Exception $e) {
         error_log("[tracking-aereo][$requestId] erro completo: " . $e->getMessage() . "\n" . $e->getTraceAsString());
-        sendJson(['success' => false, 'error' => $e->getMessage()], 500);
+        sendJson([
+            'success' => false,
+            'message' => 'Não foi possível carregar os dados do Tracking Aéreo.',
+            'error' => $e->getMessage(),
+            'request_id' => $requestId,
+        ], 500);
     }
 });
 

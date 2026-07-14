@@ -47,7 +47,7 @@ async function parseAndCheck(res: Response): Promise<any> {
   }
 
   if (!res.ok) {
-    const msg = body?.error || `Erro ${res.status} ao comunicar com a API`;
+    const msg = body?.error || body?.message || `Erro ${res.status} ao comunicar com a API`;
     throw new Error(msg);
   }
 
