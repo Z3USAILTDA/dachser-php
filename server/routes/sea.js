@@ -969,6 +969,7 @@ export function registerSeaRoutes(app, _deps = {}) {
           SELECT f.id, f.filename AS file_name, f.url AS file_url, f.mime AS file_type, f.size_bytes, f.created_at
           FROM dados_dachser.t_sea_files f WHERE f.id = ? ORDER BY f.created_at ASC
         `, [arquivoId]);
+      }
       const runsWithFiles = runs.map(r => ({ ...r, files: itemFiles }));
       res.json({ success: true, item: items[0] || { base_file_name: '' }, runs: runsWithFiles });
     } catch (err) {

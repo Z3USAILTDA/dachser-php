@@ -7,7 +7,24 @@ import { getPoolFor, queryWithRetry } from '../db/pools.js';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const AIR_DB    = process.env.MARIADB_AIR_DATABASE || process.env.DB_NAME || 'dados_dachser';
-const ETD_CUTOFF = process.env.AIR_ETD_CUTOFF || '2026-06-01';
+const RAW_ETD_CUTOFF = process.env.AIR_ETD_CUTOFF || '2026-06-01';
+function getEtdCutoff() {
+  const match = RAW_ETD_CUTOFF.match(/^(-?\d+)\s*(day|month|year)s?/i);
+  if (match) {
+    const num = parseInt(match[1]);
+    const unit = match[2].toLowerCase();
+    const d = new Date();
+    if (unit.startsWith('day')) {
+      d.setDate(d.getDate() + num);
+    } else if (unit.startsWith('month')) {
+      d.setMonth(d.getMonth() + num);
+    } else if (unit.startsWith('year')) {
+      d.setFullYear(d.getFullYear() + num);
+    }
+    return d.toISOString().split('T')[0];
+  }
+  return RAW_ETD_CUTOFF;
+}
 
 const CHECK_TABLE    = 'dados_dachser.t_awb_check';
 const PARSED_TABLE   = 'dados_dachser.t_awb_parsed';
@@ -65,6 +82,7 @@ function extractIATA(loc) {
 
 // ─── Core: computeTrackingData ────────────────────────────────────────────────
 async function computeTrackingData() {
+  const ETD_CUTOFF = getEtdCutoff();
   // Se existir cache, avaliamos se ele está fresco ou vencido (stale)
   if (trackingResultCache) {
     const age = Date.now() - trackingResultCache.at;
@@ -2392,7 +2410,6 @@ Extract the MAWB and all HAWB entries. Return ONLY valid JSON with:
     } catch (err) {
       console.error('[POST /api/air/olimpo/force-swap-log]', err.message);
       res.status(500).json({ error: err.message });
-    }
     }
   });
 
