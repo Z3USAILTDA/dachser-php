@@ -35,7 +35,7 @@ export default function DemurrageAnalytics() {
   // Calculate KPIs from real data
   const kpis = useMemo(() => {
     const totalContainers = stats?.total || containers.length;
-    const totalDemurrage = stats?.totalDemurrageUsd || containers.reduce((sum, c) => sum + (c.expected_cost_usd || 0), 0);
+    const totalDemurrage = stats?.totalDemurrageUsd || containers.reduce((sum, c) => sum + Number(c.expected_cost_usd || 0), 0);
     
     // Calculate success rate
     const disputesWon = containers.filter(c => c.dispute_status === 'won').length;
@@ -44,9 +44,9 @@ export default function DemurrageAnalytics() {
     const successRate = totalDisputes > 0 ? Math.round((disputesWon / totalDisputes) * 100) : 0;
     
     // Average days exceeded
-    const containersWithExcess = containers.filter(c => (c.excedente_dias || 0) > 0);
+    const containersWithExcess = containers.filter(c => Number(c.excedente_dias || 0) > 0);
     const avgDaysExceeded = containersWithExcess.length > 0
-      ? (containersWithExcess.reduce((sum, c) => sum + (c.excedente_dias || 0), 0) / containersWithExcess.length).toFixed(1)
+      ? (containersWithExcess.reduce((sum, c) => sum + Number(c.excedente_dias || 0), 0) / containersWithExcess.length).toFixed(1)
       : '0';
 
     return {
@@ -103,7 +103,7 @@ export default function DemurrageAnalytics() {
     containers.forEach(c => {
       if (c.armador) {
         const current = armadorMap.get(c.armador) || 0;
-        armadorMap.set(c.armador, current + (c.expected_cost_usd || 0));
+        armadorMap.set(c.armador, current + Number(c.expected_cost_usd || 0));
       }
     });
     
@@ -125,9 +125,9 @@ export default function DemurrageAnalytics() {
         const monthName = months[date.getMonth()];
         
         const existing = monthMap.get(monthKey) || { demurrage: 0, recovered: 0, month: monthName };
-        existing.demurrage += c.expected_cost_usd || 0;
+        existing.demurrage += Number(c.expected_cost_usd || 0);
         if (c.dispute_status === 'won') {
-          existing.recovered += c.recovered_amount_usd || 0;
+          existing.recovered += Number(c.recovered_amount_usd || 0);
         }
         monthMap.set(monthKey, { ...existing, month: monthName } as any);
       }
