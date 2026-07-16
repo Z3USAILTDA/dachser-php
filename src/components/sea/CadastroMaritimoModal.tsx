@@ -511,7 +511,7 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-[rgba(5,6,18,.97)] border-[rgba(255,255,255,.12)] text-white">
+      <DialogContent aria-describedby={undefined} className="max-w-4xl max-h-[90vh] overflow-y-auto bg-[rgba(5,6,18,.97)] border-[rgba(255,255,255,.12)] text-white">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
             <Anchor className="h-5 w-5 text-[#ffc800]" />

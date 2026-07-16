@@ -109,7 +109,7 @@ export function HistoryModal({ open, onOpenChange, analyses, itemName }: History
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] bg-black/95 border border-white/10 text-white">
+      <DialogContent aria-describedby={undefined} className="max-w-4xl max-h-[85vh] bg-black/95 border border-white/10 text-white">
         <DialogHeader>
           <div className="flex items-center gap-4 w-full pr-8">
             <div className="flex flex-col shrink-0">

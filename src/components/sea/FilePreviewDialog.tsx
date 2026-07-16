@@ -111,7 +111,7 @@ export const FilePreviewDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col bg-background border-border">
+      <DialogContent aria-describedby={undefined} className="max-w-4xl max-h-[90vh] flex flex-col bg-background border-border">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="text-foreground flex items-center justify-between">
             <span className="truncate pr-4">{fileName}</span>

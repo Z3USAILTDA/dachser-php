@@ -125,7 +125,7 @@ export function DemurrageFreeTimeDialog({ open, onOpenChange, onSuccess }: Demur
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] bg-[#1a1a1a] border-[#333] text-white">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-[500px] bg-[#1a1a1a] border-[#333] text-white">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-[#ffc800]">
             <Clock className="w-5 h-5" />

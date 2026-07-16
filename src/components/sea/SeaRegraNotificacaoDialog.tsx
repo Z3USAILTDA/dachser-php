@@ -168,7 +168,7 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-[rgba(5,6,18,0.95)] border-white/12">
+      <DialogContent aria-describedby={undefined} className="max-w-4xl max-h-[90vh] overflow-y-auto bg-[rgba(5,6,18,0.95)] border-white/12">
         <DialogHeader>
           <DialogTitle className="text-white flex items-center gap-2">
             <Ship className="h-5 w-5 text-cyan-400" />

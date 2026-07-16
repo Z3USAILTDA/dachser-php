@@ -66,7 +66,7 @@ export function FilesModal({ open, onOpenChange, itemId, itemName }: FilesModalP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-black/95 border border-white/10 text-white max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+      <DialogContent aria-describedby={undefined} className="bg-black/95 border border-white/10 text-white max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader className="flex flex-row items-center justify-between">
           <DialogTitle className="text-lg font-semibold text-white">
             Arquivos: {itemName}
