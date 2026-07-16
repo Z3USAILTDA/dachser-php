@@ -90,8 +90,8 @@ export default function DemurrageDisputes() {
     const negotiating = disputeContainers.filter(d => d.status === 'negotiating').length;
     const won = disputeContainers.filter(d => d.status === 'won').length;
     const lost = disputeContainers.filter(d => d.status === 'lost').length;
-    const totalDisputed = disputeContainers.reduce((sum, d) => sum + (d.disputed_amount_usd || 0), 0);
-    const totalRecovered = disputeContainers.reduce((sum, d) => sum + (d.recovered_amount_usd || 0), 0);
+    const totalDisputed = disputeContainers.reduce((sum, d) => sum + Number(d.disputed_amount_usd || 0), 0);
+    const totalRecovered = disputeContainers.reduce((sum, d) => sum + Number(d.recovered_amount_usd || 0), 0);
     const inProgress = opened + negotiating;
     const successRate = won + lost > 0 ? Math.round((won / (won + lost)) * 100) : 0;
 

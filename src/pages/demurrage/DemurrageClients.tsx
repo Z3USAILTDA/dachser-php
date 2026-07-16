@@ -92,7 +92,7 @@ export default function DemurrageClients() {
 
       const profile = clientMap.get(clientName)!;
       profile.containers += 1;
-      profile.total_demurrage += c.expected_cost_usd || 0;
+      profile.total_demurrage += Number(c.expected_cost_usd || 0);
       if (['exceeded', 'critical'].includes(c.risk_status)) {
         profile.exceeded += 1;
       }

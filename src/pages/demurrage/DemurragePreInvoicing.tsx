@@ -147,10 +147,10 @@ export default function DemurragePreInvoicing() {
     const reviewed = preInvoices.filter(p => p.workflow_status === 'reviewed').length;
     const sent = preInvoices.filter(p => p.workflow_status === 'sent').length;
     const finalized = preInvoices.filter(p => ['invoiced', 'paid'].includes(p.workflow_status)).length;
-    const totalUsd = preInvoices.reduce((sum, p) => sum + (p.total_usd || 0), 0);
+    const totalUsd = preInvoices.reduce((sum, p) => sum + Number(p.total_usd || 0), 0);
     const pendingUsd = preInvoices
       .filter(p => p.financial_status === 'PENDING')
-      .reduce((sum, p) => sum + (p.total_usd || 0), 0);
+      .reduce((sum, p) => sum + Number(p.total_usd || 0), 0);
 
     return { total, calculated, reviewed, sent, finalized, totalUsd, pendingUsd };
   }, [preInvoices]);

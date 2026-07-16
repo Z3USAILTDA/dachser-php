@@ -113,16 +113,16 @@ export default function DemurrageCarrierCosts() {
   };
 
   const stats = useMemo(() => {
-    const totalCost = carrierContainers.reduce((sum, c) => sum + (c.armador_cost_usd || 0), 0);
-    const totalCalculated = carrierContainers.reduce((sum, c) => sum + (c.expected_cost_usd || 0), 0);
-    const validated = carrierContainers.filter(c => c.audit_status === 'validated').reduce((sum, c) => sum + (c.armador_cost_usd || 0), 0);
-    const discrepancy = carrierContainers.filter(c => c.audit_status === 'discrepancy' || c.audit_status === 'disputed').reduce((sum, c) => sum + (c.armador_cost_usd || 0), 0);
-    const pending = carrierContainers.filter(c => !c.audit_status || c.audit_status === 'pending').reduce((sum, c) => sum + (c.expected_cost_usd || 0), 0);
+    const totalCost = carrierContainers.reduce((sum, c) => sum + Number(c.armador_cost_usd || 0), 0);
+    const totalCalculated = carrierContainers.reduce((sum, c) => sum + Number(c.expected_cost_usd || 0), 0);
+    const validated = carrierContainers.filter(c => c.audit_status === 'validated').reduce((sum, c) => sum + Number(c.armador_cost_usd || 0), 0);
+    const discrepancy = carrierContainers.filter(c => c.audit_status === 'discrepancy' || c.audit_status === 'disputed').reduce((sum, c) => sum + Number(c.armador_cost_usd || 0), 0);
+    const pending = carrierContainers.filter(c => !c.audit_status || c.audit_status === 'pending').reduce((sum, c) => sum + Number(c.expected_cost_usd || 0), 0);
     
     // Total discrepancy amount (overcharges)
     const totalDiscrepancyAmount = carrierContainers
       .filter(c => c.audit_status === 'discrepancy' || c.audit_status === 'disputed')
-      .reduce((sum, c) => sum + Math.max(0, (c.armador_cost_usd || 0) - (c.expected_cost_usd || 0)), 0);
+      .reduce((sum, c) => sum + Math.max(0, Number(c.armador_cost_usd || 0) - Number(c.expected_cost_usd || 0)), 0);
 
     return { totalCost, totalCalculated, validated, discrepancy, pending, totalDiscrepancyAmount };
   }, [carrierContainers]);
