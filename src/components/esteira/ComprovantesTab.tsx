@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FileText, Search, RefreshCw, Calendar, Loader2, Eye, Files } from "lucide-react";
+import { TablePagination } from "@/components/layout/TablePagination";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { FilePreview } from "./FilePreview";
@@ -52,6 +53,13 @@ export function ComprovantesTab() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedGroup, setSelectedGroup] = useState<VoucherGroup | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 15;
+
+  const handleSearchChange = (val: string) => {
+    setSearchTerm(val);
+    setCurrentPage(1);
+  };
 
   const loadComprovantes = async () => {
     setLoading(true);
@@ -115,6 +123,19 @@ export function ComprovantesTab() {
     );
   });
 
+  const totalPages = Math.ceil(filteredGroups.length / ITEMS_PER_PAGE);
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+  }, [filteredGroups.length, totalPages, currentPage]);
+
+  const paginatedGroups = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredGroups.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredGroups, currentPage]);
+
   const handleDownload = async (url: string, name: string) => {
     try {
       await downloadViaBlob(url, name);
@@ -154,7 +175,7 @@ export function ComprovantesTab() {
               <Input
                 placeholder="Buscar por SPO, fornecedor ou arquivo..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 className="pl-10 bg-input/50 border-border/50"
               />
             </div>
@@ -189,7 +210,7 @@ export function ComprovantesTab() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredGroups.map((group) => (
+                  {paginatedGroups.map((group) => (
                     <TableRow key={group.voucher_id} className="hover:bg-muted/20">
                       <TableCell>
                         <Badge variant="outline" className="font-mono">
@@ -249,6 +270,11 @@ export function ComprovantesTab() {
                   ))}
                 </TableBody>
               </Table>
+              <TablePagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+              />
             </div>
           )}
         </CardContent>
@@ -256,7 +282,7 @@ export function ComprovantesTab() {
 
       {/* Dialog: documentos do voucher */}
       <Dialog open={!!selectedGroup} onOpenChange={() => setSelectedGroup(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent aria-describedby={undefined} className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Documentos — {selectedGroup?.numero_spo}</DialogTitle>
           </DialogHeader>
