@@ -171,7 +171,7 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-xl max-h-[80vh] overflow-hidden bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
+      <DialogContent aria-describedby={undefined} className="max-w-xl max-h-[80vh] overflow-hidden bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
         <DialogHeader className="pb-4 border-b border-[rgba(255,255,255,.08)]">
           <DialogTitle className="text-[#f5f5f5] flex items-center gap-2">
             <Clock className="w-5 h-5 text-[#ffc800]" />

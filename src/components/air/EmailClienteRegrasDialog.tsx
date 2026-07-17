@@ -158,7 +158,7 @@ export function EmailClienteRegrasDialog({ open, onOpenChange }: EmailClienteReg
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-5xl h-[80vh] p-0 bg-[rgba(5,6,18,0.98)] border-white/12">
+        <DialogContent aria-describedby={undefined} className="max-w-5xl h-[80vh] p-0 bg-[rgba(5,6,18,0.98)] border-white/12">
           <DialogHeader className="p-4 border-b border-white/10">
             <DialogTitle className="text-white">Regras de Notificação por E-mail</DialogTitle>
           </DialogHeader>
