@@ -301,8 +301,8 @@ export default function CCTDashboard() {
             </div>
           )}
 
-          {/* Exceções KPI Cards - Show on Exceções tab */}
-          {activeTab === "excecoes" && (
+          {/* Exceções KPI Cards - Show on Exceções, Regras, and Console tabs */}
+          {(activeTab === "excecoes" || activeTab === "regras" || activeTab === "console") && (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <MetricCard title="Abertas" value={excecoesStats.abertas} icon={AlertTriangle} variant="critical" subtitle="Pendentes de ação" />
               <MetricCard title="Em Análise" value={excecoesStats.emAnalise} icon={Eye} variant="warning" subtitle="Sendo tratadas" />
